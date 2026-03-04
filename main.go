@@ -24,6 +24,7 @@ func main() {
 		&models.User{},
 		&models.UserProfile{},
 		&models.UserExperience{},
+		&models.CompanyProfile{},
 	); err != nil {
 		log.Fatalf("❌ AutoMigrate failed: %v", err)
 	}
@@ -48,6 +49,7 @@ func main() {
 	// Register all routes
 	routes.RegisterAuthRoutes(app)
 	routes.RegisterProfileRoutes(app)
+	routes.RegisterCompanyRoutes(app)
 
 	// Serve uploaded files statically
 	app.Static("/uploads", "./uploads")
