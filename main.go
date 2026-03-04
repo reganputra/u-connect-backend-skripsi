@@ -20,7 +20,11 @@ func main() {
 	config.ConnectDB()
 
 	// Auto-migrate models
-	if err := config.DB.AutoMigrate(&models.User{}); err != nil {
+	if err := config.DB.AutoMigrate(
+		&models.User{},
+		&models.UserProfile{},
+		&models.UserExperience{},
+	); err != nil {
 		log.Fatalf("❌ AutoMigrate failed: %v", err)
 	}
 	log.Println("✅ Database migrated successfully!")
@@ -43,6 +47,10 @@ func main() {
 
 	// Register all routes
 	routes.RegisterAuthRoutes(app)
+	routes.RegisterProfileRoutes(app)
+
+	// Serve uploaded files statically
+	app.Static("/uploads", "./uploads")
 
 	// Start server
 	port := os.Getenv("APP_PORT")
