@@ -7,6 +7,8 @@ import (
 	"github.com/gofiber/fiber/v2"
 	"github.com/gofiber/fiber/v2/middleware/logger"
 	"github.com/reganputra/skripsi-backend/config"
+	"github.com/reganputra/skripsi-backend/models"
+	"github.com/reganputra/skripsi-backend/routes"
 	"github.com/reganputra/skripsi-backend/utils"
 )
 
@@ -16,6 +18,12 @@ func main() {
 
 	// Connect to the database
 	config.ConnectDB()
+
+	// Auto-migrate models
+	if err := config.DB.AutoMigrate(&models.User{}); err != nil {
+		log.Fatalf("❌ AutoMigrate failed: %v", err)
+	}
+	log.Println("✅ Database migrated successfully!")
 
 	// Initialize Fiber app
 	app := fiber.New(fiber.Config{
@@ -33,7 +41,10 @@ func main() {
 		})
 	})
 
-	// Get port from env, default to 8080
+	// Register all routes
+	routes.RegisterAuthRoutes(app)
+
+	// Start server
 	port := os.Getenv("APP_PORT")
 	if port == "" {
 		port = "8080"
