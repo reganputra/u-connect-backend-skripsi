@@ -19,6 +19,9 @@ func main() {
 	// Connect to the database
 	config.ConnectDB()
 
+	// Initialize Cloudinary
+	config.ConnectCloudinary()
+
 	// Auto-migrate models
 	if err := config.DB.AutoMigrate(
 		&models.User{},
@@ -50,9 +53,6 @@ func main() {
 	routes.RegisterAuthRoutes(app)
 	routes.RegisterProfileRoutes(app)
 	routes.RegisterCompanyRoutes(app)
-
-	// Serve uploaded files statically
-	app.Static("/uploads", "./uploads")
 
 	// Start server
 	port := os.Getenv("APP_PORT")

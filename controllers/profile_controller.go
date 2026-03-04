@@ -2,13 +2,11 @@ package controllers
 
 import (
 	"fmt"
-	"os"
-	"path/filepath"
 	"strconv"
-	"time"
 
 	"github.com/gofiber/fiber/v2"
 	"github.com/golang-jwt/jwt/v5"
+	"github.com/reganputra/skripsi-backend/config"
 	"github.com/reganputra/skripsi-backend/service"
 	"github.com/reganputra/skripsi-backend/utils"
 )
@@ -105,38 +103,17 @@ func UploadProfilePicture(c *fiber.Ctx) error {
 		return utils.ErrorResponse(c, fiber.StatusBadRequest, "picture file is required")
 	}
 
-	// Validate extension
-	ext := filepath.Ext(file.Filename)
-	allowed := map[string]bool{".jpg": true, ".jpeg": true, ".png": true, ".webp": true}
-	if !allowed[ext] {
-		return utils.ErrorResponse(c, fiber.StatusBadRequest, "only jpg, jpeg, png, webp are allowed")
-	}
-
-	// Save to uploads/profiles/
-	uploadDir := "./uploads/profiles"
-	if err := os.MkdirAll(uploadDir, os.ModePerm); err != nil {
-		return utils.ErrorResponse(c, fiber.StatusInternalServerError, "failed to create upload directory")
-	}
-
-	filename := fmt.Sprintf("%d_%d%s", userID, time.Now().Unix(), ext)
-	savePath := filepath.Join(uploadDir, filename)
-
-	if err := c.SaveFile(file, savePath); err != nil {
-		return utils.ErrorResponse(c, fiber.StatusInternalServerError, "failed to save file")
-	}
-
-	// Update profile picture in DB
-	pictureURL := "/uploads/profiles/" + filename
-	profile, err := service.GetProfile(userID)
+	// Upload to Cloudinary
+	pictureURL, err := utils.UploadImage(config.Cloudinary, file, "alumni-platform/profiles")
 	if err != nil {
-		return utils.ErrorResponse(c, fiber.StatusNotFound, "profile not found, please create a profile first")
+		return utils.ErrorResponse(c, fiber.StatusInternalServerError, err.Error())
 	}
-	profile.ProfilePicture = pictureURL
+
+	// Save URL to profile
 	if err := service.UpdateProfilePicture(userID, pictureURL); err != nil {
 		return utils.ErrorResponse(c, fiber.StatusInternalServerError, "failed to update profile picture")
 	}
 
-	_ = profile
 	return utils.SuccessResponse(c, fiber.StatusOK, fiber.Map{"picture_url": pictureURL})
 }
 
