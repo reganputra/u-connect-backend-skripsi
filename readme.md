@@ -144,16 +144,17 @@ Response includes `token`. Use as: `Authorization: Bearer <token>`
 
 > Requires JWT. For `alumni` and `student` only.
 
-| Method | Endpoint                      | Description                        |
-| ------ | ----------------------------- | ---------------------------------- |
-| POST   | `/api/profile`                | Create profile                     |
-| GET    | `/api/profile`                | Get own profile                    |
-| PUT    | `/api/profile`                | Partial update                     |
-| DELETE | `/api/profile`                | Delete profile                     |
-| POST   | `/api/profile/picture`        | Upload profile picture (multipart) |
-| POST   | `/api/profile/experience`     | Add work experience                |
-| PUT    | `/api/profile/experience/:id` | Update experience                  |
-| DELETE | `/api/profile/experience/:id` | Delete experience                  |
+| Method | Endpoint                      | Body        | Description                              |
+| ------ | ----------------------------- | ----------- | ---------------------------------------- |
+| POST   | `/api/profile`                | `form-data` | Create profile (optional `picture` file) |
+| GET    | `/api/profile`                | —           | Get own profile                          |
+| PUT    | `/api/profile`                | `form-data` | Partial update (optional `picture` file) |
+| DELETE | `/api/profile`                | —           | Delete profile                           |
+| POST   | `/api/profile/experience`     | JSON        | Add work experience                      |
+| PUT    | `/api/profile/experience/:id` | JSON        | Update experience                        |
+| DELETE | `/api/profile/experience/:id` | —           | Delete experience                        |
+
+> **All profile create/update requests use `multipart/form-data`.** Include a `picture` file field to upload/change the profile picture in the same request.
 
 #### Profile Fields by `job_status`
 
@@ -180,12 +181,6 @@ Response includes `token`. Use as: `Authorization: Bearer <token>`
 ```
 
 > `end_year: null` means currently working there.
-
-#### Profile Picture Upload
-
-- `POST /api/profile/picture`
-- Body: `form-data`, key: `picture`, value: image file (jpg, jpeg, png, webp)
-- Stored on Cloudinary, returns a `picture_url`
 
 ---
 
@@ -214,6 +209,39 @@ Partners with the same `company_name` (set at registration) **share one company 
 ```
 
 > `employee_size` must be zero or positive.
+
+---
+
+### Portfolio
+
+> Requires JWT + `alumni` or `student` role only.
+
+| Method | Endpoint             | Body        | Description                         |
+| ------ | -------------------- | ----------- | ----------------------------------- |
+| POST   | `/api/portfolio`     | `form-data` | Create item (optional `media` file) |
+| GET    | `/api/portfolio`     | —           | List own portfolio items            |
+| PUT    | `/api/portfolio/:id` | `form-data` | Update item (optional `media` file) |
+| DELETE | `/api/portfolio/:id` | —           | Delete item                         |
+
+> **All portfolio create/update requests use `multipart/form-data`.** Include a `media` file field to upload/change the media in the same request.
+
+#### Portfolio Item Fields
+
+```json
+{
+  "title": "Alumni Mobile App",
+  "description": "A cross-platform app for alumni networking.",
+  "category": "Mobile Development",
+  "tags": "Flutter, Dart, Firebase",
+  "start_date": "2023-01",
+  "end_date": "2023-06"
+}
+```
+
+- `title` is **required**
+- `start_date` / `end_date` format: `YYYY-MM`
+- `tags` is comma-separated
+- Add a `media` key with an image file in the same `form-data` request to attach media
 
 ---
 

@@ -13,9 +13,8 @@ func RegisterProfileRoutes(app *fiber.App) {
 	profile.Get("/", controllers.GetProfile)
 	profile.Put("/", controllers.UpdateProfile)
 	profile.Delete("/", controllers.DeleteProfile)
-	profile.Post("/picture", controllers.UploadProfilePicture)
 
-	// Experience sub-routes
+	// Experience sub-routes (still JSON body)
 	profile.Post("/experience", controllers.AddExperience)
 	profile.Put("/experience/:id", controllers.UpdateExperience)
 	profile.Delete("/experience/:id", controllers.DeleteExperience)

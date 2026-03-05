@@ -27,16 +27,82 @@ func getUserIDFromToken(c *fiber.Ctx) (uint, error) {
 	return uint(idFloat), nil
 }
 
+// parseOptionalString returns a *string if the form value is non-empty, else nil
+func parseOptionalString(val string) *string {
+	if val == "" {
+		return nil
+	}
+	return &val
+}
+
+// parseOptionalInt returns a *int if the form value is a valid non-zero int, else nil
+func parseOptionalInt(val string) *int {
+	if val == "" {
+		return nil
+	}
+	n, err := strconv.Atoi(val)
+	if err != nil {
+		return nil
+	}
+	return &n
+}
+
+// uploadFileIfPresent uploads a form file to Cloudinary and returns its URL.
+// Returns empty string and nil error if no file was provided.
+func uploadFileIfPresent(c *fiber.Ctx, fieldName, folder string) (string, error) {
+	file, err := c.FormFile(fieldName)
+	if err != nil || file == nil {
+		return "", nil // no file — not an error
+	}
+	url, err := utils.UploadImage(config.Cloudinary, file, folder)
+	if err != nil {
+		return "", err
+	}
+	return url, nil
+}
+
 func CreateProfile(c *fiber.Ctx) error {
 	userID, err := getUserIDFromToken(c)
 	if err != nil {
 		return utils.ErrorResponse(c, fiber.StatusUnauthorized, err.Error())
 	}
 
-	var req service.ProfileRequest
-	if err := c.BodyParser(&req); err != nil {
-		return utils.ErrorResponse(c, fiber.StatusBadRequest, "invalid request body")
+	// Handle optional profile picture upload
+	pictureURL, err := uploadFileIfPresent(c, "picture", "alumni-platform/profiles")
+	if err != nil {
+		return utils.ErrorResponse(c, fiber.StatusInternalServerError, err.Error())
 	}
+
+	yearEnroll := parseOptionalInt(c.FormValue("year_enroll"))
+	salary := parseOptionalInt(c.FormValue("salary"))
+	yearFounding := parseOptionalInt(c.FormValue("year_founding"))
+	mentorQuota := parseOptionalInt(c.FormValue("mentor_quota"))
+	expectedGradYear := parseOptionalInt(c.FormValue("expected_graduation_year"))
+
+	req := service.ProfileRequest{
+		ProfilePicture:         parseOptionalString(pictureURL),
+		Bio:                    parseOptionalString(c.FormValue("bio")),
+		Location:               parseOptionalString(c.FormValue("location")),
+		JobStatus:              parseOptionalString(c.FormValue("job_status")),
+		Position:               parseOptionalString(c.FormValue("position")),
+		CompanyName:            parseOptionalString(c.FormValue("company_name")),
+		IndustryName:           parseOptionalString(c.FormValue("industry_name")),
+		IndustryType:           parseOptionalString(c.FormValue("industry_type")),
+		YearFounding:           yearFounding,
+		Salary:                 salary,
+		EducationalLevel:       parseOptionalString(c.FormValue("educational_level")),
+		AdvancedStudyProgram:   parseOptionalString(c.FormValue("advanced_study_program")),
+		InstitutionName:        parseOptionalString(c.FormValue("institution_name")),
+		ExpectedGraduationYear: expectedGradYear,
+		Skills:                 parseOptionalString(c.FormValue("skills")),
+		Interests:              parseOptionalString(c.FormValue("interests")),
+		MentorQuota:            mentorQuota,
+		MentorDescription:      parseOptionalString(c.FormValue("mentor_description")),
+		StatusDescription:      parseOptionalString(c.FormValue("status_description")),
+	}
+
+	// year_enroll is part of User, not profile — ignore here
+	_ = yearEnroll
 
 	profile, err := service.CreateProfile(userID, req)
 	if err != nil {
@@ -66,9 +132,37 @@ func UpdateProfile(c *fiber.Ctx) error {
 		return utils.ErrorResponse(c, fiber.StatusUnauthorized, err.Error())
 	}
 
-	var req service.ProfileRequest
-	if err := c.BodyParser(&req); err != nil {
-		return utils.ErrorResponse(c, fiber.StatusBadRequest, "invalid request body")
+	// Handle optional profile picture upload
+	pictureURL, err := uploadFileIfPresent(c, "picture", "alumni-platform/profiles")
+	if err != nil {
+		return utils.ErrorResponse(c, fiber.StatusInternalServerError, err.Error())
+	}
+
+	salary := parseOptionalInt(c.FormValue("salary"))
+	yearFounding := parseOptionalInt(c.FormValue("year_founding"))
+	mentorQuota := parseOptionalInt(c.FormValue("mentor_quota"))
+	expectedGradYear := parseOptionalInt(c.FormValue("expected_graduation_year"))
+
+	req := service.ProfileRequest{
+		ProfilePicture:         parseOptionalString(pictureURL),
+		Bio:                    parseOptionalString(c.FormValue("bio")),
+		Location:               parseOptionalString(c.FormValue("location")),
+		JobStatus:              parseOptionalString(c.FormValue("job_status")),
+		Position:               parseOptionalString(c.FormValue("position")),
+		CompanyName:            parseOptionalString(c.FormValue("company_name")),
+		IndustryName:           parseOptionalString(c.FormValue("industry_name")),
+		IndustryType:           parseOptionalString(c.FormValue("industry_type")),
+		YearFounding:           yearFounding,
+		Salary:                 salary,
+		EducationalLevel:       parseOptionalString(c.FormValue("educational_level")),
+		AdvancedStudyProgram:   parseOptionalString(c.FormValue("advanced_study_program")),
+		InstitutionName:        parseOptionalString(c.FormValue("institution_name")),
+		ExpectedGraduationYear: expectedGradYear,
+		Skills:                 parseOptionalString(c.FormValue("skills")),
+		Interests:              parseOptionalString(c.FormValue("interests")),
+		MentorQuota:            mentorQuota,
+		MentorDescription:      parseOptionalString(c.FormValue("mentor_description")),
+		StatusDescription:      parseOptionalString(c.FormValue("status_description")),
 	}
 
 	profile, err := service.UpdateProfile(userID, req)
@@ -90,31 +184,6 @@ func DeleteProfile(c *fiber.Ctx) error {
 	}
 
 	return utils.SuccessResponse(c, fiber.StatusOK, fiber.Map{"message": "profile deleted successfully"})
-}
-
-func UploadProfilePicture(c *fiber.Ctx) error {
-	userID, err := getUserIDFromToken(c)
-	if err != nil {
-		return utils.ErrorResponse(c, fiber.StatusUnauthorized, err.Error())
-	}
-
-	file, err := c.FormFile("picture")
-	if err != nil {
-		return utils.ErrorResponse(c, fiber.StatusBadRequest, "picture file is required")
-	}
-
-	// Upload to Cloudinary
-	pictureURL, err := utils.UploadImage(config.Cloudinary, file, "alumni-platform/profiles")
-	if err != nil {
-		return utils.ErrorResponse(c, fiber.StatusInternalServerError, err.Error())
-	}
-
-	// Save URL to profile
-	if err := service.UpdateProfilePicture(userID, pictureURL); err != nil {
-		return utils.ErrorResponse(c, fiber.StatusInternalServerError, "failed to update profile picture")
-	}
-
-	return utils.SuccessResponse(c, fiber.StatusOK, fiber.Map{"picture_url": pictureURL})
 }
 
 func AddExperience(c *fiber.Ctx) error {

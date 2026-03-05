@@ -17,8 +17,9 @@ var validJobStatuses = map[string]bool{
 }
 
 type ProfileRequest struct {
-	Bio      *string `json:"bio"`
-	Location *string `json:"location"`
+	ProfilePicture *string `json:"profile_picture"` // set by controller after Cloudinary upload
+	Bio            *string `json:"bio"`
+	Location       *string `json:"location"`
 
 	// Professional
 	JobStatus    *string `json:"job_status"`
@@ -154,6 +155,10 @@ func CreateProfile(userID uint, req ProfileRequest) (*models.UserProfile, error)
 		StatusDescription:      req.StatusDescription,
 	}
 
+	if req.ProfilePicture != nil {
+		profile.ProfilePicture = *req.ProfilePicture
+	}
+
 	nullFieldsByStatus(profile)
 
 	if err := repository.CreateProfile(profile); err != nil {
@@ -227,6 +232,9 @@ func UpdateProfile(userID uint, req ProfileRequest) (*models.UserProfile, error)
 	}
 	if req.MentorDescription != nil {
 		profile.MentorDescription = req.MentorDescription
+	}
+	if req.ProfilePicture != nil {
+		profile.ProfilePicture = *req.ProfilePicture
 	}
 	if req.StatusDescription != nil {
 		profile.StatusDescription = req.StatusDescription

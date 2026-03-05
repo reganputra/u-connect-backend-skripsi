@@ -28,6 +28,7 @@ func main() {
 		&models.UserProfile{},
 		&models.UserExperience{},
 		&models.CompanyProfile{},
+		&models.PortfolioItem{},
 	); err != nil {
 		log.Fatalf("❌ AutoMigrate failed: %v", err)
 	}
@@ -53,6 +54,7 @@ func main() {
 	routes.RegisterAuthRoutes(app)
 	routes.RegisterProfileRoutes(app)
 	routes.RegisterCompanyRoutes(app)
+	routes.RegisterPortfolioRoutes(app)
 
 	// Start server
 	port := os.Getenv("APP_PORT")
