@@ -247,6 +247,72 @@ Partners with the same `company_name` (set at registration) **share one company 
 
 ## Response Format
 
+### Feed Posting
+
+> Requires JWT. Read/react/vote: all roles. Post/comment CRUD: `alumni` and `student` only.
+
+| Method | Endpoint                  | Body        | Description                           |
+| ------ | ------------------------- | ----------- | ------------------------------------- |
+| GET    | `/api/feed`               | —           | List posts (paginated, counts only)   |
+| GET    | `/api/feed/:id`           | —           | Post detail with full nested comments |
+| POST   | `/api/feed`               | `form-data` | Create post (optional `image` file)   |
+| PUT    | `/api/feed/:id`           | `form-data` | Update own post                       |
+| DELETE | `/api/feed/:id`           | —           | Delete own post                       |
+| POST   | `/api/feed/:id/comments`  | JSON        | Add comment or reply to a post        |
+| POST   | `/api/feed/:id/react`     | JSON        | React to post (toggle/change)         |
+| POST   | `/api/feed/:id/vote`      | JSON        | Vote post (toggle/flip)               |
+| PUT    | `/api/comments/:id`       | JSON        | Update own comment                    |
+| DELETE | `/api/comments/:id`       | —           | Delete own comment                    |
+| POST   | `/api/comments/:id/react` | JSON        | React to a comment or reply           |
+| POST   | `/api/comments/:id/vote`  | JSON        | Vote on a comment or reply            |
+
+#### Post Fields (form-data)
+
+| Key        | Required | Notes                    |
+| ---------- | -------- | ------------------------ |
+| `title`    | ✅       | —                        |
+| `content`  | ✅       | —                        |
+| `category` | ❌       | optional                 |
+| `image`    | ❌       | file upload → Cloudinary |
+
+#### Comment / Reply
+
+```json
+{ "content": "Great post!" }
+```
+
+To reply to a comment, include `parent_comment_id`:
+
+```json
+{ "content": "Thanks!", "parent_comment_id": 8 }
+```
+
+> Replies can be nested infinitely.
+
+#### Reaction Types
+
+`like` · `love` · `haha` · `wow` · `sad` · `angry`
+
+- Same type again → **removed**
+- Different type → **updated**
+
+#### Vote Values
+
+`1` = upvote · `-1` = downvote
+
+- Same value again → **removed**
+- Opposite value → **flipped**
+
+#### Feed List Response (`GET /api/feed`)
+
+Returns `comment_count`, `reaction_count`, `vote_count` — no full arrays.
+
+#### Feed Detail Response (`GET /api/feed/:id`)
+
+Returns full nested comment tree (infinite depth) with reactions and votes at every level.
+
+---
+
 All responses follow a consistent structure:
 
 **Success**
