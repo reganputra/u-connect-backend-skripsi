@@ -246,8 +246,6 @@ Partners with the same `company_name` (set at registration) **share one company 
 
 ---
 
-## Response Format
-
 ### Feed Posting
 
 > Requires JWT. Read/react/vote: all roles. Post/comment CRUD: `alumni` and `student` only.
