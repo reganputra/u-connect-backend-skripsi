@@ -33,6 +33,11 @@ func main() {
 		&models.Comment{},
 		&models.Reaction{},
 		&models.Vote{},
+		&models.Group{},
+		&models.GroupMember{},
+		&models.GroupArticle{},
+		&models.GroupComment{},
+		&models.GroupReaction{},
 	); err != nil {
 		log.Fatalf("❌ AutoMigrate failed: %v", err)
 	}
@@ -60,6 +65,7 @@ func main() {
 	routes.RegisterCompanyRoutes(app)
 	routes.RegisterPortfolioRoutes(app)
 	routes.RegisterFeedRoutes(app)
+	routes.RegisterGroupRoutes(app)
 
 	// Start server
 	port := os.Getenv("APP_PORT")
