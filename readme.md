@@ -29,6 +29,7 @@ backend-skripsi/
 ├── routes/           # Route registration
 ├── service/          # Business logic & validation
 ├── utils/            # Helpers (env loader, response, image upload)
+├── test/             # Integration tests
 ├── .env              # Environment variables
 ├── docker-compose.yaml
 └── main.go
@@ -313,7 +314,151 @@ Returns full nested comment tree (infinite depth) with reactions and votes at ev
 
 ---
 
-All responses follow a consistent structure:
+### Group Forum
+
+> Requires JWT. Read: all roles. Group/article CRUD, membership, reactions: `alumni` and `student` only.
+
+#### Group Management
+
+| Method | Endpoint             | Body        | Description                             |
+| ------ | -------------------- | ----------- | --------------------------------------- |
+| GET    | `/api/groups`        | —           | List all groups                         |
+| POST   | `/api/groups`        | `form-data` | Create group (optional `banner` file)   |
+| GET    | `/api/groups/:id`    | —           | Group detail                            |
+| PUT    | `/api/groups/:id`    | `form-data` | Update group (owner only)               |
+| DELETE | `/api/groups/:id`    | —           | Delete group + all data (owner only)    |
+| GET    | `/api/groups/joined` | —           | List groups the current user belongs to |
+
+#### Membership
+
+| Method | Endpoint                          | Description                        |
+| ------ | --------------------------------- | ---------------------------------- |
+| POST   | `/api/groups/:id/join`            | Join a group                       |
+| DELETE | `/api/groups/:id/leave`           | Leave a group (owner cannot leave) |
+| GET    | `/api/groups/:id/members`         | List group members                 |
+| DELETE | `/api/groups/:id/members/:userID` | Kick a member (owner only)         |
+
+#### Group Articles
+
+| Method | Endpoint                            | Body        | Description                                          |
+| ------ | ----------------------------------- | ----------- | ---------------------------------------------------- |
+| POST   | `/api/groups/:id/articles`          | `form-data` | Create article (members only, optional `media` file) |
+| GET    | `/api/groups/articles/:id`          | —           | Article detail with nested comments                  |
+| PUT    | `/api/groups/articles/:id`          | `form-data` | Update own article                                   |
+| DELETE | `/api/groups/articles/:id`          | —           | Delete own article                                   |
+| POST   | `/api/groups/articles/:id/comments` | JSON        | Add comment or reply                                 |
+| POST   | `/api/groups/articles/:id/react`    | JSON        | React to article (members only)                      |
+| PUT    | `/api/groups/comments/:id`          | JSON        | Update own comment                                   |
+| DELETE | `/api/groups/comments/:id`          | —           | Delete own comment                                   |
+| POST   | `/api/groups/comments/:id/react`    | JSON        | React to a comment (members only)                    |
+
+#### Group Fields (form-data)
+
+| Key           | Required | Notes                    |
+| ------------- | -------- | ------------------------ |
+| `title`       | ✅       | —                        |
+| `category`    | ✅       | —                        |
+| `description` | ❌       | —                        |
+| `rules`       | ❌       | —                        |
+| `banner`      | ❌       | file upload → Cloudinary |
+
+#### Article Fields (form-data)
+
+| Key       | Required | Notes                    |
+| --------- | -------- | ------------------------ |
+| `title`   | ✅       | —                        |
+| `content` | ✅       | —                        |
+| `media`   | ❌       | file upload → Cloudinary |
+
+#### Group Business Rules
+
+- Non-members can only view the group preview — they cannot create articles or react
+- The group owner cannot leave their own group
+- Only the group owner can kick members
+- When a group is deleted, all articles, comments, and reactions are cascade-deleted
+- Reaction types: `like` · `love` · `haha` · `wow` · `sad` · `angry` (same toggle/update logic as Feed)
+
+---
+
+### Events
+
+> Requires JWT. Read/view participants: all roles. Create/update/delete/register/agenda: `alumni` and `student` only.
+
+#### Event Management
+
+| Method | Endpoint          | Body        | Description                              |
+| ------ | ----------------- | ----------- | ---------------------------------------- |
+| GET    | `/api/events`     | —           | List all events (paginated)              |
+| POST   | `/api/events`     | `form-data` | Create event (optional `photo` file)     |
+| GET    | `/api/events/:id` | —           | Event detail with agendas & participants |
+| PUT    | `/api/events/:id` | `form-data` | Update own event                         |
+| DELETE | `/api/events/:id` | —           | Delete event + all data (owner only)     |
+
+#### Event Registration
+
+| Method | Endpoint                       | Description                  |
+| ------ | ------------------------------ | ---------------------------- |
+| POST   | `/api/events/:id/register`     | Register for an event        |
+| DELETE | `/api/events/:id/register`     | Cancel registration          |
+| GET    | `/api/events/:id/participants` | List registered participants |
+
+#### Event Agenda
+
+| Method | Endpoint                 | Body | Description                     |
+| ------ | ------------------------ | ---- | ------------------------------- |
+| POST   | `/api/events/:id/agenda` | JSON | Add agenda item (owner only)    |
+| PUT    | `/api/events/agenda/:id` | JSON | Update agenda item (owner only) |
+| DELETE | `/api/events/agenda/:id` | —    | Delete agenda item (owner only) |
+
+#### Event Fields (form-data)
+
+| Key           | Required | Notes                                                        |
+| ------------- | -------- | ------------------------------------------------------------ |
+| `title`       | ✅       | —                                                            |
+| `description` | ❌       | —                                                            |
+| `location`    | ❌       | —                                                            |
+| `capacity`    | ❌       | integer, must be zero or positive                            |
+| `status`      | ❌       | `upcoming` (default) · `ongoing` · `completed` · `cancelled` |
+| `photo`       | ❌       | file upload → Cloudinary                                     |
+
+#### Agenda Fields (JSON)
+
+```json
+{
+  "description": "Opening Ceremony",
+  "agenda_time": "2026-06-01T09:00:00Z"
+}
+```
+
+#### Event Business Rules
+
+- `partner` role cannot create events, register, or manage agendas
+- Registration is **not allowed** when event `status` is `completed` or `cancelled`
+- A user can register for the same event **only once**
+- When `capacity` is set, it cannot be exceeded
+- When an event is deleted, all agendas and registrations are cascade-deleted
+- Only the event creator (owner) can update, delete, and manage agendas
+
+---
+
+## Cloudinary Upload Summary
+
+Every file upload is **optional** — omit the field to skip uploading. Accepted formats: `jpg` · `jpeg` · `png` · `webp`
+
+| Module          | Form field | Cloudinary folder                 |
+| --------------- | ---------- | --------------------------------- |
+| Profile picture | `picture`  | `alumni-platform/profiles`        |
+| Feed post image | `image`    | `alumni-platform/feed`            |
+| Group banner    | `banner`   | `alumni-platform/groups/banners`  |
+| Group article   | `media`    | `alumni-platform/groups/articles` |
+| Portfolio item  | `media`    | `alumni-platform/portfolio`       |
+| Event photo     | `photo`    | `alumni-platform/events`          |
+
+---
+
+## Response Format
+
+All responses follow a consistent envelope:
 
 **Success**
 
@@ -332,6 +477,36 @@ All responses follow a consistent structure:
   "error": "message describing the error"
 }
 ```
+
+---
+
+## Running Tests
+
+Tests are integration tests — the server must be running on port `8080` before executing them.
+
+```bash
+# Run all suites
+go test -v ./test/...
+
+# Run a specific suite
+go test -v -run TestAuth      ./test/...
+go test -v -run TestProfile   ./test/...
+go test -v -run TestCompany   ./test/...
+go test -v -run TestPortfolio ./test/...
+go test -v -run TestFeed      ./test/...
+go test -v -run TestGroup     ./test/...
+go test -v -run TestEvent     ./test/...
+```
+
+| Suite           | Coverage                                                                   |
+| --------------- | -------------------------------------------------------------------------- |
+| `TestAuth`      | Register (alumni/partner/duplicate), login, JWT `/me` guard                |
+| `TestProfile`   | Profile CRUD, job status variants, experience CRUD                         |
+| `TestCompany`   | Company CRUD, role guard, shared profile joining                           |
+| `TestPortfolio` | Portfolio CRUD, role guard, ownership checks                               |
+| `TestFeed`      | Post CRUD, nested comments, reactions toggle, vote flip                    |
+| `TestGroup`     | Group CRUD, membership, articles, nested comments, reactions, kick         |
+| `TestEvent`     | Event CRUD, registration, capacity enforcement, status guards, agenda CRUD |
 
 ---
 
