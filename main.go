@@ -41,6 +41,8 @@ func main() {
 		&models.Event{},
 		&models.EventAgenda{},
 		&models.EventRegistration{},
+		&models.Job{},
+		&models.JobApplication{},
 	); err != nil {
 		log.Fatalf("❌ AutoMigrate failed: %v", err)
 	}
@@ -70,6 +72,7 @@ func main() {
 	routes.RegisterFeedRoutes(app)
 	routes.RegisterGroupRoutes(app)
 	routes.RegisterEventRoutes(app)
+	routes.RegisterJobRoutes(app)
 
 	// Start server
 	port := os.Getenv("APP_PORT")
