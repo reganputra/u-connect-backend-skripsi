@@ -14,7 +14,7 @@ func CreateOrJoinCompanyProfile(c *fiber.Ctx) error {
 
 	var req service.CompanyProfileRequest
 	if err := c.BodyParser(&req); err != nil {
-		return utils.ErrorResponse(c, fiber.StatusBadRequest, "invalid request body")
+		return utils.ErrorResponse(c, fiber.StatusBadRequest, "isi permintaan tidak valid")
 	}
 
 	profile, created, err := service.CreateOrJoinCompanyProfile(userID, req)
@@ -51,7 +51,7 @@ func UpdateCompanyProfile(c *fiber.Ctx) error {
 
 	var req service.CompanyProfileRequest
 	if err := c.BodyParser(&req); err != nil {
-		return utils.ErrorResponse(c, fiber.StatusBadRequest, "invalid request body")
+		return utils.ErrorResponse(c, fiber.StatusBadRequest, "isi permintaan tidak valid")
 	}
 
 	profile, err := service.UpdateCompanyProfile(userID, req)
@@ -72,5 +72,5 @@ func DeleteCompanyProfile(c *fiber.Ctx) error {
 		return utils.ErrorResponse(c, fiber.StatusNotFound, err.Error())
 	}
 
-	return utils.SuccessResponse(c, fiber.StatusOK, fiber.Map{"message": "company profile deleted successfully"})
+	return utils.SuccessResponse(c, fiber.StatusOK, fiber.Map{"message": "profil perusahaan berhasil dihapus"})
 }

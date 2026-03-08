@@ -14,17 +14,38 @@ import (
 func getUserIDFromToken(c *fiber.Ctx) (uint, error) {
 	token, ok := c.Locals("user").(*jwt.Token)
 	if !ok {
-		return 0, fmt.Errorf("invalid token")
+		return 0, fmt.Errorf("token tidak valid")
 	}
 	claims, ok := token.Claims.(jwt.MapClaims)
 	if !ok {
-		return 0, fmt.Errorf("invalid claims")
+		return 0, fmt.Errorf("klaim token tidak valid")
 	}
 	idFloat, ok := claims["user_id"].(float64)
 	if !ok {
-		return 0, fmt.Errorf("invalid user_id in token")
+		return 0, fmt.Errorf("user_id tidak valid dalam token")
 	}
 	return uint(idFloat), nil
+}
+
+func getUserRoleFromToken(c *fiber.Ctx) (string, error) {
+	token, ok := c.Locals("user").(*jwt.Token)
+	if !ok {
+		return "", fmt.Errorf("token tidak valid")
+	}
+	claims, ok := token.Claims.(jwt.MapClaims)
+	if !ok {
+		return "", fmt.Errorf("klaim token tidak valid")
+	}
+
+	// Accept both lower and upper key variants to be resilient to token claim serialization.
+	if role, ok := claims["role"].(string); ok && role != "" {
+		return role, nil
+	}
+	if role, ok := claims["Role"].(string); ok && role != "" {
+		return role, nil
+	}
+
+	return "", fmt.Errorf("peran pengguna tidak ditemukan")
 }
 
 // parseOptionalString returns a *string if the form value is non-empty, else nil
@@ -47,7 +68,7 @@ func parseOptionalInt(val string) *int {
 	return &n
 }
 
-// uploadFileIfPresent uploads a form file to Cloudinary and returns its URL.
+// uploadFileIfPresent uploads an image form file to Cloudinary and returns its URL.
 // Returns empty string and nil error if no file was provided.
 func uploadFileIfPresent(c *fiber.Ctx, fieldName, folder string) (string, error) {
 	file, err := c.FormFile(fieldName)
@@ -55,6 +76,20 @@ func uploadFileIfPresent(c *fiber.Ctx, fieldName, folder string) (string, error)
 		return "", nil // no file — not an error
 	}
 	url, err := utils.UploadImage(config.Cloudinary, file, folder)
+	if err != nil {
+		return "", err
+	}
+	return url, nil
+}
+
+// uploadRawFileIfPresent uploads any file type (e.g. PDF resume) to Cloudinary.
+// Returns empty string and nil error if no file was provided.
+func uploadRawFileIfPresent(c *fiber.Ctx, fieldName, folder string) (string, error) {
+	file, err := c.FormFile(fieldName)
+	if err != nil || file == nil {
+		return "", nil // no file — not an error
+	}
+	url, err := utils.UploadFile(config.Cloudinary, file, folder)
 	if err != nil {
 		return "", err
 	}
@@ -183,7 +218,7 @@ func DeleteProfile(c *fiber.Ctx) error {
 		return utils.ErrorResponse(c, fiber.StatusNotFound, err.Error())
 	}
 
-	return utils.SuccessResponse(c, fiber.StatusOK, fiber.Map{"message": "profile deleted successfully"})
+	return utils.SuccessResponse(c, fiber.StatusOK, fiber.Map{"message": "profil berhasil dihapus"})
 }
 
 func AddExperience(c *fiber.Ctx) error {
@@ -194,7 +229,7 @@ func AddExperience(c *fiber.Ctx) error {
 
 	var req service.ExperienceRequest
 	if err := c.BodyParser(&req); err != nil {
-		return utils.ErrorResponse(c, fiber.StatusBadRequest, "invalid request body")
+		return utils.ErrorResponse(c, fiber.StatusBadRequest, "isi permintaan tidak valid")
 	}
 
 	exp, err := service.AddExperience(userID, req)
@@ -213,12 +248,12 @@ func UpdateExperience(c *fiber.Ctx) error {
 
 	expID, err := strconv.ParseUint(c.Params("id"), 10, 64)
 	if err != nil {
-		return utils.ErrorResponse(c, fiber.StatusBadRequest, "invalid experience id")
+		return utils.ErrorResponse(c, fiber.StatusBadRequest, "ID pengalaman tidak valid")
 	}
 
 	var req service.ExperienceRequest
 	if err := c.BodyParser(&req); err != nil {
-		return utils.ErrorResponse(c, fiber.StatusBadRequest, "invalid request body")
+		return utils.ErrorResponse(c, fiber.StatusBadRequest, "isi permintaan tidak valid")
 	}
 
 	exp, err := service.UpdateExperience(userID, uint(expID), req)
@@ -237,12 +272,12 @@ func DeleteExperience(c *fiber.Ctx) error {
 
 	expID, err := strconv.ParseUint(c.Params("id"), 10, 64)
 	if err != nil {
-		return utils.ErrorResponse(c, fiber.StatusBadRequest, "invalid experience id")
+		return utils.ErrorResponse(c, fiber.StatusBadRequest, "ID pengalaman tidak valid")
 	}
 
 	if err := service.DeleteExperience(userID, uint(expID)); err != nil {
 		return utils.ErrorResponse(c, fiber.StatusBadRequest, err.Error())
 	}
 
-	return utils.SuccessResponse(c, fiber.StatusOK, fiber.Map{"message": "experience deleted successfully"})
+	return utils.SuccessResponse(c, fiber.StatusOK, fiber.Map{"message": "pengalaman berhasil dihapus"})
 }

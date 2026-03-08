@@ -46,7 +46,7 @@ func GetPortfolioItems(c *fiber.Ctx) error {
 
 	items, err := service.GetPortfolioItems(userID)
 	if err != nil {
-		return utils.ErrorResponse(c, fiber.StatusInternalServerError, "failed to fetch portfolio items")
+		return utils.ErrorResponse(c, fiber.StatusInternalServerError, "gagal mengambil data portofolio")
 	}
 
 	return utils.SuccessResponse(c, fiber.StatusOK, items)
@@ -60,7 +60,7 @@ func UpdatePortfolioItem(c *fiber.Ctx) error {
 
 	itemID, err := strconv.ParseUint(c.Params("id"), 10, 64)
 	if err != nil {
-		return utils.ErrorResponse(c, fiber.StatusBadRequest, "invalid portfolio item id")
+		return utils.ErrorResponse(c, fiber.StatusBadRequest, "ID item portofolio tidak valid")
 	}
 
 	// Handle optional media upload
@@ -81,7 +81,7 @@ func UpdatePortfolioItem(c *fiber.Ctx) error {
 
 	item, err := service.UpdatePortfolioItem(userID, uint(itemID), req)
 	if err != nil {
-		if err.Error() == "access denied" {
+		if err.Error() == "akses ditolak" {
 			return utils.ErrorResponse(c, fiber.StatusForbidden, err.Error())
 		}
 		return utils.ErrorResponse(c, fiber.StatusBadRequest, err.Error())
@@ -98,15 +98,15 @@ func DeletePortfolioItem(c *fiber.Ctx) error {
 
 	itemID, err := strconv.ParseUint(c.Params("id"), 10, 64)
 	if err != nil {
-		return utils.ErrorResponse(c, fiber.StatusBadRequest, "invalid portfolio item id")
+		return utils.ErrorResponse(c, fiber.StatusBadRequest, "ID item portofolio tidak valid")
 	}
 
 	if err := service.DeletePortfolioItem(userID, uint(itemID)); err != nil {
-		if err.Error() == "access denied" {
+		if err.Error() == "akses ditolak" {
 			return utils.ErrorResponse(c, fiber.StatusForbidden, err.Error())
 		}
 		return utils.ErrorResponse(c, fiber.StatusNotFound, err.Error())
 	}
 
-	return utils.SuccessResponse(c, fiber.StatusOK, fiber.Map{"message": "portfolio item deleted successfully"})
+	return utils.SuccessResponse(c, fiber.StatusOK, fiber.Map{"message": "item portofolio berhasil dihapus"})
 }

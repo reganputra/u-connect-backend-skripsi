@@ -18,7 +18,7 @@ func Protected() fiber.Handler {
 	return jwtware.New(jwtware.Config{
 		SigningKey: jwtware.SigningKey{Key: []byte(secret)},
 		ErrorHandler: func(c *fiber.Ctx, err error) error {
-			return utils.ErrorResponse(c, fiber.StatusUnauthorized, "missing or invalid token")
+			return utils.ErrorResponse(c, fiber.StatusUnauthorized, "token tidak ada atau tidak valid")
 		},
 	})
 }
@@ -28,12 +28,12 @@ func RequireRole(roles ...string) fiber.Handler {
 	return func(c *fiber.Ctx) error {
 		user, ok := c.Locals("user").(*jwt.Token)
 		if !ok {
-			return utils.ErrorResponse(c, fiber.StatusUnauthorized, "missing or invalid token")
+			return utils.ErrorResponse(c, fiber.StatusUnauthorized, "token tidak ada atau tidak valid")
 		}
 
 		claims, ok := user.Claims.(jwt.MapClaims)
 		if !ok {
-			return utils.ErrorResponse(c, fiber.StatusUnauthorized, "invalid token claims")
+			return utils.ErrorResponse(c, fiber.StatusUnauthorized, "klaim token tidak valid")
 		}
 
 		role, _ := claims["role"].(string)
@@ -43,6 +43,6 @@ func RequireRole(roles ...string) fiber.Handler {
 			}
 		}
 
-		return utils.ErrorResponse(c, fiber.StatusForbidden, "access denied: insufficient role")
+		return utils.ErrorResponse(c, fiber.StatusForbidden, "akses ditolak: peran tidak mencukupi")
 	}
 }

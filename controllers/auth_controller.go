@@ -9,7 +9,7 @@ import (
 func Register(c *fiber.Ctx) error {
 	var req service.RegisterRequest
 	if err := c.BodyParser(&req); err != nil {
-		return utils.ErrorResponse(c, fiber.StatusBadRequest, "invalid request body")
+		return utils.ErrorResponse(c, fiber.StatusBadRequest, "isi permintaan tidak valid")
 	}
 
 	user, err := service.Register(req)
@@ -34,7 +34,7 @@ func Register(c *fiber.Ctx) error {
 func Login(c *fiber.Ctx) error {
 	var req service.LoginRequest
 	if err := c.BodyParser(&req); err != nil {
-		return utils.ErrorResponse(c, fiber.StatusBadRequest, "invalid request body")
+		return utils.ErrorResponse(c, fiber.StatusBadRequest, "isi permintaan tidak valid")
 	}
 
 	token, err := service.Login(req)
