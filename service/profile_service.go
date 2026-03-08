@@ -7,7 +7,7 @@ import (
 	"github.com/reganputra/skripsi-backend/repository"
 )
 
-var validJobStatuses = map[string]bool{
+var validProfileJobStatuses = map[string]bool{
 	"employed":         true,
 	"entrepreneur":     true,
 	"continuing_study": true,
@@ -61,34 +61,34 @@ func validateJobStatus(req ProfileRequest) error {
 		return nil
 	}
 	status := *req.JobStatus
-	if !validJobStatuses[status] {
-		return errors.New("invalid job_status: must be employed, entrepreneur, continuing_study, unemployed, freelance, or student")
+	if !validProfileJobStatuses[status] {
+		return errors.New("status pekerjaan tidak valid: harus employed, entrepreneur, continuing_study, unemployed, freelance, atau student")
 	}
 	switch status {
 	case "employed":
 		if req.Position == nil || *req.Position == "" {
-			return errors.New("position is required when job_status is employed")
+			return errors.New("posisi wajib diisi ketika status pekerjaan adalah employed")
 		}
 		if req.CompanyName == nil || *req.CompanyName == "" {
-			return errors.New("company_name is required when job_status is employed")
+			return errors.New("nama perusahaan wajib diisi ketika status pekerjaan adalah employed")
 		}
 	case "entrepreneur":
 		if req.IndustryName == nil || *req.IndustryName == "" {
-			return errors.New("industry_name is required when job_status is entrepreneur")
+			return errors.New("nama industri wajib diisi ketika status pekerjaan adalah entrepreneur")
 		}
 	case "continuing_study":
 		if req.EducationalLevel == nil || *req.EducationalLevel == "" {
-			return errors.New("educational_level is required when job_status is continuing_study")
+			return errors.New("jenjang pendidikan wajib diisi ketika status pekerjaan adalah continuing_study")
 		}
 		if req.AdvancedStudyProgram == nil || *req.AdvancedStudyProgram == "" {
-			return errors.New("advanced_study_program is required when job_status is continuing_study")
+			return errors.New("program studi lanjut wajib diisi ketika status pekerjaan adalah continuing_study")
 		}
 		if req.InstitutionName == nil || *req.InstitutionName == "" {
-			return errors.New("institution_name is required when job_status is continuing_study")
+			return errors.New("nama institusi wajib diisi ketika status pekerjaan adalah continuing_study")
 		}
 	case "unemployed", "freelance":
 		if req.StatusDescription == nil || *req.StatusDescription == "" {
-			return errors.New("status_description is required when job_status is unemployed or freelance")
+			return errors.New("deskripsi status wajib diisi ketika status pekerjaan adalah unemployed atau freelance")
 		}
 	}
 	return nil
@@ -126,7 +126,7 @@ func CreateProfile(userID uint, req ProfileRequest) (*models.UserProfile, error)
 	// Check for duplicate
 	existing, _ := repository.FindProfileByUserID(userID)
 	if existing != nil {
-		return nil, errors.New("profile already exists")
+		return nil, errors.New("profil sudah ada")
 	}
 
 	if err := validateJobStatus(req); err != nil {
@@ -162,7 +162,7 @@ func CreateProfile(userID uint, req ProfileRequest) (*models.UserProfile, error)
 	nullFieldsByStatus(profile)
 
 	if err := repository.CreateProfile(profile); err != nil {
-		return nil, errors.New("failed to create profile")
+		return nil, errors.New("gagal membuat profil")
 	}
 	return profile, nil
 }
@@ -170,7 +170,7 @@ func CreateProfile(userID uint, req ProfileRequest) (*models.UserProfile, error)
 func GetProfile(userID uint) (*models.UserProfile, error) {
 	profile, err := repository.FindProfileByUserID(userID)
 	if err != nil {
-		return nil, errors.New("profile not found")
+		return nil, errors.New("profil tidak ditemukan")
 	}
 	return profile, nil
 }
@@ -178,7 +178,7 @@ func GetProfile(userID uint) (*models.UserProfile, error) {
 func UpdateProfile(userID uint, req ProfileRequest) (*models.UserProfile, error) {
 	profile, err := repository.FindProfileByUserID(userID)
 	if err != nil {
-		return nil, errors.New("profile not found")
+		return nil, errors.New("profil tidak ditemukan")
 	}
 
 	// Apply updates for non-nil fields only
@@ -246,7 +246,7 @@ func UpdateProfile(userID uint, req ProfileRequest) (*models.UserProfile, error)
 	nullFieldsByStatus(profile)
 
 	if err := repository.UpdateProfile(profile); err != nil {
-		return nil, errors.New("failed to update profile")
+		return nil, errors.New("gagal memperbarui profil")
 	}
 	return profile, nil
 }
@@ -254,19 +254,19 @@ func UpdateProfile(userID uint, req ProfileRequest) (*models.UserProfile, error)
 func DeleteProfile(userID uint) error {
 	_, err := repository.FindProfileByUserID(userID)
 	if err != nil {
-		return errors.New("profile not found")
+		return errors.New("profil tidak ditemukan")
 	}
 	return repository.DeleteProfileByUserID(userID)
 }
 
 func AddExperience(userID uint, req ExperienceRequest) (*models.UserExperience, error) {
 	if req.CompanyName == "" || req.Position == "" || req.StartYear == 0 {
-		return nil, errors.New("company_name, position, and start_year are required")
+		return nil, errors.New("nama perusahaan, posisi, dan tahun mulai wajib diisi")
 	}
 
 	profile, err := repository.FindProfileByUserID(userID)
 	if err != nil {
-		return nil, errors.New("profile not found, please create a profile first")
+		return nil, errors.New("profil tidak ditemukan, silakan buat profil terlebih dahulu")
 	}
 
 	exp := &models.UserExperience{
@@ -279,7 +279,7 @@ func AddExperience(userID uint, req ExperienceRequest) (*models.UserExperience, 
 	}
 
 	if err := repository.AddExperience(exp); err != nil {
-		return nil, errors.New("failed to add experience")
+		return nil, errors.New("gagal menambahkan pengalaman")
 	}
 	return exp, nil
 }
@@ -287,17 +287,17 @@ func AddExperience(userID uint, req ExperienceRequest) (*models.UserExperience, 
 func UpdateExperience(userID uint, expID uint, req ExperienceRequest) (*models.UserExperience, error) {
 	profile, err := repository.FindProfileByUserID(userID)
 	if err != nil {
-		return nil, errors.New("profile not found")
+		return nil, errors.New("profil tidak ditemukan")
 	}
 
 	exp, err := repository.FindExperienceByID(expID)
 	if err != nil {
-		return nil, errors.New("experience not found")
+		return nil, errors.New("pengalaman tidak ditemukan")
 	}
 
 	// Verify ownership
 	if exp.UserProfileID != profile.ID {
-		return nil, errors.New("access denied")
+		return nil, errors.New("akses ditolak")
 	}
 
 	if req.CompanyName != "" {
@@ -313,7 +313,7 @@ func UpdateExperience(userID uint, expID uint, req ExperienceRequest) (*models.U
 	exp.Description = req.Description
 
 	if err := repository.UpdateExperience(exp); err != nil {
-		return nil, errors.New("failed to update experience")
+		return nil, errors.New("gagal memperbarui pengalaman")
 	}
 	return exp, nil
 }
@@ -321,16 +321,16 @@ func UpdateExperience(userID uint, expID uint, req ExperienceRequest) (*models.U
 func DeleteExperience(userID uint, expID uint) error {
 	profile, err := repository.FindProfileByUserID(userID)
 	if err != nil {
-		return errors.New("profile not found")
+		return errors.New("profil tidak ditemukan")
 	}
 
 	exp, err := repository.FindExperienceByID(expID)
 	if err != nil {
-		return errors.New("experience not found")
+		return errors.New("pengalaman tidak ditemukan")
 	}
 
 	if exp.UserProfileID != profile.ID {
-		return errors.New("access denied")
+		return errors.New("akses ditolak")
 	}
 
 	return repository.DeleteExperience(expID)
@@ -339,7 +339,7 @@ func DeleteExperience(userID uint, expID uint) error {
 func UpdateProfilePicture(userID uint, pictureURL string) error {
 	profile, err := repository.FindProfileByUserID(userID)
 	if err != nil {
-		return errors.New("profile not found")
+		return errors.New("profil tidak ditemukan")
 	}
 	profile.ProfilePicture = pictureURL
 	return repository.UpdateProfile(profile)

@@ -132,7 +132,7 @@ type VoteRequest struct {
 
 func CreatePost(userID uint, req PostRequest) (*models.Post, error) {
 	if req.Title == "" || req.Content == "" {
-		return nil, errors.New("title and content are required")
+		return nil, errors.New("judul dan konten wajib diisi")
 	}
 	post := &models.Post{
 		UserID:   userID,
@@ -142,7 +142,7 @@ func CreatePost(userID uint, req PostRequest) (*models.Post, error) {
 		ImageURL: req.ImageURL,
 	}
 	if err := repository.CreatePost(post); err != nil {
-		return nil, errors.New("failed to create post")
+		return nil, errors.New("gagal membuat postingan")
 	}
 	return post, nil
 }
@@ -184,13 +184,13 @@ func GetPosts(page, limit int) ([]*PostListItem, int64, error) {
 func GetPostByID(id uint) (*PostDetailResponse, error) {
 	post, err := repository.FindPostByID(id)
 	if err != nil {
-		return nil, errors.New("post not found")
+		return nil, errors.New("postingan tidak ditemukan")
 	}
 
 	// Load all comments flat (any depth) with their reactions & votes
 	comments, err := repository.FindAllCommentsByPostID(id)
 	if err != nil {
-		return nil, errors.New("failed to load comments")
+		return nil, errors.New("gagal memuat komentar")
 	}
 
 	return &PostDetailResponse{
@@ -212,10 +212,10 @@ func GetPostByID(id uint) (*PostDetailResponse, error) {
 func UpdatePost(userID uint, postID uint, req PostRequest) (*models.Post, error) {
 	post, err := repository.FindPostByID(postID)
 	if err != nil {
-		return nil, errors.New("post not found")
+		return nil, errors.New("postingan tidak ditemukan")
 	}
 	if post.UserID != userID {
-		return nil, errors.New("access denied")
+		return nil, errors.New("akses ditolak")
 	}
 	if req.Title != "" {
 		post.Title = req.Title
@@ -230,7 +230,7 @@ func UpdatePost(userID uint, postID uint, req PostRequest) (*models.Post, error)
 		post.ImageURL = req.ImageURL
 	}
 	if err := repository.UpdatePost(post); err != nil {
-		return nil, errors.New("failed to update post")
+		return nil, errors.New("gagal memperbarui postingan")
 	}
 	return post, nil
 }
@@ -238,10 +238,10 @@ func UpdatePost(userID uint, postID uint, req PostRequest) (*models.Post, error)
 func DeletePost(userID uint, postID uint) error {
 	post, err := repository.FindPostByID(postID)
 	if err != nil {
-		return errors.New("post not found")
+		return errors.New("postingan tidak ditemukan")
 	}
 	if post.UserID != userID {
-		return errors.New("access denied")
+		return errors.New("akses ditolak")
 	}
 	return repository.DeletePost(postID)
 }
@@ -250,11 +250,11 @@ func DeletePost(userID uint, postID uint) error {
 
 func AddComment(userID uint, postID uint, req CommentRequest) (*models.Comment, error) {
 	if req.Content == "" {
-		return nil, errors.New("content is required")
+		return nil, errors.New("konten wajib diisi")
 	}
 	// Verify post exists
 	if _, err := repository.FindPostByID(postID); err != nil {
-		return nil, errors.New("post not found")
+		return nil, errors.New("postingan tidak ditemukan")
 	}
 	comment := &models.Comment{
 		PostID:          postID,
@@ -263,25 +263,25 @@ func AddComment(userID uint, postID uint, req CommentRequest) (*models.Comment, 
 		ParentCommentID: req.ParentCommentID,
 	}
 	if err := repository.CreateComment(comment); err != nil {
-		return nil, errors.New("failed to add comment")
+		return nil, errors.New("gagal menambahkan komentar")
 	}
 	return comment, nil
 }
 
 func UpdateComment(userID uint, commentID uint, req CommentRequest) (*models.Comment, error) {
 	if req.Content == "" {
-		return nil, errors.New("content is required")
+		return nil, errors.New("konten wajib diisi")
 	}
 	comment, err := repository.FindCommentByID(commentID)
 	if err != nil {
-		return nil, errors.New("comment not found")
+		return nil, errors.New("komentar tidak ditemukan")
 	}
 	if comment.UserID != userID {
-		return nil, errors.New("access denied")
+		return nil, errors.New("akses ditolak")
 	}
 	comment.Content = req.Content
 	if err := repository.UpdateComment(comment); err != nil {
-		return nil, errors.New("failed to update comment")
+		return nil, errors.New("gagal memperbarui komentar")
 	}
 	return comment, nil
 }
@@ -289,10 +289,10 @@ func UpdateComment(userID uint, commentID uint, req CommentRequest) (*models.Com
 func DeleteComment(userID uint, commentID uint) error {
 	comment, err := repository.FindCommentByID(commentID)
 	if err != nil {
-		return errors.New("comment not found")
+		return errors.New("komentar tidak ditemukan")
 	}
 	if comment.UserID != userID {
-		return errors.New("access denied")
+		return errors.New("akses ditolak")
 	}
 	return repository.DeleteComment(commentID)
 }
@@ -301,7 +301,7 @@ func DeleteComment(userID uint, commentID uint) error {
 
 func ReactToPost(userID uint, postID uint, req ReactionRequest) (string, error) {
 	if !validReactionTypes[req.Type] {
-		return "", errors.New("invalid reaction type: must be like, love, haha, wow, sad, or angry")
+		return "", errors.New("jenis reaksi tidak valid: harus like, love, haha, wow, sad, atau angry")
 	}
 
 	existing, err := repository.FindReaction(userID, &postID, nil)
@@ -323,7 +323,7 @@ func ReactToPost(userID uint, postID uint, req ReactionRequest) (string, error) 
 
 func ReactToComment(userID uint, commentID uint, req ReactionRequest) (string, error) {
 	if !validReactionTypes[req.Type] {
-		return "", errors.New("invalid reaction type: must be like, love, haha, wow, sad, or angry")
+		return "", errors.New("jenis reaksi tidak valid: harus like, love, haha, wow, sad, atau angry")
 	}
 
 	existing, err := repository.FindReaction(userID, nil, &commentID)
@@ -345,7 +345,7 @@ func ReactToComment(userID uint, commentID uint, req ReactionRequest) (string, e
 
 func VotePost(userID uint, postID uint, req VoteRequest) (string, error) {
 	if req.Value != 1 && req.Value != -1 {
-		return "", errors.New("value must be 1 (upvote) or -1 (downvote)")
+		return "", errors.New("nilai harus 1 (upvote) atau -1 (downvote)")
 	}
 
 	existing, err := repository.FindVote(userID, &postID, nil)
@@ -365,7 +365,7 @@ func VotePost(userID uint, postID uint, req VoteRequest) (string, error) {
 
 func VoteComment(userID uint, commentID uint, req VoteRequest) (string, error) {
 	if req.Value != 1 && req.Value != -1 {
-		return "", errors.New("value must be 1 (upvote) or -1 (downvote)")
+		return "", errors.New("nilai harus 1 (upvote) atau -1 (downvote)")
 	}
 
 	existing, err := repository.FindVote(userID, nil, &commentID)

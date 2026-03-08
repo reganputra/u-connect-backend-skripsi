@@ -45,34 +45,34 @@ type AuthClaims struct {
 func Register(req RegisterRequest) (*models.User, error) {
 	// Validate common fields
 	if req.Name == "" || req.Email == "" || req.Password == "" || req.Role == "" {
-		return nil, errors.New("name, email, password, and role are required")
+		return nil, errors.New("nama, email, kata sandi, dan peran wajib diisi")
 	}
 	if !validRoles[req.Role] {
-		return nil, errors.New("invalid role: must be alumni, student, or partner")
+		return nil, errors.New("peran tidak valid: harus alumni, student, atau partner")
 	}
 
 	// Validate role-specific fields
 	if req.Role == "alumni" || req.Role == "student" {
 		if req.Faculty == "" || req.Major == "" || req.YearEnroll == 0 {
-			return nil, errors.New("faculty, major, and year_enroll are required for alumni and student")
+			return nil, errors.New("fakultas, jurusan, dan tahun masuk wajib diisi untuk alumni dan mahasiswa")
 		}
 	}
 	if req.Role == "partner" {
 		if req.CompanyName == "" {
-			return nil, errors.New("company_name is required for partner")
+			return nil, errors.New("nama perusahaan wajib diisi untuk partner")
 		}
 	}
 
 	// Check email uniqueness
 	existing, _ := repository.FindUserByEmail(req.Email)
 	if existing != nil {
-		return nil, errors.New("email already registered")
+		return nil, errors.New("email sudah terdaftar")
 	}
 
 	// Hash password
 	hashed, err := bcrypt.GenerateFromPassword([]byte(req.Password), bcrypt.DefaultCost)
 	if err != nil {
-		return nil, errors.New("failed to hash password")
+		return nil, errors.New("gagal mengenkripsi kata sandi")
 	}
 
 	user := &models.User{
@@ -93,7 +93,7 @@ func Register(req RegisterRequest) (*models.User, error) {
 	}
 
 	if err := repository.CreateUser(user); err != nil {
-		return nil, errors.New("failed to create user")
+		return nil, errors.New("gagal membuat pengguna")
 	}
 
 	return user, nil
@@ -101,16 +101,16 @@ func Register(req RegisterRequest) (*models.User, error) {
 
 func Login(req LoginRequest) (string, error) {
 	if req.Email == "" || req.Password == "" {
-		return "", errors.New("email and password are required")
+		return "", errors.New("email dan kata sandi wajib diisi")
 	}
 
 	user, err := repository.FindUserByEmail(req.Email)
 	if err != nil {
-		return "", errors.New("invalid email or password")
+		return "", errors.New("email atau kata sandi tidak valid")
 	}
 
 	if err := bcrypt.CompareHashAndPassword([]byte(user.Password), []byte(req.Password)); err != nil {
-		return "", errors.New("invalid email or password")
+		return "", errors.New("email atau kata sandi tidak valid")
 	}
 
 	claims := AuthClaims{
@@ -131,7 +131,7 @@ func Login(req LoginRequest) (string, error) {
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
 	signed, err := token.SignedString([]byte(secret))
 	if err != nil {
-		return "", errors.New("failed to generate token")
+		return "", errors.New("gagal membuat token")
 	}
 
 	return signed, nil

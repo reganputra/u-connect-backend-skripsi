@@ -106,6 +106,38 @@ func registerAndLogin(t *testing.T, suffix, name, email, role, faculty, major st
 	return
 }
 
+// formReqWithFile sends a multipart/form-data request with one file field and returns (statusCode, parsed body).
+func formReqWithFile(t *testing.T, method, path, token string, fields map[string]string, fileField, fileName string, fileContent []byte) (int, map[string]any) {
+	t.Helper()
+	var buf bytes.Buffer
+	w := multipart.NewWriter(&buf)
+	for k, v := range fields {
+		_ = w.WriteField(k, v)
+	}
+	if len(fileContent) > 0 {
+		fw, err := w.CreateFormFile(fileField, fileName)
+		if err != nil {
+			t.Fatalf("❌ failed to create form file: %v", err)
+		}
+		_, _ = fw.Write(fileContent)
+	}
+	w.Close()
+	req, _ := http.NewRequest(method, baseURL+path, &buf)
+	req.Header.Set("Content-Type", w.FormDataContentType())
+	if token != "" {
+		req.Header.Set("Authorization", "Bearer "+token)
+	}
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("❌ HTTP request failed: %v", err)
+	}
+	defer resp.Body.Close()
+	raw, _ := io.ReadAll(resp.Body)
+	var result map[string]any
+	_ = json.Unmarshal(raw, &result)
+	return resp.StatusCode, result
+}
+
 // registerAndLoginPartner registers a partner user and returns their token and user ID.
 func registerAndLoginPartner(t *testing.T, name, email, companyName string) (token string, userID float64) {
 	t.Helper()

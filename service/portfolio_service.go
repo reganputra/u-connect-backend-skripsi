@@ -19,7 +19,7 @@ type PortfolioItemRequest struct {
 
 func CreatePortfolioItem(userID uint, req PortfolioItemRequest) (*models.PortfolioItem, error) {
 	if req.Title == "" {
-		return nil, errors.New("title is required")
+		return nil, errors.New("judul wajib diisi")
 	}
 
 	item := &models.PortfolioItem{
@@ -34,7 +34,7 @@ func CreatePortfolioItem(userID uint, req PortfolioItemRequest) (*models.Portfol
 	}
 
 	if err := repository.CreatePortfolioItem(item); err != nil {
-		return nil, errors.New("failed to create portfolio item")
+		return nil, errors.New("gagal membuat item portofolio")
 	}
 	return item, nil
 }
@@ -46,12 +46,12 @@ func GetPortfolioItems(userID uint) ([]models.PortfolioItem, error) {
 func UpdatePortfolioItem(userID uint, itemID uint, req PortfolioItemRequest) (*models.PortfolioItem, error) {
 	item, err := repository.FindPortfolioItemByID(itemID)
 	if err != nil {
-		return nil, errors.New("portfolio item not found")
+		return nil, errors.New("item portofolio tidak ditemukan")
 	}
 
 	// Ownership check
 	if item.UserID != userID {
-		return nil, errors.New("access denied")
+		return nil, errors.New("akses ditolak")
 	}
 
 	if req.Title != "" {
@@ -77,7 +77,7 @@ func UpdatePortfolioItem(userID uint, itemID uint, req PortfolioItemRequest) (*m
 	}
 
 	if err := repository.UpdatePortfolioItem(item); err != nil {
-		return nil, errors.New("failed to update portfolio item")
+		return nil, errors.New("gagal memperbarui item portofolio")
 	}
 	return item, nil
 }
@@ -85,10 +85,10 @@ func UpdatePortfolioItem(userID uint, itemID uint, req PortfolioItemRequest) (*m
 func DeletePortfolioItem(userID uint, itemID uint) error {
 	item, err := repository.FindPortfolioItemByID(itemID)
 	if err != nil {
-		return errors.New("portfolio item not found")
+		return errors.New("item portofolio tidak ditemukan")
 	}
 	if item.UserID != userID {
-		return errors.New("access denied")
+		return errors.New("akses ditolak")
 	}
 	return repository.DeletePortfolioItem(itemID)
 }
@@ -96,10 +96,10 @@ func DeletePortfolioItem(userID uint, itemID uint) error {
 func UpdatePortfolioMedia(userID uint, itemID uint, mediaURL string) error {
 	item, err := repository.FindPortfolioItemByID(itemID)
 	if err != nil {
-		return errors.New("portfolio item not found")
+		return errors.New("item portofolio tidak ditemukan")
 	}
 	if item.UserID != userID {
-		return errors.New("access denied")
+		return errors.New("akses ditolak")
 	}
 	item.MediaURL = &mediaURL
 	return repository.UpdatePortfolioItem(item)

@@ -18,15 +18,15 @@ func CreateOrJoinCompanyProfile(userID uint, req CompanyProfileRequest) (*models
 	// Load user to get company_name from registration
 	user, err := repository.FindUserByID(userID)
 	if err != nil {
-		return nil, false, errors.New("user not found")
+		return nil, false, errors.New("pengguna tidak ditemukan")
 	}
 	if user.CompanyName == nil || *user.CompanyName == "" {
-		return nil, false, errors.New("company_name is not set on your account")
+		return nil, false, errors.New("nama perusahaan belum diatur pada akun Anda")
 	}
 
 	// Validate employee_size if provided
 	if req.EmployeeSize != nil && *req.EmployeeSize < 0 {
-		return nil, false, errors.New("employee_size must be zero or positive")
+		return nil, false, errors.New("jumlah karyawan harus nol atau positif")
 	}
 
 	companyName := *user.CompanyName
@@ -48,7 +48,7 @@ func CreateOrJoinCompanyProfile(userID uint, req CompanyProfileRequest) (*models
 	}
 
 	if err := repository.CreateCompanyProfile(profile); err != nil {
-		return nil, false, errors.New("failed to create company profile")
+		return nil, false, errors.New("gagal membuat profil perusahaan")
 	}
 	return profile, true, nil
 }
@@ -56,15 +56,15 @@ func CreateOrJoinCompanyProfile(userID uint, req CompanyProfileRequest) (*models
 func GetCompanyProfile(userID uint) (*models.CompanyProfile, error) {
 	user, err := repository.FindUserByID(userID)
 	if err != nil {
-		return nil, errors.New("user not found")
+		return nil, errors.New("pengguna tidak ditemukan")
 	}
 	if user.CompanyName == nil || *user.CompanyName == "" {
-		return nil, errors.New("company_name is not set on your account")
+		return nil, errors.New("nama perusahaan belum diatur pada akun Anda")
 	}
 
 	profile, err := repository.FindCompanyProfileByName(*user.CompanyName)
 	if err != nil {
-		return nil, errors.New("company profile not found")
+		return nil, errors.New("profil perusahaan tidak ditemukan")
 	}
 	return profile, nil
 }
@@ -72,20 +72,20 @@ func GetCompanyProfile(userID uint) (*models.CompanyProfile, error) {
 func UpdateCompanyProfile(userID uint, req CompanyProfileRequest) (*models.CompanyProfile, error) {
 	user, err := repository.FindUserByID(userID)
 	if err != nil {
-		return nil, errors.New("user not found")
+		return nil, errors.New("pengguna tidak ditemukan")
 	}
 	if user.CompanyName == nil || *user.CompanyName == "" {
-		return nil, errors.New("company_name is not set on your account")
+		return nil, errors.New("nama perusahaan belum diatur pada akun Anda")
 	}
 
 	profile, err := repository.FindCompanyProfileByName(*user.CompanyName)
 	if err != nil {
-		return nil, errors.New("company profile not found")
+		return nil, errors.New("profil perusahaan tidak ditemukan")
 	}
 
 	if req.EmployeeSize != nil {
 		if *req.EmployeeSize < 0 {
-			return nil, errors.New("employee_size must be zero or positive")
+			return nil, errors.New("jumlah karyawan harus nol atau positif")
 		}
 		profile.EmployeeSize = req.EmployeeSize
 	}
@@ -100,7 +100,7 @@ func UpdateCompanyProfile(userID uint, req CompanyProfileRequest) (*models.Compa
 	}
 
 	if err := repository.UpdateCompanyProfile(profile); err != nil {
-		return nil, errors.New("failed to update company profile")
+		return nil, errors.New("gagal memperbarui profil perusahaan")
 	}
 	return profile, nil
 }
@@ -108,15 +108,15 @@ func UpdateCompanyProfile(userID uint, req CompanyProfileRequest) (*models.Compa
 func DeleteCompanyProfile(userID uint) error {
 	user, err := repository.FindUserByID(userID)
 	if err != nil {
-		return errors.New("user not found")
+		return errors.New("pengguna tidak ditemukan")
 	}
 	if user.CompanyName == nil || *user.CompanyName == "" {
-		return errors.New("company_name is not set on your account")
+		return errors.New("nama perusahaan belum diatur pada akun Anda")
 	}
 
 	profile, err := repository.FindCompanyProfileByName(*user.CompanyName)
 	if err != nil {
-		return errors.New("company profile not found")
+		return errors.New("profil perusahaan tidak ditemukan")
 	}
 
 	return repository.DeleteCompanyProfile(profile.ID)
