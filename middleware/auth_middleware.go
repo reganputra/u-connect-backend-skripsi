@@ -12,9 +12,6 @@ import (
 // Protected returns a Fiber middleware that validates Bearer JWT tokens.
 func Protected() fiber.Handler {
 	secret := os.Getenv("JWT_SECRET")
-	if secret == "" {
-		secret = "default_secret"
-	}
 	return jwtware.New(jwtware.Config{
 		SigningKey: jwtware.SigningKey{Key: []byte(secret)},
 		ErrorHandler: func(c *fiber.Ctx, err error) error {

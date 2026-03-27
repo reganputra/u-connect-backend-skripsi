@@ -17,6 +17,8 @@ var validRoles = map[string]bool{
 	"partner": true,
 }
 
+// ─── DTOs ─────────────────────────────────────────────────────────────────────
+
 type RegisterRequest struct {
 	Name     string `json:"name"`
 	Email    string `json:"email"`
@@ -42,7 +44,24 @@ type AuthClaims struct {
 	jwt.RegisteredClaims
 }
 
-func Register(req RegisterRequest) (*models.User, error) {
+// ─── Interface ────────────────────────────────────────────────────────────────
+
+type AuthService interface {
+	Register(req RegisterRequest) (*models.User, error)
+	Login(req LoginRequest) (string, error)
+}
+
+// ─── Implementation ───────────────────────────────────────────────────────────
+
+type authService struct {
+	userRepo repository.UserRepository
+}
+
+func NewAuthService(userRepo repository.UserRepository) AuthService {
+	return &authService{userRepo: userRepo}
+}
+
+func (s *authService) Register(req RegisterRequest) (*models.User, error) {
 	// Validate common fields
 	if req.Name == "" || req.Email == "" || req.Password == "" || req.Role == "" {
 		return nil, errors.New("nama, email, kata sandi, dan peran wajib diisi")
@@ -64,7 +83,7 @@ func Register(req RegisterRequest) (*models.User, error) {
 	}
 
 	// Check email uniqueness
-	existing, _ := repository.FindUserByEmail(req.Email)
+	existing, _ := s.userRepo.FindUserByEmail(req.Email)
 	if existing != nil {
 		return nil, errors.New("email sudah terdaftar")
 	}
@@ -92,19 +111,19 @@ func Register(req RegisterRequest) (*models.User, error) {
 		user.CompanyName = &req.CompanyName
 	}
 
-	if err := repository.CreateUser(user); err != nil {
+	if err := s.userRepo.CreateUser(user); err != nil {
 		return nil, errors.New("gagal membuat pengguna")
 	}
 
 	return user, nil
 }
 
-func Login(req LoginRequest) (string, error) {
+func (s *authService) Login(req LoginRequest) (string, error) {
 	if req.Email == "" || req.Password == "" {
 		return "", errors.New("email dan kata sandi wajib diisi")
 	}
 
-	user, err := repository.FindUserByEmail(req.Email)
+	user, err := s.userRepo.FindUserByEmail(req.Email)
 	if err != nil {
 		return "", errors.New("email atau kata sandi tidak valid")
 	}
@@ -124,9 +143,6 @@ func Login(req LoginRequest) (string, error) {
 	}
 
 	secret := os.Getenv("JWT_SECRET")
-	if secret == "" {
-		secret = "default_secret"
-	}
 
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
 	signed, err := token.SignedString([]byte(secret))
