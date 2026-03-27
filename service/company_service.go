@@ -7,6 +7,17 @@ import (
 	"github.com/reganputra/skripsi-backend/repository"
 )
 
+// ─── Interface ────────────────────────────────────────────────────────────────
+
+type CompanyService interface {
+	CreateOrJoinCompanyProfile(userID uint, req CompanyProfileRequest) (*models.CompanyProfile, bool, error)
+	GetCompanyProfile(userID uint) (*models.CompanyProfile, error)
+	UpdateCompanyProfile(userID uint, req CompanyProfileRequest) (*models.CompanyProfile, error)
+	DeleteCompanyProfile(userID uint) error
+}
+
+// ─── DTO ──────────────────────────────────────────────────────────────────────
+
 type CompanyProfileRequest struct {
 	IndustryType *string `json:"industry_type"`
 	Location     *string `json:"location"`
@@ -14,9 +25,22 @@ type CompanyProfileRequest struct {
 	WebsiteURL   *string `json:"website_url"`
 }
 
-func CreateOrJoinCompanyProfile(userID uint, req CompanyProfileRequest) (*models.CompanyProfile, bool, error) {
-	// Load user to get company_name from registration
-	user, err := repository.FindUserByID(userID)
+// ─── Implementation ───────────────────────────────────────────────────────────
+
+type companyService struct {
+	companyRepo repository.CompanyRepository
+	userRepo    repository.UserRepository
+}
+
+func NewCompanyService(companyRepo repository.CompanyRepository, userRepo repository.UserRepository) CompanyService {
+	return &companyService{
+		companyRepo: companyRepo,
+		userRepo:    userRepo,
+	}
+}
+
+func (s *companyService) CreateOrJoinCompanyProfile(userID uint, req CompanyProfileRequest) (*models.CompanyProfile, bool, error) {
+	user, err := s.userRepo.FindUserByID(userID)
 	if err != nil {
 		return nil, false, errors.New("pengguna tidak ditemukan")
 	}
@@ -24,21 +48,17 @@ func CreateOrJoinCompanyProfile(userID uint, req CompanyProfileRequest) (*models
 		return nil, false, errors.New("nama perusahaan belum diatur pada akun Anda")
 	}
 
-	// Validate employee_size if provided
 	if req.EmployeeSize != nil && *req.EmployeeSize < 0 {
 		return nil, false, errors.New("jumlah karyawan harus nol atau positif")
 	}
 
 	companyName := *user.CompanyName
 
-	// Check if profile already exists for this company
-	existing, err := repository.FindCompanyProfileByName(companyName)
+	existing, err := s.companyRepo.FindCompanyProfileByName(companyName)
 	if err == nil && existing != nil {
-		// Profile already exists — return it (user auto-joins)
 		return existing, false, nil
 	}
 
-	// Create new profile
 	profile := &models.CompanyProfile{
 		CompanyName:  companyName,
 		IndustryType: req.IndustryType,
@@ -47,14 +67,14 @@ func CreateOrJoinCompanyProfile(userID uint, req CompanyProfileRequest) (*models
 		WebsiteURL:   req.WebsiteURL,
 	}
 
-	if err := repository.CreateCompanyProfile(profile); err != nil {
+	if err := s.companyRepo.CreateCompanyProfile(profile); err != nil {
 		return nil, false, errors.New("gagal membuat profil perusahaan")
 	}
 	return profile, true, nil
 }
 
-func GetCompanyProfile(userID uint) (*models.CompanyProfile, error) {
-	user, err := repository.FindUserByID(userID)
+func (s *companyService) GetCompanyProfile(userID uint) (*models.CompanyProfile, error) {
+	user, err := s.userRepo.FindUserByID(userID)
 	if err != nil {
 		return nil, errors.New("pengguna tidak ditemukan")
 	}
@@ -62,15 +82,15 @@ func GetCompanyProfile(userID uint) (*models.CompanyProfile, error) {
 		return nil, errors.New("nama perusahaan belum diatur pada akun Anda")
 	}
 
-	profile, err := repository.FindCompanyProfileByName(*user.CompanyName)
+	profile, err := s.companyRepo.FindCompanyProfileByName(*user.CompanyName)
 	if err != nil {
 		return nil, errors.New("profil perusahaan tidak ditemukan")
 	}
 	return profile, nil
 }
 
-func UpdateCompanyProfile(userID uint, req CompanyProfileRequest) (*models.CompanyProfile, error) {
-	user, err := repository.FindUserByID(userID)
+func (s *companyService) UpdateCompanyProfile(userID uint, req CompanyProfileRequest) (*models.CompanyProfile, error) {
+	user, err := s.userRepo.FindUserByID(userID)
 	if err != nil {
 		return nil, errors.New("pengguna tidak ditemukan")
 	}
@@ -78,7 +98,7 @@ func UpdateCompanyProfile(userID uint, req CompanyProfileRequest) (*models.Compa
 		return nil, errors.New("nama perusahaan belum diatur pada akun Anda")
 	}
 
-	profile, err := repository.FindCompanyProfileByName(*user.CompanyName)
+	profile, err := s.companyRepo.FindCompanyProfileByName(*user.CompanyName)
 	if err != nil {
 		return nil, errors.New("profil perusahaan tidak ditemukan")
 	}
@@ -99,14 +119,14 @@ func UpdateCompanyProfile(userID uint, req CompanyProfileRequest) (*models.Compa
 		profile.WebsiteURL = req.WebsiteURL
 	}
 
-	if err := repository.UpdateCompanyProfile(profile); err != nil {
+	if err := s.companyRepo.UpdateCompanyProfile(profile); err != nil {
 		return nil, errors.New("gagal memperbarui profil perusahaan")
 	}
 	return profile, nil
 }
 
-func DeleteCompanyProfile(userID uint) error {
-	user, err := repository.FindUserByID(userID)
+func (s *companyService) DeleteCompanyProfile(userID uint) error {
+	user, err := s.userRepo.FindUserByID(userID)
 	if err != nil {
 		return errors.New("pengguna tidak ditemukan")
 	}
@@ -114,10 +134,10 @@ func DeleteCompanyProfile(userID uint) error {
 		return errors.New("nama perusahaan belum diatur pada akun Anda")
 	}
 
-	profile, err := repository.FindCompanyProfileByName(*user.CompanyName)
+	profile, err := s.companyRepo.FindCompanyProfileByName(*user.CompanyName)
 	if err != nil {
 		return errors.New("profil perusahaan tidak ditemukan")
 	}
 
-	return repository.DeleteCompanyProfile(profile.ID)
+	return s.companyRepo.DeleteCompanyProfile(profile.ID)
 }

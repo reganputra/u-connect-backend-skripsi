@@ -8,13 +8,20 @@ import (
 	"github.com/reganputra/skripsi-backend/utils"
 )
 
-func CreatePortfolioItem(c *fiber.Ctx) error {
+type PortfolioController struct {
+	portfolioSvc service.PortfolioService
+}
+
+func NewPortfolioController(portfolioSvc service.PortfolioService) *PortfolioController {
+	return &PortfolioController{portfolioSvc: portfolioSvc}
+}
+
+func (ctrl *PortfolioController) CreatePortfolioItem(c *fiber.Ctx) error {
 	userID, err := getUserIDFromToken(c)
 	if err != nil {
 		return utils.ErrorResponse(c, fiber.StatusUnauthorized, err.Error())
 	}
 
-	// Handle optional media upload
 	mediaURL, err := uploadFileIfPresent(c, "media", "alumni-platform/portfolio")
 	if err != nil {
 		return utils.ErrorResponse(c, fiber.StatusInternalServerError, err.Error())
@@ -30,7 +37,7 @@ func CreatePortfolioItem(c *fiber.Ctx) error {
 		MediaURL:    parseOptionalString(mediaURL),
 	}
 
-	item, err := service.CreatePortfolioItem(userID, req)
+	item, err := ctrl.portfolioSvc.CreatePortfolioItem(userID, req)
 	if err != nil {
 		return utils.ErrorResponse(c, fiber.StatusBadRequest, err.Error())
 	}
@@ -38,13 +45,13 @@ func CreatePortfolioItem(c *fiber.Ctx) error {
 	return utils.SuccessResponse(c, fiber.StatusCreated, item)
 }
 
-func GetPortfolioItems(c *fiber.Ctx) error {
+func (ctrl *PortfolioController) GetPortfolioItems(c *fiber.Ctx) error {
 	userID, err := getUserIDFromToken(c)
 	if err != nil {
 		return utils.ErrorResponse(c, fiber.StatusUnauthorized, err.Error())
 	}
 
-	items, err := service.GetPortfolioItems(userID)
+	items, err := ctrl.portfolioSvc.GetPortfolioItems(userID)
 	if err != nil {
 		return utils.ErrorResponse(c, fiber.StatusInternalServerError, "gagal mengambil data portofolio")
 	}
@@ -52,7 +59,7 @@ func GetPortfolioItems(c *fiber.Ctx) error {
 	return utils.SuccessResponse(c, fiber.StatusOK, items)
 }
 
-func UpdatePortfolioItem(c *fiber.Ctx) error {
+func (ctrl *PortfolioController) UpdatePortfolioItem(c *fiber.Ctx) error {
 	userID, err := getUserIDFromToken(c)
 	if err != nil {
 		return utils.ErrorResponse(c, fiber.StatusUnauthorized, err.Error())
@@ -63,7 +70,6 @@ func UpdatePortfolioItem(c *fiber.Ctx) error {
 		return utils.ErrorResponse(c, fiber.StatusBadRequest, "ID item portofolio tidak valid")
 	}
 
-	// Handle optional media upload
 	mediaURL, err := uploadFileIfPresent(c, "media", "alumni-platform/portfolio")
 	if err != nil {
 		return utils.ErrorResponse(c, fiber.StatusInternalServerError, err.Error())
@@ -79,7 +85,7 @@ func UpdatePortfolioItem(c *fiber.Ctx) error {
 		MediaURL:    parseOptionalString(mediaURL),
 	}
 
-	item, err := service.UpdatePortfolioItem(userID, uint(itemID), req)
+	item, err := ctrl.portfolioSvc.UpdatePortfolioItem(userID, uint(itemID), req)
 	if err != nil {
 		if err.Error() == "akses ditolak" {
 			return utils.ErrorResponse(c, fiber.StatusForbidden, err.Error())
@@ -90,7 +96,7 @@ func UpdatePortfolioItem(c *fiber.Ctx) error {
 	return utils.SuccessResponse(c, fiber.StatusOK, item)
 }
 
-func DeletePortfolioItem(c *fiber.Ctx) error {
+func (ctrl *PortfolioController) DeletePortfolioItem(c *fiber.Ctx) error {
 	userID, err := getUserIDFromToken(c)
 	if err != nil {
 		return utils.ErrorResponse(c, fiber.StatusUnauthorized, err.Error())
@@ -101,7 +107,7 @@ func DeletePortfolioItem(c *fiber.Ctx) error {
 		return utils.ErrorResponse(c, fiber.StatusBadRequest, "ID item portofolio tidak valid")
 	}
 
-	if err := service.DeletePortfolioItem(userID, uint(itemID)); err != nil {
+	if err := ctrl.portfolioSvc.DeletePortfolioItem(userID, uint(itemID)); err != nil {
 		if err.Error() == "akses ditolak" {
 			return utils.ErrorResponse(c, fiber.StatusForbidden, err.Error())
 		}

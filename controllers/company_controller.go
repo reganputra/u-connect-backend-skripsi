@@ -6,7 +6,15 @@ import (
 	"github.com/reganputra/skripsi-backend/utils"
 )
 
-func CreateOrJoinCompanyProfile(c *fiber.Ctx) error {
+type CompanyController struct {
+	companySvc service.CompanyService
+}
+
+func NewCompanyController(companySvc service.CompanyService) *CompanyController {
+	return &CompanyController{companySvc: companySvc}
+}
+
+func (ctrl *CompanyController) CreateOrJoinCompanyProfile(c *fiber.Ctx) error {
 	userID, err := getUserIDFromToken(c)
 	if err != nil {
 		return utils.ErrorResponse(c, fiber.StatusUnauthorized, err.Error())
@@ -17,7 +25,7 @@ func CreateOrJoinCompanyProfile(c *fiber.Ctx) error {
 		return utils.ErrorResponse(c, fiber.StatusBadRequest, "isi permintaan tidak valid")
 	}
 
-	profile, created, err := service.CreateOrJoinCompanyProfile(userID, req)
+	profile, created, err := ctrl.companySvc.CreateOrJoinCompanyProfile(userID, req)
 	if err != nil {
 		return utils.ErrorResponse(c, fiber.StatusBadRequest, err.Error())
 	}
@@ -29,13 +37,13 @@ func CreateOrJoinCompanyProfile(c *fiber.Ctx) error {
 	return utils.SuccessResponse(c, status, profile)
 }
 
-func GetCompanyProfile(c *fiber.Ctx) error {
+func (ctrl *CompanyController) GetCompanyProfile(c *fiber.Ctx) error {
 	userID, err := getUserIDFromToken(c)
 	if err != nil {
 		return utils.ErrorResponse(c, fiber.StatusUnauthorized, err.Error())
 	}
 
-	profile, err := service.GetCompanyProfile(userID)
+	profile, err := ctrl.companySvc.GetCompanyProfile(userID)
 	if err != nil {
 		return utils.ErrorResponse(c, fiber.StatusNotFound, err.Error())
 	}
@@ -43,7 +51,7 @@ func GetCompanyProfile(c *fiber.Ctx) error {
 	return utils.SuccessResponse(c, fiber.StatusOK, profile)
 }
 
-func UpdateCompanyProfile(c *fiber.Ctx) error {
+func (ctrl *CompanyController) UpdateCompanyProfile(c *fiber.Ctx) error {
 	userID, err := getUserIDFromToken(c)
 	if err != nil {
 		return utils.ErrorResponse(c, fiber.StatusUnauthorized, err.Error())
@@ -54,7 +62,7 @@ func UpdateCompanyProfile(c *fiber.Ctx) error {
 		return utils.ErrorResponse(c, fiber.StatusBadRequest, "isi permintaan tidak valid")
 	}
 
-	profile, err := service.UpdateCompanyProfile(userID, req)
+	profile, err := ctrl.companySvc.UpdateCompanyProfile(userID, req)
 	if err != nil {
 		return utils.ErrorResponse(c, fiber.StatusBadRequest, err.Error())
 	}
@@ -62,13 +70,13 @@ func UpdateCompanyProfile(c *fiber.Ctx) error {
 	return utils.SuccessResponse(c, fiber.StatusOK, profile)
 }
 
-func DeleteCompanyProfile(c *fiber.Ctx) error {
+func (ctrl *CompanyController) DeleteCompanyProfile(c *fiber.Ctx) error {
 	userID, err := getUserIDFromToken(c)
 	if err != nil {
 		return utils.ErrorResponse(c, fiber.StatusUnauthorized, err.Error())
 	}
 
-	if err := service.DeleteCompanyProfile(userID); err != nil {
+	if err := ctrl.companySvc.DeleteCompanyProfile(userID); err != nil {
 		return utils.ErrorResponse(c, fiber.StatusNotFound, err.Error())
 	}
 

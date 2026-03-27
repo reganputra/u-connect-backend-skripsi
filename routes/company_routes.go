@@ -6,14 +6,11 @@ import (
 	"github.com/reganputra/skripsi-backend/middleware"
 )
 
-func RegisterCompanyRoutes(app *fiber.App) {
-	company := app.Group("/api/company",
-		middleware.Protected(),
-		middleware.RequireRole("partner"),
-	)
+func RegisterCompanyRoutes(app *fiber.App, ctrl *controllers.CompanyController) {
+	company := app.Group("/api/company", middleware.Protected(), middleware.RequireRole("partner"))
 
-	company.Post("/", controllers.CreateOrJoinCompanyProfile)
-	company.Get("/", controllers.GetCompanyProfile)
-	company.Put("/", controllers.UpdateCompanyProfile)
-	company.Delete("/", controllers.DeleteCompanyProfile)
+	company.Post("/", ctrl.CreateOrJoinCompanyProfile)
+	company.Get("/", ctrl.GetCompanyProfile)
+	company.Put("/", ctrl.UpdateCompanyProfile)
+	company.Delete("/", ctrl.DeleteCompanyProfile)
 }

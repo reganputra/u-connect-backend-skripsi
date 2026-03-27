@@ -11,6 +11,8 @@ import (
 	"github.com/reganputra/skripsi-backend/utils"
 )
 
+// ─── Token helpers (shared across all controllers in this package) ────────────
+
 func getUserIDFromToken(c *fiber.Ctx) (uint, error) {
 	token, ok := c.Locals("user").(*jwt.Token)
 	if !ok {
@@ -36,19 +38,16 @@ func getUserRoleFromToken(c *fiber.Ctx) (string, error) {
 	if !ok {
 		return "", fmt.Errorf("klaim token tidak valid")
 	}
-
-	// Accept both lower and upper key variants to be resilient to token claim serialization.
 	if role, ok := claims["role"].(string); ok && role != "" {
 		return role, nil
 	}
 	if role, ok := claims["Role"].(string); ok && role != "" {
 		return role, nil
 	}
-
 	return "", fmt.Errorf("peran pengguna tidak ditemukan")
 }
 
-// parseOptionalString returns a *string if the form value is non-empty, else nil
+// parseOptionalString returns a *string if the form value is non-empty, else nil.
 func parseOptionalString(val string) *string {
 	if val == "" {
 		return nil
@@ -56,7 +55,7 @@ func parseOptionalString(val string) *string {
 	return &val
 }
 
-// parseOptionalInt returns a *int if the form value is a valid non-zero int, else nil
+// parseOptionalInt returns a *int if the form value is a valid non-zero int, else nil.
 func parseOptionalInt(val string) *int {
 	if val == "" {
 		return nil
@@ -73,7 +72,7 @@ func parseOptionalInt(val string) *int {
 func uploadFileIfPresent(c *fiber.Ctx, fieldName, folder string) (string, error) {
 	file, err := c.FormFile(fieldName)
 	if err != nil || file == nil {
-		return "", nil // no file — not an error
+		return "", nil
 	}
 	url, err := utils.UploadImage(config.Cloudinary, file, folder)
 	if err != nil {
@@ -87,7 +86,7 @@ func uploadFileIfPresent(c *fiber.Ctx, fieldName, folder string) (string, error)
 func uploadRawFileIfPresent(c *fiber.Ctx, fieldName, folder string) (string, error) {
 	file, err := c.FormFile(fieldName)
 	if err != nil || file == nil {
-		return "", nil // no file — not an error
+		return "", nil
 	}
 	url, err := utils.UploadFile(config.Cloudinary, file, folder)
 	if err != nil {
@@ -96,13 +95,22 @@ func uploadRawFileIfPresent(c *fiber.Ctx, fieldName, folder string) (string, err
 	return url, nil
 }
 
-func CreateProfile(c *fiber.Ctx) error {
+// ─── ProfileController ────────────────────────────────────────────────────────
+
+type ProfileController struct {
+	profileSvc service.ProfileService
+}
+
+func NewProfileController(profileSvc service.ProfileService) *ProfileController {
+	return &ProfileController{profileSvc: profileSvc}
+}
+
+func (ctrl *ProfileController) CreateProfile(c *fiber.Ctx) error {
 	userID, err := getUserIDFromToken(c)
 	if err != nil {
 		return utils.ErrorResponse(c, fiber.StatusUnauthorized, err.Error())
 	}
 
-	// Handle optional profile picture upload
 	pictureURL, err := uploadFileIfPresent(c, "picture", "alumni-platform/profiles")
 	if err != nil {
 		return utils.ErrorResponse(c, fiber.StatusInternalServerError, err.Error())
@@ -136,10 +144,9 @@ func CreateProfile(c *fiber.Ctx) error {
 		StatusDescription:      parseOptionalString(c.FormValue("status_description")),
 	}
 
-	// year_enroll is part of User, not profile — ignore here
 	_ = yearEnroll
 
-	profile, err := service.CreateProfile(userID, req)
+	profile, err := ctrl.profileSvc.CreateProfile(userID, req)
 	if err != nil {
 		return utils.ErrorResponse(c, fiber.StatusBadRequest, err.Error())
 	}
@@ -147,13 +154,13 @@ func CreateProfile(c *fiber.Ctx) error {
 	return utils.SuccessResponse(c, fiber.StatusCreated, profile)
 }
 
-func GetProfile(c *fiber.Ctx) error {
+func (ctrl *ProfileController) GetProfile(c *fiber.Ctx) error {
 	userID, err := getUserIDFromToken(c)
 	if err != nil {
 		return utils.ErrorResponse(c, fiber.StatusUnauthorized, err.Error())
 	}
 
-	profile, err := service.GetProfile(userID)
+	profile, err := ctrl.profileSvc.GetProfile(userID)
 	if err != nil {
 		return utils.ErrorResponse(c, fiber.StatusNotFound, err.Error())
 	}
@@ -161,13 +168,12 @@ func GetProfile(c *fiber.Ctx) error {
 	return utils.SuccessResponse(c, fiber.StatusOK, profile)
 }
 
-func UpdateProfile(c *fiber.Ctx) error {
+func (ctrl *ProfileController) UpdateProfile(c *fiber.Ctx) error {
 	userID, err := getUserIDFromToken(c)
 	if err != nil {
 		return utils.ErrorResponse(c, fiber.StatusUnauthorized, err.Error())
 	}
 
-	// Handle optional profile picture upload
 	pictureURL, err := uploadFileIfPresent(c, "picture", "alumni-platform/profiles")
 	if err != nil {
 		return utils.ErrorResponse(c, fiber.StatusInternalServerError, err.Error())
@@ -200,7 +206,7 @@ func UpdateProfile(c *fiber.Ctx) error {
 		StatusDescription:      parseOptionalString(c.FormValue("status_description")),
 	}
 
-	profile, err := service.UpdateProfile(userID, req)
+	profile, err := ctrl.profileSvc.UpdateProfile(userID, req)
 	if err != nil {
 		return utils.ErrorResponse(c, fiber.StatusBadRequest, err.Error())
 	}
@@ -208,20 +214,20 @@ func UpdateProfile(c *fiber.Ctx) error {
 	return utils.SuccessResponse(c, fiber.StatusOK, profile)
 }
 
-func DeleteProfile(c *fiber.Ctx) error {
+func (ctrl *ProfileController) DeleteProfile(c *fiber.Ctx) error {
 	userID, err := getUserIDFromToken(c)
 	if err != nil {
 		return utils.ErrorResponse(c, fiber.StatusUnauthorized, err.Error())
 	}
 
-	if err := service.DeleteProfile(userID); err != nil {
+	if err := ctrl.profileSvc.DeleteProfile(userID); err != nil {
 		return utils.ErrorResponse(c, fiber.StatusNotFound, err.Error())
 	}
 
 	return utils.SuccessResponse(c, fiber.StatusOK, fiber.Map{"message": "profil berhasil dihapus"})
 }
 
-func AddExperience(c *fiber.Ctx) error {
+func (ctrl *ProfileController) AddExperience(c *fiber.Ctx) error {
 	userID, err := getUserIDFromToken(c)
 	if err != nil {
 		return utils.ErrorResponse(c, fiber.StatusUnauthorized, err.Error())
@@ -232,7 +238,7 @@ func AddExperience(c *fiber.Ctx) error {
 		return utils.ErrorResponse(c, fiber.StatusBadRequest, "isi permintaan tidak valid")
 	}
 
-	exp, err := service.AddExperience(userID, req)
+	exp, err := ctrl.profileSvc.AddExperience(userID, req)
 	if err != nil {
 		return utils.ErrorResponse(c, fiber.StatusBadRequest, err.Error())
 	}
@@ -240,7 +246,7 @@ func AddExperience(c *fiber.Ctx) error {
 	return utils.SuccessResponse(c, fiber.StatusCreated, exp)
 }
 
-func UpdateExperience(c *fiber.Ctx) error {
+func (ctrl *ProfileController) UpdateExperience(c *fiber.Ctx) error {
 	userID, err := getUserIDFromToken(c)
 	if err != nil {
 		return utils.ErrorResponse(c, fiber.StatusUnauthorized, err.Error())
@@ -256,7 +262,7 @@ func UpdateExperience(c *fiber.Ctx) error {
 		return utils.ErrorResponse(c, fiber.StatusBadRequest, "isi permintaan tidak valid")
 	}
 
-	exp, err := service.UpdateExperience(userID, uint(expID), req)
+	exp, err := ctrl.profileSvc.UpdateExperience(userID, uint(expID), req)
 	if err != nil {
 		return utils.ErrorResponse(c, fiber.StatusBadRequest, err.Error())
 	}
@@ -264,7 +270,7 @@ func UpdateExperience(c *fiber.Ctx) error {
 	return utils.SuccessResponse(c, fiber.StatusOK, exp)
 }
 
-func DeleteExperience(c *fiber.Ctx) error {
+func (ctrl *ProfileController) DeleteExperience(c *fiber.Ctx) error {
 	userID, err := getUserIDFromToken(c)
 	if err != nil {
 		return utils.ErrorResponse(c, fiber.StatusUnauthorized, err.Error())
@@ -275,7 +281,7 @@ func DeleteExperience(c *fiber.Ctx) error {
 		return utils.ErrorResponse(c, fiber.StatusBadRequest, "ID pengalaman tidak valid")
 	}
 
-	if err := service.DeleteExperience(userID, uint(expID)); err != nil {
+	if err := ctrl.profileSvc.DeleteExperience(userID, uint(expID)); err != nil {
 		return utils.ErrorResponse(c, fiber.StatusBadRequest, err.Error())
 	}
 

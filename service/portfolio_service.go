@@ -7,6 +7,18 @@ import (
 	"github.com/reganputra/skripsi-backend/repository"
 )
 
+// ─── Interface ────────────────────────────────────────────────────────────────
+
+type PortfolioService interface {
+	CreatePortfolioItem(userID uint, req PortfolioItemRequest) (*models.PortfolioItem, error)
+	GetPortfolioItems(userID uint) ([]models.PortfolioItem, error)
+	UpdatePortfolioItem(userID uint, itemID uint, req PortfolioItemRequest) (*models.PortfolioItem, error)
+	DeletePortfolioItem(userID uint, itemID uint) error
+	UpdatePortfolioMedia(userID uint, itemID uint, mediaURL string) error
+}
+
+// ─── DTO ─────────────────────────────────────────────────────────────────────
+
 type PortfolioItemRequest struct {
 	Title       string  `json:"title"`
 	Description *string `json:"description"`
@@ -17,7 +29,19 @@ type PortfolioItemRequest struct {
 	MediaURL    *string `json:"media_url"` // set by controller after Cloudinary upload
 }
 
-func CreatePortfolioItem(userID uint, req PortfolioItemRequest) (*models.PortfolioItem, error) {
+// ─── Struct & Constructor ─────────────────────────────────────────────────────
+
+type portfolioService struct {
+	portfolioRepo repository.PortfolioRepository
+}
+
+func NewPortfolioService(portfolioRepo repository.PortfolioRepository) PortfolioService {
+	return &portfolioService{portfolioRepo: portfolioRepo}
+}
+
+// ─── Methods ──────────────────────────────────────────────────────────────────
+
+func (s *portfolioService) CreatePortfolioItem(userID uint, req PortfolioItemRequest) (*models.PortfolioItem, error) {
 	if req.Title == "" {
 		return nil, errors.New("judul wajib diisi")
 	}
@@ -33,23 +57,22 @@ func CreatePortfolioItem(userID uint, req PortfolioItemRequest) (*models.Portfol
 		MediaURL:    req.MediaURL,
 	}
 
-	if err := repository.CreatePortfolioItem(item); err != nil {
+	if err := s.portfolioRepo.CreatePortfolioItem(item); err != nil {
 		return nil, errors.New("gagal membuat item portofolio")
 	}
 	return item, nil
 }
 
-func GetPortfolioItems(userID uint) ([]models.PortfolioItem, error) {
-	return repository.FindPortfolioItemsByUserID(userID)
+func (s *portfolioService) GetPortfolioItems(userID uint) ([]models.PortfolioItem, error) {
+	return s.portfolioRepo.FindPortfolioItemsByUserID(userID)
 }
 
-func UpdatePortfolioItem(userID uint, itemID uint, req PortfolioItemRequest) (*models.PortfolioItem, error) {
-	item, err := repository.FindPortfolioItemByID(itemID)
+func (s *portfolioService) UpdatePortfolioItem(userID uint, itemID uint, req PortfolioItemRequest) (*models.PortfolioItem, error) {
+	item, err := s.portfolioRepo.FindPortfolioItemByID(itemID)
 	if err != nil {
 		return nil, errors.New("item portofolio tidak ditemukan")
 	}
 
-	// Ownership check
 	if item.UserID != userID {
 		return nil, errors.New("akses ditolak")
 	}
@@ -76,25 +99,25 @@ func UpdatePortfolioItem(userID uint, itemID uint, req PortfolioItemRequest) (*m
 		item.MediaURL = req.MediaURL
 	}
 
-	if err := repository.UpdatePortfolioItem(item); err != nil {
+	if err := s.portfolioRepo.UpdatePortfolioItem(item); err != nil {
 		return nil, errors.New("gagal memperbarui item portofolio")
 	}
 	return item, nil
 }
 
-func DeletePortfolioItem(userID uint, itemID uint) error {
-	item, err := repository.FindPortfolioItemByID(itemID)
+func (s *portfolioService) DeletePortfolioItem(userID uint, itemID uint) error {
+	item, err := s.portfolioRepo.FindPortfolioItemByID(itemID)
 	if err != nil {
 		return errors.New("item portofolio tidak ditemukan")
 	}
 	if item.UserID != userID {
 		return errors.New("akses ditolak")
 	}
-	return repository.DeletePortfolioItem(itemID)
+	return s.portfolioRepo.DeletePortfolioItem(itemID)
 }
 
-func UpdatePortfolioMedia(userID uint, itemID uint, mediaURL string) error {
-	item, err := repository.FindPortfolioItemByID(itemID)
+func (s *portfolioService) UpdatePortfolioMedia(userID uint, itemID uint, mediaURL string) error {
+	item, err := s.portfolioRepo.FindPortfolioItemByID(itemID)
 	if err != nil {
 		return errors.New("item portofolio tidak ditemukan")
 	}
@@ -102,5 +125,5 @@ func UpdatePortfolioMedia(userID uint, itemID uint, mediaURL string) error {
 		return errors.New("akses ditolak")
 	}
 	item.MediaURL = &mediaURL
-	return repository.UpdatePortfolioItem(item)
+	return s.portfolioRepo.UpdatePortfolioItem(item)
 }

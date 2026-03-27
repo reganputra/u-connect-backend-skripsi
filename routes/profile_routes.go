@@ -6,16 +6,16 @@ import (
 	"github.com/reganputra/skripsi-backend/middleware"
 )
 
-func RegisterProfileRoutes(app *fiber.App) {
+func RegisterProfileRoutes(app *fiber.App, ctrl *controllers.ProfileController) {
 	profile := app.Group("/api/profile", middleware.Protected())
 
-	profile.Post("/", controllers.CreateProfile)
-	profile.Get("/", controllers.GetProfile)
-	profile.Put("/", controllers.UpdateProfile)
-	profile.Delete("/", controllers.DeleteProfile)
+	profile.Post("/", middleware.RequireRole("alumni", "student"), ctrl.CreateProfile)
+	profile.Get("/", ctrl.GetProfile)
+	profile.Put("/", middleware.RequireRole("alumni", "student"), ctrl.UpdateProfile)
+	profile.Delete("/", middleware.RequireRole("alumni", "student"), ctrl.DeleteProfile)
 
-	// Experience sub-routes (still JSON body)
-	profile.Post("/experience", controllers.AddExperience)
-	profile.Put("/experience/:id", controllers.UpdateExperience)
-	profile.Delete("/experience/:id", controllers.DeleteExperience)
+	// Experience sub-routes
+	profile.Post("/experience", middleware.RequireRole("alumni", "student"), ctrl.AddExperience)
+	profile.Put("/experience/:id", middleware.RequireRole("alumni", "student"), ctrl.UpdateExperience)
+	profile.Delete("/experience/:id", middleware.RequireRole("alumni", "student"), ctrl.DeleteExperience)
 }

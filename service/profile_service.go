@@ -16,8 +16,10 @@ var validProfileJobStatuses = map[string]bool{
 	"student":          true,
 }
 
+// ─── DTOs ─────────────────────────────────────────────────────────────────────
+
 type ProfileRequest struct {
-	ProfilePicture *string `json:"profile_picture"` // set by controller after Cloudinary upload
+	ProfilePicture *string `json:"profile_picture"`
 	Bio            *string `json:"bio"`
 	Location       *string `json:"location"`
 
@@ -55,6 +57,31 @@ type ExperienceRequest struct {
 	EndYear     *int    `json:"end_year"`
 	Description *string `json:"description"`
 }
+
+// ─── Interface ────────────────────────────────────────────────────────────────
+
+type ProfileService interface {
+	CreateProfile(userID uint, req ProfileRequest) (*models.UserProfile, error)
+	GetProfile(userID uint) (*models.UserProfile, error)
+	UpdateProfile(userID uint, req ProfileRequest) (*models.UserProfile, error)
+	DeleteProfile(userID uint) error
+	AddExperience(userID uint, req ExperienceRequest) (*models.UserExperience, error)
+	UpdateExperience(userID uint, expID uint, req ExperienceRequest) (*models.UserExperience, error)
+	DeleteExperience(userID uint, expID uint) error
+	UpdateProfilePicture(userID uint, pictureURL string) error
+}
+
+// ─── Implementation ───────────────────────────────────────────────────────────
+
+type profileService struct {
+	profileRepo repository.ProfileRepository
+}
+
+func NewProfileService(profileRepo repository.ProfileRepository) ProfileService {
+	return &profileService{profileRepo: profileRepo}
+}
+
+// ─── Validation helpers ───────────────────────────────────────────────────────
 
 func validateJobStatus(req ProfileRequest) error {
 	if req.JobStatus == nil {
@@ -99,7 +126,6 @@ func nullFieldsByStatus(profile *models.UserProfile) {
 		return
 	}
 	status := *profile.JobStatus
-	// Clear fields irrelevant to the active status
 	if status != "employed" {
 		profile.Position = nil
 		if status != "entrepreneur" {
@@ -122,9 +148,10 @@ func nullFieldsByStatus(profile *models.UserProfile) {
 	}
 }
 
-func CreateProfile(userID uint, req ProfileRequest) (*models.UserProfile, error) {
-	// Check for duplicate
-	existing, _ := repository.FindProfileByUserID(userID)
+// ─── Service methods ──────────────────────────────────────────────────────────
+
+func (s *profileService) CreateProfile(userID uint, req ProfileRequest) (*models.UserProfile, error) {
+	existing, _ := s.profileRepo.FindProfileByUserID(userID)
 	if existing != nil {
 		return nil, errors.New("profil sudah ada")
 	}
@@ -161,27 +188,26 @@ func CreateProfile(userID uint, req ProfileRequest) (*models.UserProfile, error)
 
 	nullFieldsByStatus(profile)
 
-	if err := repository.CreateProfile(profile); err != nil {
+	if err := s.profileRepo.CreateProfile(profile); err != nil {
 		return nil, errors.New("gagal membuat profil")
 	}
 	return profile, nil
 }
 
-func GetProfile(userID uint) (*models.UserProfile, error) {
-	profile, err := repository.FindProfileByUserID(userID)
+func (s *profileService) GetProfile(userID uint) (*models.UserProfile, error) {
+	profile, err := s.profileRepo.FindProfileByUserID(userID)
 	if err != nil {
 		return nil, errors.New("profil tidak ditemukan")
 	}
 	return profile, nil
 }
 
-func UpdateProfile(userID uint, req ProfileRequest) (*models.UserProfile, error) {
-	profile, err := repository.FindProfileByUserID(userID)
+func (s *profileService) UpdateProfile(userID uint, req ProfileRequest) (*models.UserProfile, error) {
+	profile, err := s.profileRepo.FindProfileByUserID(userID)
 	if err != nil {
 		return nil, errors.New("profil tidak ditemukan")
 	}
 
-	// Apply updates for non-nil fields only
 	if req.Bio != nil {
 		profile.Bio = req.Bio
 	}
@@ -245,26 +271,26 @@ func UpdateProfile(userID uint, req ProfileRequest) (*models.UserProfile, error)
 	}
 	nullFieldsByStatus(profile)
 
-	if err := repository.UpdateProfile(profile); err != nil {
+	if err := s.profileRepo.UpdateProfile(profile); err != nil {
 		return nil, errors.New("gagal memperbarui profil")
 	}
 	return profile, nil
 }
 
-func DeleteProfile(userID uint) error {
-	_, err := repository.FindProfileByUserID(userID)
+func (s *profileService) DeleteProfile(userID uint) error {
+	_, err := s.profileRepo.FindProfileByUserID(userID)
 	if err != nil {
 		return errors.New("profil tidak ditemukan")
 	}
-	return repository.DeleteProfileByUserID(userID)
+	return s.profileRepo.DeleteProfileByUserID(userID)
 }
 
-func AddExperience(userID uint, req ExperienceRequest) (*models.UserExperience, error) {
+func (s *profileService) AddExperience(userID uint, req ExperienceRequest) (*models.UserExperience, error) {
 	if req.CompanyName == "" || req.Position == "" || req.StartYear == 0 {
 		return nil, errors.New("nama perusahaan, posisi, dan tahun mulai wajib diisi")
 	}
 
-	profile, err := repository.FindProfileByUserID(userID)
+	profile, err := s.profileRepo.FindProfileByUserID(userID)
 	if err != nil {
 		return nil, errors.New("profil tidak ditemukan, silakan buat profil terlebih dahulu")
 	}
@@ -278,24 +304,23 @@ func AddExperience(userID uint, req ExperienceRequest) (*models.UserExperience, 
 		Description:   req.Description,
 	}
 
-	if err := repository.AddExperience(exp); err != nil {
+	if err := s.profileRepo.AddExperience(exp); err != nil {
 		return nil, errors.New("gagal menambahkan pengalaman")
 	}
 	return exp, nil
 }
 
-func UpdateExperience(userID uint, expID uint, req ExperienceRequest) (*models.UserExperience, error) {
-	profile, err := repository.FindProfileByUserID(userID)
+func (s *profileService) UpdateExperience(userID uint, expID uint, req ExperienceRequest) (*models.UserExperience, error) {
+	profile, err := s.profileRepo.FindProfileByUserID(userID)
 	if err != nil {
 		return nil, errors.New("profil tidak ditemukan")
 	}
 
-	exp, err := repository.FindExperienceByID(expID)
+	exp, err := s.profileRepo.FindExperienceByID(expID)
 	if err != nil {
 		return nil, errors.New("pengalaman tidak ditemukan")
 	}
 
-	// Verify ownership
 	if exp.UserProfileID != profile.ID {
 		return nil, errors.New("akses ditolak")
 	}
@@ -312,19 +337,19 @@ func UpdateExperience(userID uint, expID uint, req ExperienceRequest) (*models.U
 	exp.EndYear = req.EndYear
 	exp.Description = req.Description
 
-	if err := repository.UpdateExperience(exp); err != nil {
+	if err := s.profileRepo.UpdateExperience(exp); err != nil {
 		return nil, errors.New("gagal memperbarui pengalaman")
 	}
 	return exp, nil
 }
 
-func DeleteExperience(userID uint, expID uint) error {
-	profile, err := repository.FindProfileByUserID(userID)
+func (s *profileService) DeleteExperience(userID uint, expID uint) error {
+	profile, err := s.profileRepo.FindProfileByUserID(userID)
 	if err != nil {
 		return errors.New("profil tidak ditemukan")
 	}
 
-	exp, err := repository.FindExperienceByID(expID)
+	exp, err := s.profileRepo.FindExperienceByID(expID)
 	if err != nil {
 		return errors.New("pengalaman tidak ditemukan")
 	}
@@ -333,14 +358,14 @@ func DeleteExperience(userID uint, expID uint) error {
 		return errors.New("akses ditolak")
 	}
 
-	return repository.DeleteExperience(expID)
+	return s.profileRepo.DeleteExperience(expID)
 }
 
-func UpdateProfilePicture(userID uint, pictureURL string) error {
-	profile, err := repository.FindProfileByUserID(userID)
+func (s *profileService) UpdateProfilePicture(userID uint, pictureURL string) error {
+	profile, err := s.profileRepo.FindProfileByUserID(userID)
 	if err != nil {
 		return errors.New("profil tidak ditemukan")
 	}
 	profile.ProfilePicture = pictureURL
-	return repository.UpdateProfile(profile)
+	return s.profileRepo.UpdateProfile(profile)
 }

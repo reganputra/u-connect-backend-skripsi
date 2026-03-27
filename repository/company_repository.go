@@ -1,35 +1,51 @@
 package repository
 
 import (
-	"github.com/reganputra/skripsi-backend/config"
 	"github.com/reganputra/skripsi-backend/models"
+	"gorm.io/gorm"
 )
 
-func CreateCompanyProfile(profile *models.CompanyProfile) error {
-	return config.DB.Create(profile).Error
+type CompanyRepository interface {
+	CreateCompanyProfile(profile *models.CompanyProfile) error
+	FindCompanyProfileByName(name string) (*models.CompanyProfile, error)
+	FindCompanyProfileByID(id uint) (*models.CompanyProfile, error)
+	UpdateCompanyProfile(profile *models.CompanyProfile) error
+	DeleteCompanyProfile(id uint) error
 }
 
-func FindCompanyProfileByName(name string) (*models.CompanyProfile, error) {
+type companyRepository struct {
+	db *gorm.DB
+}
+
+func NewCompanyRepository(db *gorm.DB) CompanyRepository {
+	return &companyRepository{db: db}
+}
+
+func (r *companyRepository) CreateCompanyProfile(profile *models.CompanyProfile) error {
+	return r.db.Create(profile).Error
+}
+
+func (r *companyRepository) FindCompanyProfileByName(name string) (*models.CompanyProfile, error) {
 	var profile models.CompanyProfile
-	result := config.DB.Where("company_name = ?", name).First(&profile)
+	result := r.db.Where("company_name = ?", name).First(&profile)
 	if result.Error != nil {
 		return nil, result.Error
 	}
 	return &profile, nil
 }
 
-func FindCompanyProfileByID(id uint) (*models.CompanyProfile, error) {
+func (r *companyRepository) FindCompanyProfileByID(id uint) (*models.CompanyProfile, error) {
 	var profile models.CompanyProfile
-	if err := config.DB.First(&profile, id).Error; err != nil {
+	if err := r.db.First(&profile, id).Error; err != nil {
 		return nil, err
 	}
 	return &profile, nil
 }
 
-func UpdateCompanyProfile(profile *models.CompanyProfile) error {
-	return config.DB.Save(profile).Error
+func (r *companyRepository) UpdateCompanyProfile(profile *models.CompanyProfile) error {
+	return r.db.Save(profile).Error
 }
 
-func DeleteCompanyProfile(id uint) error {
-	return config.DB.Delete(&models.CompanyProfile{}, id).Error
+func (r *companyRepository) DeleteCompanyProfile(id uint) error {
+	return r.db.Delete(&models.CompanyProfile{}, id).Error
 }
