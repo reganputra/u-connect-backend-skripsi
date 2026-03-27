@@ -1,23 +1,39 @@
 package repository
 
 import (
-	"github.com/reganputra/skripsi-backend/config"
 	"github.com/reganputra/skripsi-backend/models"
+	"gorm.io/gorm"
 )
 
-func CreateGroup(group *models.Group) error {
-	return config.DB.Create(group).Error
+type GroupRepository interface {
+	CreateGroup(group *models.Group) error
+	FindGroups() ([]models.Group, error)
+	FindGroupByID(id uint) (*models.Group, error)
+	UpdateGroup(group *models.Group) error
+	DeleteGroup(id uint) error
 }
 
-func FindGroups() ([]models.Group, error) {
+type groupRepository struct {
+	db *gorm.DB
+}
+
+func NewGroupRepository(db *gorm.DB) GroupRepository {
+	return &groupRepository{db: db}
+}
+
+func (r *groupRepository) CreateGroup(group *models.Group) error {
+	return r.db.Create(group).Error
+}
+
+func (r *groupRepository) FindGroups() ([]models.Group, error) {
 	var groups []models.Group
-	err := config.DB.Preload("Owner").Order("created_at desc").Find(&groups).Error
+	err := r.db.Preload("Owner").Order("created_at desc").Find(&groups).Error
 	return groups, err
 }
 
-func FindGroupByID(id uint) (*models.Group, error) {
+func (r *groupRepository) FindGroupByID(id uint) (*models.Group, error) {
 	var group models.Group
-	err := config.DB.
+	err := r.db.
 		Preload("Owner").
 		Preload("Members").
 		Preload("Members.User").
@@ -28,16 +44,15 @@ func FindGroupByID(id uint) (*models.Group, error) {
 	return &group, nil
 }
 
-func UpdateGroup(group *models.Group) error {
-	return config.DB.Save(group).Error
+func (r *groupRepository) UpdateGroup(group *models.Group) error {
+	return r.db.Save(group).Error
 }
 
-func DeleteGroup(id uint) error {
-	// Cascade delete all related data
-	config.DB.Where("article_id IN (SELECT id FROM group_articles WHERE group_id = ?)", id).Delete(&models.GroupReaction{})
-	config.DB.Where("comment_id IN (SELECT id FROM group_comments WHERE article_id IN (SELECT id FROM group_articles WHERE group_id = ?))", id).Delete(&models.GroupReaction{})
-	config.DB.Where("article_id IN (SELECT id FROM group_articles WHERE group_id = ?)", id).Delete(&models.GroupComment{})
-	config.DB.Where("group_id = ?", id).Delete(&models.GroupArticle{})
-	config.DB.Where("group_id = ?", id).Delete(&models.GroupMember{})
-	return config.DB.Delete(&models.Group{}, id).Error
+func (r *groupRepository) DeleteGroup(id uint) error {
+	r.db.Where("article_id IN (SELECT id FROM group_articles WHERE group_id = ?)", id).Delete(&models.GroupReaction{})
+	r.db.Where("comment_id IN (SELECT id FROM group_comments WHERE article_id IN (SELECT id FROM group_articles WHERE group_id = ?))", id).Delete(&models.GroupReaction{})
+	r.db.Where("article_id IN (SELECT id FROM group_articles WHERE group_id = ?)", id).Delete(&models.GroupComment{})
+	r.db.Where("group_id = ?", id).Delete(&models.GroupArticle{})
+	r.db.Where("group_id = ?", id).Delete(&models.GroupMember{})
+	return r.db.Delete(&models.Group{}, id).Error
 }

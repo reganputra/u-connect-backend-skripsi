@@ -1,20 +1,35 @@
 package repository
 
 import (
-	"github.com/reganputra/skripsi-backend/config"
 	"github.com/reganputra/skripsi-backend/models"
 	"gorm.io/gorm"
 )
 
-func CreateJob(job *models.Job) error {
-	return config.DB.Create(job).Error
+type JobRepository interface {
+	CreateJob(job *models.Job) error
+	FindJobs(search, jobType, status string, offset, limit int) ([]models.Job, int64, error)
+	FindJobByID(id uint) (*models.Job, error)
+	UpdateJob(job *models.Job) error
+	DeleteJob(id uint) error
 }
 
-func FindJobs(search, jobType, status string, offset, limit int) ([]models.Job, int64, error) {
+type jobRepository struct {
+	db *gorm.DB
+}
+
+func NewJobRepository(db *gorm.DB) JobRepository {
+	return &jobRepository{db: db}
+}
+
+func (r *jobRepository) CreateJob(job *models.Job) error {
+	return r.db.Create(job).Error
+}
+
+func (r *jobRepository) FindJobs(search, jobType, status string, offset, limit int) ([]models.Job, int64, error) {
 	var jobs []models.Job
 	var total int64
 
-	query := config.DB.Model(&models.Job{}).Preload("User")
+	query := r.db.Model(&models.Job{}).Preload("User")
 
 	if search != "" {
 		like := "%" + search + "%"
@@ -32,21 +47,21 @@ func FindJobs(search, jobType, status string, offset, limit int) ([]models.Job, 
 	return jobs, total, err
 }
 
-func FindJobByID(id uint) (*models.Job, error) {
+func (r *jobRepository) FindJobByID(id uint) (*models.Job, error) {
 	var job models.Job
-	err := config.DB.Preload("User").First(&job, id).Error
+	err := r.db.Preload("User").First(&job, id).Error
 	if err != nil {
 		return nil, err
 	}
 	return &job, nil
 }
 
-func UpdateJob(job *models.Job) error {
-	return config.DB.Save(job).Error
+func (r *jobRepository) UpdateJob(job *models.Job) error {
+	return r.db.Save(job).Error
 }
 
-func DeleteJob(id uint) error {
-	return config.DB.Transaction(func(tx *gorm.DB) error {
+func (r *jobRepository) DeleteJob(id uint) error {
+	return r.db.Transaction(func(tx *gorm.DB) error {
 		if err := tx.Where("job_id = ?", id).Delete(&models.JobApplication{}).Error; err != nil {
 			return err
 		}

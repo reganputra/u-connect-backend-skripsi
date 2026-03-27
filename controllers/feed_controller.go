@@ -4,14 +4,21 @@ import (
 	"strconv"
 
 	"github.com/gofiber/fiber/v2"
-	"github.com/reganputra/skripsi-backend/config"
 	"github.com/reganputra/skripsi-backend/service"
 	"github.com/reganputra/skripsi-backend/utils"
 )
 
+type FeedController struct {
+	feedSvc service.FeedService
+}
+
+func NewFeedController(feedSvc service.FeedService) *FeedController {
+	return &FeedController{feedSvc: feedSvc}
+}
+
 // ─── Posts ────────────────────────────────────────────────────────────────────
 
-func CreatePost(c *fiber.Ctx) error {
+func (ctrl *FeedController) CreatePost(c *fiber.Ctx) error {
 	userID, err := getUserIDFromToken(c)
 	if err != nil {
 		return utils.ErrorResponse(c, fiber.StatusUnauthorized, err.Error())
@@ -29,18 +36,18 @@ func CreatePost(c *fiber.Ctx) error {
 		ImageURL: parseOptionalString(imageURL),
 	}
 
-	post, err := service.CreatePost(userID, req)
+	post, err := ctrl.feedSvc.CreatePost(userID, req)
 	if err != nil {
 		return utils.ErrorResponse(c, fiber.StatusBadRequest, err.Error())
 	}
 	return utils.SuccessResponse(c, fiber.StatusCreated, post)
 }
 
-func GetPosts(c *fiber.Ctx) error {
+func (ctrl *FeedController) GetPosts(c *fiber.Ctx) error {
 	page, _ := strconv.Atoi(c.Query("page", "1"))
 	limit, _ := strconv.Atoi(c.Query("limit", "10"))
 
-	posts, total, err := service.GetPosts(page, limit)
+	posts, total, err := ctrl.feedSvc.GetPosts(page, limit)
 	if err != nil {
 		return utils.ErrorResponse(c, fiber.StatusInternalServerError, "gagal mengambil data postingan")
 	}
@@ -52,19 +59,19 @@ func GetPosts(c *fiber.Ctx) error {
 	})
 }
 
-func GetPostByID(c *fiber.Ctx) error {
+func (ctrl *FeedController) GetPostByID(c *fiber.Ctx) error {
 	postID, err := strconv.ParseUint(c.Params("id"), 10, 64)
 	if err != nil {
 		return utils.ErrorResponse(c, fiber.StatusBadRequest, "ID postingan tidak valid")
 	}
-	post, err := service.GetPostByID(uint(postID))
+	post, err := ctrl.feedSvc.GetPostByID(uint(postID))
 	if err != nil {
 		return utils.ErrorResponse(c, fiber.StatusNotFound, err.Error())
 	}
 	return utils.SuccessResponse(c, fiber.StatusOK, post)
 }
 
-func UpdatePost(c *fiber.Ctx) error {
+func (ctrl *FeedController) UpdatePost(c *fiber.Ctx) error {
 	userID, err := getUserIDFromToken(c)
 	if err != nil {
 		return utils.ErrorResponse(c, fiber.StatusUnauthorized, err.Error())
@@ -86,7 +93,7 @@ func UpdatePost(c *fiber.Ctx) error {
 		ImageURL: parseOptionalString(imageURL),
 	}
 
-	post, err := service.UpdatePost(userID, uint(postID), req)
+	post, err := ctrl.feedSvc.UpdatePost(userID, uint(postID), req)
 	if err != nil {
 		if err.Error() == "akses ditolak" {
 			return utils.ErrorResponse(c, fiber.StatusForbidden, err.Error())
@@ -96,7 +103,7 @@ func UpdatePost(c *fiber.Ctx) error {
 	return utils.SuccessResponse(c, fiber.StatusOK, post)
 }
 
-func DeletePost(c *fiber.Ctx) error {
+func (ctrl *FeedController) DeletePost(c *fiber.Ctx) error {
 	userID, err := getUserIDFromToken(c)
 	if err != nil {
 		return utils.ErrorResponse(c, fiber.StatusUnauthorized, err.Error())
@@ -105,7 +112,7 @@ func DeletePost(c *fiber.Ctx) error {
 	if err != nil {
 		return utils.ErrorResponse(c, fiber.StatusBadRequest, "ID postingan tidak valid")
 	}
-	if err := service.DeletePost(userID, uint(postID)); err != nil {
+	if err := ctrl.feedSvc.DeletePost(userID, uint(postID)); err != nil {
 		if err.Error() == "akses ditolak" {
 			return utils.ErrorResponse(c, fiber.StatusForbidden, err.Error())
 		}
@@ -116,7 +123,7 @@ func DeletePost(c *fiber.Ctx) error {
 
 // ─── Comments ─────────────────────────────────────────────────────────────────
 
-func AddComment(c *fiber.Ctx) error {
+func (ctrl *FeedController) AddComment(c *fiber.Ctx) error {
 	userID, err := getUserIDFromToken(c)
 	if err != nil {
 		return utils.ErrorResponse(c, fiber.StatusUnauthorized, err.Error())
@@ -129,14 +136,14 @@ func AddComment(c *fiber.Ctx) error {
 	if err := c.BodyParser(&req); err != nil {
 		return utils.ErrorResponse(c, fiber.StatusBadRequest, "isi permintaan tidak valid")
 	}
-	comment, err := service.AddComment(userID, uint(postID), req)
+	comment, err := ctrl.feedSvc.AddComment(userID, uint(postID), req)
 	if err != nil {
 		return utils.ErrorResponse(c, fiber.StatusBadRequest, err.Error())
 	}
 	return utils.SuccessResponse(c, fiber.StatusCreated, comment)
 }
 
-func UpdateComment(c *fiber.Ctx) error {
+func (ctrl *FeedController) UpdateComment(c *fiber.Ctx) error {
 	userID, err := getUserIDFromToken(c)
 	if err != nil {
 		return utils.ErrorResponse(c, fiber.StatusUnauthorized, err.Error())
@@ -149,7 +156,7 @@ func UpdateComment(c *fiber.Ctx) error {
 	if err := c.BodyParser(&req); err != nil {
 		return utils.ErrorResponse(c, fiber.StatusBadRequest, "isi permintaan tidak valid")
 	}
-	comment, err := service.UpdateComment(userID, uint(commentID), req)
+	comment, err := ctrl.feedSvc.UpdateComment(userID, uint(commentID), req)
 	if err != nil {
 		if err.Error() == "akses ditolak" {
 			return utils.ErrorResponse(c, fiber.StatusForbidden, err.Error())
@@ -159,7 +166,7 @@ func UpdateComment(c *fiber.Ctx) error {
 	return utils.SuccessResponse(c, fiber.StatusOK, comment)
 }
 
-func DeleteComment(c *fiber.Ctx) error {
+func (ctrl *FeedController) DeleteComment(c *fiber.Ctx) error {
 	userID, err := getUserIDFromToken(c)
 	if err != nil {
 		return utils.ErrorResponse(c, fiber.StatusUnauthorized, err.Error())
@@ -168,7 +175,7 @@ func DeleteComment(c *fiber.Ctx) error {
 	if err != nil {
 		return utils.ErrorResponse(c, fiber.StatusBadRequest, "ID komentar tidak valid")
 	}
-	if err := service.DeleteComment(userID, uint(commentID)); err != nil {
+	if err := ctrl.feedSvc.DeleteComment(userID, uint(commentID)); err != nil {
 		if err.Error() == "akses ditolak" {
 			return utils.ErrorResponse(c, fiber.StatusForbidden, err.Error())
 		}
@@ -179,7 +186,7 @@ func DeleteComment(c *fiber.Ctx) error {
 
 // ─── Reactions ────────────────────────────────────────────────────────────────
 
-func ReactToPost(c *fiber.Ctx) error {
+func (ctrl *FeedController) ReactToPost(c *fiber.Ctx) error {
 	userID, err := getUserIDFromToken(c)
 	if err != nil {
 		return utils.ErrorResponse(c, fiber.StatusUnauthorized, err.Error())
@@ -192,14 +199,14 @@ func ReactToPost(c *fiber.Ctx) error {
 	if err := c.BodyParser(&req); err != nil {
 		return utils.ErrorResponse(c, fiber.StatusBadRequest, "isi permintaan tidak valid")
 	}
-	result, err := service.ReactToPost(userID, uint(postID), req)
+	result, err := ctrl.feedSvc.ReactToPost(userID, uint(postID), req)
 	if err != nil {
 		return utils.ErrorResponse(c, fiber.StatusBadRequest, err.Error())
 	}
 	return utils.SuccessResponse(c, fiber.StatusOK, fiber.Map{"action": result})
 }
 
-func ReactToComment(c *fiber.Ctx) error {
+func (ctrl *FeedController) ReactToComment(c *fiber.Ctx) error {
 	userID, err := getUserIDFromToken(c)
 	if err != nil {
 		return utils.ErrorResponse(c, fiber.StatusUnauthorized, err.Error())
@@ -212,7 +219,7 @@ func ReactToComment(c *fiber.Ctx) error {
 	if err := c.BodyParser(&req); err != nil {
 		return utils.ErrorResponse(c, fiber.StatusBadRequest, "isi permintaan tidak valid")
 	}
-	result, err := service.ReactToComment(userID, uint(commentID), req)
+	result, err := ctrl.feedSvc.ReactToComment(userID, uint(commentID), req)
 	if err != nil {
 		return utils.ErrorResponse(c, fiber.StatusBadRequest, err.Error())
 	}
@@ -221,7 +228,7 @@ func ReactToComment(c *fiber.Ctx) error {
 
 // ─── Votes ────────────────────────────────────────────────────────────────────
 
-func VotePost(c *fiber.Ctx) error {
+func (ctrl *FeedController) VotePost(c *fiber.Ctx) error {
 	userID, err := getUserIDFromToken(c)
 	if err != nil {
 		return utils.ErrorResponse(c, fiber.StatusUnauthorized, err.Error())
@@ -234,14 +241,14 @@ func VotePost(c *fiber.Ctx) error {
 	if err := c.BodyParser(&req); err != nil {
 		return utils.ErrorResponse(c, fiber.StatusBadRequest, "isi permintaan tidak valid")
 	}
-	result, err := service.VotePost(userID, uint(postID), req)
+	result, err := ctrl.feedSvc.VotePost(userID, uint(postID), req)
 	if err != nil {
 		return utils.ErrorResponse(c, fiber.StatusBadRequest, err.Error())
 	}
 	return utils.SuccessResponse(c, fiber.StatusOK, fiber.Map{"action": result})
 }
 
-func VoteComment(c *fiber.Ctx) error {
+func (ctrl *FeedController) VoteComment(c *fiber.Ctx) error {
 	userID, err := getUserIDFromToken(c)
 	if err != nil {
 		return utils.ErrorResponse(c, fiber.StatusUnauthorized, err.Error())
@@ -254,12 +261,9 @@ func VoteComment(c *fiber.Ctx) error {
 	if err := c.BodyParser(&req); err != nil {
 		return utils.ErrorResponse(c, fiber.StatusBadRequest, "isi permintaan tidak valid")
 	}
-	result, err := service.VoteComment(userID, uint(commentID), req)
+	result, err := ctrl.feedSvc.VoteComment(userID, uint(commentID), req)
 	if err != nil {
 		return utils.ErrorResponse(c, fiber.StatusBadRequest, err.Error())
 	}
 	return utils.SuccessResponse(c, fiber.StatusOK, fiber.Map{"action": result})
 }
-
-// keep config import used
-var _ = config.DB

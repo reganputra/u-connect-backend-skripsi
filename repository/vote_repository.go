@@ -1,14 +1,28 @@
 package repository
 
 import (
-	"github.com/reganputra/skripsi-backend/config"
 	"github.com/reganputra/skripsi-backend/models"
+	"gorm.io/gorm"
 )
 
-// FindVote finds a user's existing vote on a post or comment
-func FindVote(userID uint, postID *uint, commentID *uint) (*models.Vote, error) {
+type VoteRepository interface {
+	FindVote(userID uint, postID *uint, commentID *uint) (*models.Vote, error)
+	CreateVote(vote *models.Vote) error
+	UpdateVote(vote *models.Vote) error
+	DeleteVote(id uint) error
+}
+
+type voteRepository struct {
+	db *gorm.DB
+}
+
+func NewVoteRepository(db *gorm.DB) VoteRepository {
+	return &voteRepository{db: db}
+}
+
+func (r *voteRepository) FindVote(userID uint, postID *uint, commentID *uint) (*models.Vote, error) {
 	var vote models.Vote
-	query := config.DB.Where("user_id = ?", userID)
+	query := r.db.Where("user_id = ?", userID)
 	if postID != nil {
 		query = query.Where("post_id = ?", *postID)
 	} else if commentID != nil {
@@ -20,14 +34,14 @@ func FindVote(userID uint, postID *uint, commentID *uint) (*models.Vote, error) 
 	return &vote, nil
 }
 
-func CreateVote(vote *models.Vote) error {
-	return config.DB.Create(vote).Error
+func (r *voteRepository) CreateVote(vote *models.Vote) error {
+	return r.db.Create(vote).Error
 }
 
-func UpdateVote(vote *models.Vote) error {
-	return config.DB.Save(vote).Error
+func (r *voteRepository) UpdateVote(vote *models.Vote) error {
+	return r.db.Save(vote).Error
 }
 
-func DeleteVote(id uint) error {
-	return config.DB.Delete(&models.Vote{}, id).Error
+func (r *voteRepository) DeleteVote(id uint) error {
+	return r.db.Delete(&models.Vote{}, id).Error
 }

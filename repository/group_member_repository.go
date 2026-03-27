@@ -1,32 +1,49 @@
 package repository
 
 import (
-	"github.com/reganputra/skripsi-backend/config"
 	"github.com/reganputra/skripsi-backend/models"
+	"gorm.io/gorm"
 )
 
-func AddGroupMember(member *models.GroupMember) error {
-	return config.DB.Create(member).Error
+type GroupMemberRepository interface {
+	AddGroupMember(member *models.GroupMember) error
+	FindGroupMember(groupID, userID uint) (*models.GroupMember, error)
+	FindGroupMembers(groupID uint) ([]models.GroupMember, error)
+	FindJoinedGroups(userID uint) ([]models.Group, error)
+	RemoveGroupMember(groupID, userID uint) error
+	CountGroupMembers(groupID uint) (int64, error)
 }
 
-func FindGroupMember(groupID, userID uint) (*models.GroupMember, error) {
+type groupMemberRepository struct {
+	db *gorm.DB
+}
+
+func NewGroupMemberRepository(db *gorm.DB) GroupMemberRepository {
+	return &groupMemberRepository{db: db}
+}
+
+func (r *groupMemberRepository) AddGroupMember(member *models.GroupMember) error {
+	return r.db.Create(member).Error
+}
+
+func (r *groupMemberRepository) FindGroupMember(groupID, userID uint) (*models.GroupMember, error) {
 	var member models.GroupMember
-	err := config.DB.Where("group_id = ? AND user_id = ?", groupID, userID).First(&member).Error
+	err := r.db.Where("group_id = ? AND user_id = ?", groupID, userID).First(&member).Error
 	if err != nil {
 		return nil, err
 	}
 	return &member, nil
 }
 
-func FindGroupMembers(groupID uint) ([]models.GroupMember, error) {
+func (r *groupMemberRepository) FindGroupMembers(groupID uint) ([]models.GroupMember, error) {
 	var members []models.GroupMember
-	err := config.DB.Where("group_id = ?", groupID).Preload("User").Find(&members).Error
+	err := r.db.Where("group_id = ?", groupID).Preload("User").Find(&members).Error
 	return members, err
 }
 
-func FindJoinedGroups(userID uint) ([]models.Group, error) {
+func (r *groupMemberRepository) FindJoinedGroups(userID uint) ([]models.Group, error) {
 	var groups []models.Group
-	err := config.DB.
+	err := r.db.
 		Joins("JOIN group_members ON group_members.group_id = groups.id AND group_members.deleted_at IS NULL").
 		Where("group_members.user_id = ?", userID).
 		Preload("Owner").
@@ -35,12 +52,12 @@ func FindJoinedGroups(userID uint) ([]models.Group, error) {
 	return groups, err
 }
 
-func RemoveGroupMember(groupID, userID uint) error {
-	return config.DB.Where("group_id = ? AND user_id = ?", groupID, userID).Delete(&models.GroupMember{}).Error
+func (r *groupMemberRepository) RemoveGroupMember(groupID, userID uint) error {
+	return r.db.Where("group_id = ? AND user_id = ?", groupID, userID).Delete(&models.GroupMember{}).Error
 }
 
-func CountGroupMembers(groupID uint) (int64, error) {
+func (r *groupMemberRepository) CountGroupMembers(groupID uint) (int64, error) {
 	var count int64
-	err := config.DB.Model(&models.GroupMember{}).Where("group_id = ?", groupID).Count(&count).Error
+	err := r.db.Model(&models.GroupMember{}).Where("group_id = ?", groupID).Count(&count).Error
 	return count, err
 }

@@ -128,9 +128,52 @@ type VoteRequest struct {
 	Value int `json:"value"` // 1 or -1
 }
 
+// ─── Interface ────────────────────────────────────────────────────────────────
+
+type FeedService interface {
+	CreatePost(userID uint, req PostRequest) (*models.Post, error)
+	GetPosts(page, limit int) ([]*PostListItem, int64, error)
+	GetPostByID(id uint) (*PostDetailResponse, error)
+	UpdatePost(userID uint, postID uint, req PostRequest) (*models.Post, error)
+	DeletePost(userID uint, postID uint) error
+
+	AddComment(userID uint, postID uint, req CommentRequest) (*models.Comment, error)
+	UpdateComment(userID uint, commentID uint, req CommentRequest) (*models.Comment, error)
+	DeleteComment(userID uint, commentID uint) error
+
+	ReactToPost(userID uint, postID uint, req ReactionRequest) (string, error)
+	ReactToComment(userID uint, commentID uint, req ReactionRequest) (string, error)
+
+	VotePost(userID uint, postID uint, req VoteRequest) (string, error)
+	VoteComment(userID uint, commentID uint, req VoteRequest) (string, error)
+}
+
+// ─── Struct ───────────────────────────────────────────────────────────────────
+
+type feedService struct {
+	postRepo     repository.PostRepository
+	commentRepo  repository.CommentRepository
+	reactionRepo repository.ReactionRepository
+	voteRepo     repository.VoteRepository
+}
+
+func NewFeedService(
+	postRepo repository.PostRepository,
+	commentRepo repository.CommentRepository,
+	reactionRepo repository.ReactionRepository,
+	voteRepo repository.VoteRepository,
+) FeedService {
+	return &feedService{
+		postRepo:     postRepo,
+		commentRepo:  commentRepo,
+		reactionRepo: reactionRepo,
+		voteRepo:     voteRepo,
+	}
+}
+
 // ─── Post ─────────────────────────────────────────────────────────────────────
 
-func CreatePost(userID uint, req PostRequest) (*models.Post, error) {
+func (s *feedService) CreatePost(userID uint, req PostRequest) (*models.Post, error) {
 	if req.Title == "" || req.Content == "" {
 		return nil, errors.New("judul dan konten wajib diisi")
 	}
@@ -141,20 +184,20 @@ func CreatePost(userID uint, req PostRequest) (*models.Post, error) {
 		Content:  req.Content,
 		ImageURL: req.ImageURL,
 	}
-	if err := repository.CreatePost(post); err != nil {
+	if err := s.postRepo.CreatePost(post); err != nil {
 		return nil, errors.New("gagal membuat postingan")
 	}
 	return post, nil
 }
 
-func GetPosts(page, limit int) ([]*PostListItem, int64, error) {
+func (s *feedService) GetPosts(page, limit int) ([]*PostListItem, int64, error) {
 	if page < 1 {
 		page = 1
 	}
 	if limit < 1 || limit > 50 {
 		limit = 10
 	}
-	posts, total, err := repository.FindPosts(page, limit)
+	posts, total, err := s.postRepo.FindPosts(page, limit)
 	if err != nil {
 		return nil, 0, err
 	}
@@ -181,14 +224,13 @@ func GetPosts(page, limit int) ([]*PostListItem, int64, error) {
 	return result, total, nil
 }
 
-func GetPostByID(id uint) (*PostDetailResponse, error) {
-	post, err := repository.FindPostByID(id)
+func (s *feedService) GetPostByID(id uint) (*PostDetailResponse, error) {
+	post, err := s.postRepo.FindPostByID(id)
 	if err != nil {
 		return nil, errors.New("postingan tidak ditemukan")
 	}
 
-	// Load all comments flat (any depth) with their reactions & votes
-	comments, err := repository.FindAllCommentsByPostID(id)
+	comments, err := s.postRepo.FindAllCommentsByPostID(id)
 	if err != nil {
 		return nil, errors.New("gagal memuat komentar")
 	}
@@ -209,8 +251,8 @@ func GetPostByID(id uint) (*PostDetailResponse, error) {
 	}, nil
 }
 
-func UpdatePost(userID uint, postID uint, req PostRequest) (*models.Post, error) {
-	post, err := repository.FindPostByID(postID)
+func (s *feedService) UpdatePost(userID uint, postID uint, req PostRequest) (*models.Post, error) {
+	post, err := s.postRepo.FindPostByID(postID)
 	if err != nil {
 		return nil, errors.New("postingan tidak ditemukan")
 	}
@@ -229,31 +271,30 @@ func UpdatePost(userID uint, postID uint, req PostRequest) (*models.Post, error)
 	if req.ImageURL != nil {
 		post.ImageURL = req.ImageURL
 	}
-	if err := repository.UpdatePost(post); err != nil {
+	if err := s.postRepo.UpdatePost(post); err != nil {
 		return nil, errors.New("gagal memperbarui postingan")
 	}
 	return post, nil
 }
 
-func DeletePost(userID uint, postID uint) error {
-	post, err := repository.FindPostByID(postID)
+func (s *feedService) DeletePost(userID uint, postID uint) error {
+	post, err := s.postRepo.FindPostByID(postID)
 	if err != nil {
 		return errors.New("postingan tidak ditemukan")
 	}
 	if post.UserID != userID {
 		return errors.New("akses ditolak")
 	}
-	return repository.DeletePost(postID)
+	return s.postRepo.DeletePost(postID)
 }
 
 // ─── Comment ──────────────────────────────────────────────────────────────────
 
-func AddComment(userID uint, postID uint, req CommentRequest) (*models.Comment, error) {
+func (s *feedService) AddComment(userID uint, postID uint, req CommentRequest) (*models.Comment, error) {
 	if req.Content == "" {
 		return nil, errors.New("konten wajib diisi")
 	}
-	// Verify post exists
-	if _, err := repository.FindPostByID(postID); err != nil {
+	if _, err := s.postRepo.FindPostByID(postID); err != nil {
 		return nil, errors.New("postingan tidak ditemukan")
 	}
 	comment := &models.Comment{
@@ -262,17 +303,17 @@ func AddComment(userID uint, postID uint, req CommentRequest) (*models.Comment, 
 		Content:         req.Content,
 		ParentCommentID: req.ParentCommentID,
 	}
-	if err := repository.CreateComment(comment); err != nil {
+	if err := s.commentRepo.CreateComment(comment); err != nil {
 		return nil, errors.New("gagal menambahkan komentar")
 	}
 	return comment, nil
 }
 
-func UpdateComment(userID uint, commentID uint, req CommentRequest) (*models.Comment, error) {
+func (s *feedService) UpdateComment(userID uint, commentID uint, req CommentRequest) (*models.Comment, error) {
 	if req.Content == "" {
 		return nil, errors.New("konten wajib diisi")
 	}
-	comment, err := repository.FindCommentByID(commentID)
+	comment, err := s.commentRepo.FindCommentByID(commentID)
 	if err != nil {
 		return nil, errors.New("komentar tidak ditemukan")
 	}
@@ -280,105 +321,127 @@ func UpdateComment(userID uint, commentID uint, req CommentRequest) (*models.Com
 		return nil, errors.New("akses ditolak")
 	}
 	comment.Content = req.Content
-	if err := repository.UpdateComment(comment); err != nil {
+	if err := s.commentRepo.UpdateComment(comment); err != nil {
 		return nil, errors.New("gagal memperbarui komentar")
 	}
 	return comment, nil
 }
 
-func DeleteComment(userID uint, commentID uint) error {
-	comment, err := repository.FindCommentByID(commentID)
+func (s *feedService) DeleteComment(userID uint, commentID uint) error {
+	comment, err := s.commentRepo.FindCommentByID(commentID)
 	if err != nil {
 		return errors.New("komentar tidak ditemukan")
 	}
 	if comment.UserID != userID {
 		return errors.New("akses ditolak")
 	}
-	return repository.DeleteComment(commentID)
+	return s.commentRepo.DeleteComment(commentID)
 }
 
 // ─── Reaction ─────────────────────────────────────────────────────────────────
 
-func ReactToPost(userID uint, postID uint, req ReactionRequest) (string, error) {
+func (s *feedService) ReactToPost(userID uint, postID uint, req ReactionRequest) (string, error) {
 	if !validReactionTypes[req.Type] {
 		return "", errors.New("jenis reaksi tidak valid: harus like, love, haha, wow, sad, atau angry")
 	}
 
-	existing, err := repository.FindReaction(userID, &postID, nil)
+	existing, err := s.reactionRepo.FindReaction(userID, &postID, nil)
 	if err == nil {
-		// Exists — same type: toggle off; different type: update
 		if existing.Type == req.Type {
-			_ = repository.DeleteReaction(existing.ID)
+			if err := s.reactionRepo.DeleteReaction(existing.ID); err != nil {
+				return "", errors.New("gagal menghapus reaksi")
+			}
 			return "removed", nil
 		}
 		existing.Type = req.Type
-		_ = repository.UpdateReaction(existing)
+		if err := s.reactionRepo.UpdateReaction(existing); err != nil {
+			return "", errors.New("gagal memperbarui reaksi")
+		}
 		return "updated", nil
 	}
-	// Does not exist — create
 	reaction := &models.Reaction{UserID: userID, PostID: &postID, Type: req.Type}
-	_ = repository.CreateReaction(reaction)
+	if err := s.reactionRepo.CreateReaction(reaction); err != nil {
+		return "", errors.New("gagal menambahkan reaksi")
+	}
 	return "added", nil
 }
 
-func ReactToComment(userID uint, commentID uint, req ReactionRequest) (string, error) {
+func (s *feedService) ReactToComment(userID uint, commentID uint, req ReactionRequest) (string, error) {
 	if !validReactionTypes[req.Type] {
 		return "", errors.New("jenis reaksi tidak valid: harus like, love, haha, wow, sad, atau angry")
 	}
 
-	existing, err := repository.FindReaction(userID, nil, &commentID)
+	existing, err := s.reactionRepo.FindReaction(userID, nil, &commentID)
 	if err == nil {
 		if existing.Type == req.Type {
-			_ = repository.DeleteReaction(existing.ID)
+			if err := s.reactionRepo.DeleteReaction(existing.ID); err != nil {
+				return "", errors.New("gagal menghapus reaksi")
+			}
 			return "removed", nil
 		}
 		existing.Type = req.Type
-		_ = repository.UpdateReaction(existing)
+		if err := s.reactionRepo.UpdateReaction(existing); err != nil {
+			return "", errors.New("gagal memperbarui reaksi")
+		}
 		return "updated", nil
 	}
 	reaction := &models.Reaction{UserID: userID, CommentID: &commentID, Type: req.Type}
-	_ = repository.CreateReaction(reaction)
+	if err := s.reactionRepo.CreateReaction(reaction); err != nil {
+		return "", errors.New("gagal menambahkan reaksi")
+	}
 	return "added", nil
 }
 
 // ─── Vote ─────────────────────────────────────────────────────────────────────
 
-func VotePost(userID uint, postID uint, req VoteRequest) (string, error) {
+func (s *feedService) VotePost(userID uint, postID uint, req VoteRequest) (string, error) {
 	if req.Value != 1 && req.Value != -1 {
 		return "", errors.New("nilai harus 1 (upvote) atau -1 (downvote)")
 	}
 
-	existing, err := repository.FindVote(userID, &postID, nil)
+	existing, err := s.voteRepo.FindVote(userID, &postID, nil)
 	if err == nil {
 		if existing.Value == req.Value {
-			_ = repository.DeleteVote(existing.ID)
+			if err := s.voteRepo.DeleteVote(existing.ID); err != nil {
+				return "", errors.New("gagal menghapus vote")
+			}
 			return "removed", nil
 		}
 		existing.Value = req.Value
-		_ = repository.UpdateVote(existing)
+		if err := s.voteRepo.UpdateVote(existing); err != nil {
+			return "", errors.New("gagal memperbarui vote")
+		}
 		return "flipped", nil
 	}
 	vote := &models.Vote{UserID: userID, PostID: &postID, Value: req.Value}
-	_ = repository.CreateVote(vote)
+	if err := s.voteRepo.CreateVote(vote); err != nil {
+		return "", errors.New("gagal menambahkan vote")
+	}
 	return "added", nil
 }
 
-func VoteComment(userID uint, commentID uint, req VoteRequest) (string, error) {
+func (s *feedService) VoteComment(userID uint, commentID uint, req VoteRequest) (string, error) {
 	if req.Value != 1 && req.Value != -1 {
 		return "", errors.New("nilai harus 1 (upvote) atau -1 (downvote)")
 	}
 
-	existing, err := repository.FindVote(userID, nil, &commentID)
+	existing, err := s.voteRepo.FindVote(userID, nil, &commentID)
 	if err == nil {
 		if existing.Value == req.Value {
-			_ = repository.DeleteVote(existing.ID)
+			if err := s.voteRepo.DeleteVote(existing.ID); err != nil {
+				return "", errors.New("gagal menghapus vote")
+			}
 			return "removed", nil
 		}
 		existing.Value = req.Value
-		_ = repository.UpdateVote(existing)
+		if err := s.voteRepo.UpdateVote(existing); err != nil {
+			return "", errors.New("gagal memperbarui vote")
+		}
 		return "flipped", nil
 	}
 	vote := &models.Vote{UserID: userID, CommentID: &commentID, Value: req.Value}
-	_ = repository.CreateVote(vote)
+	if err := s.voteRepo.CreateVote(vote); err != nil {
+		return "", errors.New("gagal menambahkan vote")
+	}
 	return "added", nil
 }

@@ -1,44 +1,61 @@
 package repository
 
 import (
-	"github.com/reganputra/skripsi-backend/config"
 	"github.com/reganputra/skripsi-backend/models"
+	"gorm.io/gorm"
 )
 
-func CreateJobApplication(app *models.JobApplication) error {
-	return config.DB.Create(app).Error
+type JobApplicationRepository interface {
+	CreateJobApplication(app *models.JobApplication) error
+	FindJobApplication(jobID, userID uint) (*models.JobApplication, error)
+	FindApplicantsByJobID(jobID uint) ([]models.JobApplication, error)
+	FindApplicationsByUserID(userID uint) ([]models.JobApplication, error)
+	FindJobApplicationByID(id uint) (*models.JobApplication, error)
+	UpdateJobApplication(app *models.JobApplication) error
 }
 
-func FindJobApplication(jobID, userID uint) (*models.JobApplication, error) {
+type jobApplicationRepository struct {
+	db *gorm.DB
+}
+
+func NewJobApplicationRepository(db *gorm.DB) JobApplicationRepository {
+	return &jobApplicationRepository{db: db}
+}
+
+func (r *jobApplicationRepository) CreateJobApplication(app *models.JobApplication) error {
+	return r.db.Create(app).Error
+}
+
+func (r *jobApplicationRepository) FindJobApplication(jobID, userID uint) (*models.JobApplication, error) {
 	var app models.JobApplication
-	err := config.DB.Where("job_id = ? AND user_id = ?", jobID, userID).First(&app).Error
+	err := r.db.Where("job_id = ? AND user_id = ?", jobID, userID).First(&app).Error
 	if err != nil {
 		return nil, err
 	}
 	return &app, nil
 }
 
-func FindApplicantsByJobID(jobID uint) ([]models.JobApplication, error) {
+func (r *jobApplicationRepository) FindApplicantsByJobID(jobID uint) ([]models.JobApplication, error) {
 	var apps []models.JobApplication
-	err := config.DB.Preload("User").Where("job_id = ?", jobID).Order("created_at DESC").Find(&apps).Error
+	err := r.db.Preload("User").Where("job_id = ?", jobID).Order("created_at DESC").Find(&apps).Error
 	return apps, err
 }
 
-func FindApplicationsByUserID(userID uint) ([]models.JobApplication, error) {
+func (r *jobApplicationRepository) FindApplicationsByUserID(userID uint) ([]models.JobApplication, error) {
 	var apps []models.JobApplication
-	err := config.DB.Preload("Job").Preload("Job.User").Where("user_id = ?", userID).Order("created_at DESC").Find(&apps).Error
+	err := r.db.Preload("Job").Preload("Job.User").Where("user_id = ?", userID).Order("created_at DESC").Find(&apps).Error
 	return apps, err
 }
 
-func FindJobApplicationByID(id uint) (*models.JobApplication, error) {
+func (r *jobApplicationRepository) FindJobApplicationByID(id uint) (*models.JobApplication, error) {
 	var app models.JobApplication
-	err := config.DB.Preload("Job").First(&app, id).Error
+	err := r.db.Preload("Job").First(&app, id).Error
 	if err != nil {
 		return nil, err
 	}
 	return &app, nil
 }
 
-func UpdateJobApplication(app *models.JobApplication) error {
-	return config.DB.Save(app).Error
+func (r *jobApplicationRepository) UpdateJobApplication(app *models.JobApplication) error {
+	return r.db.Save(app).Error
 }

@@ -8,9 +8,17 @@ import (
 	"github.com/reganputra/skripsi-backend/utils"
 )
 
+type JobController struct {
+	jobSvc service.JobService
+}
+
+func NewJobController(jobSvc service.JobService) *JobController {
+	return &JobController{jobSvc: jobSvc}
+}
+
 // ─── Job CRUD ─────────────────────────────────────────────────────────────────
 
-func CreateJobHandler(c *fiber.Ctx) error {
+func (ctrl *JobController) CreateJobHandler(c *fiber.Ctx) error {
 	userID, err := getUserIDFromToken(c)
 	if err != nil {
 		return utils.ErrorResponse(c, fiber.StatusUnauthorized, err.Error())
@@ -36,7 +44,7 @@ func CreateJobHandler(c *fiber.Ctx) error {
 		ImageURL:    parseOptionalString(imageURL),
 	}
 
-	job, err := service.CreateJob(userID, role, req)
+	job, err := ctrl.jobSvc.CreateJob(userID, role, req)
 	if err != nil {
 		if err.Error() == "akses ditolak: hanya alumni atau partner yang dapat membuat lowongan" {
 			return utils.ErrorResponse(c, fiber.StatusForbidden, err.Error())
@@ -46,14 +54,14 @@ func CreateJobHandler(c *fiber.Ctx) error {
 	return utils.SuccessResponse(c, fiber.StatusCreated, job)
 }
 
-func GetJobsHandler(c *fiber.Ctx) error {
+func (ctrl *JobController) GetJobsHandler(c *fiber.Ctx) error {
 	page, _ := strconv.Atoi(c.Query("page", "1"))
 	limit, _ := strconv.Atoi(c.Query("limit", "10"))
 	search := c.Query("search", "")
 	jobType := c.Query("job_type", "")
 	status := c.Query("status", "")
 
-	jobs, total, err := service.GetJobs(search, jobType, status, page, limit)
+	jobs, total, err := ctrl.jobSvc.GetJobs(search, jobType, status, page, limit)
 	if err != nil {
 		return utils.ErrorResponse(c, fiber.StatusInternalServerError, "gagal mengambil data lowongan")
 	}
@@ -65,19 +73,19 @@ func GetJobsHandler(c *fiber.Ctx) error {
 	})
 }
 
-func GetJobByIDHandler(c *fiber.Ctx) error {
+func (ctrl *JobController) GetJobByIDHandler(c *fiber.Ctx) error {
 	jobID, err := strconv.ParseUint(c.Params("id"), 10, 64)
 	if err != nil {
 		return utils.ErrorResponse(c, fiber.StatusBadRequest, "ID lowongan tidak valid")
 	}
-	job, err := service.GetJobByID(uint(jobID))
+	job, err := ctrl.jobSvc.GetJobByID(uint(jobID))
 	if err != nil {
 		return utils.ErrorResponse(c, fiber.StatusNotFound, err.Error())
 	}
 	return utils.SuccessResponse(c, fiber.StatusOK, job)
 }
 
-func UpdateJobHandler(c *fiber.Ctx) error {
+func (ctrl *JobController) UpdateJobHandler(c *fiber.Ctx) error {
 	userID, err := getUserIDFromToken(c)
 	if err != nil {
 		return utils.ErrorResponse(c, fiber.StatusUnauthorized, err.Error())
@@ -103,7 +111,7 @@ func UpdateJobHandler(c *fiber.Ctx) error {
 		ImageURL:    parseOptionalString(imageURL),
 	}
 
-	job, err := service.UpdateJob(userID, uint(jobID), req)
+	job, err := ctrl.jobSvc.UpdateJob(userID, uint(jobID), req)
 	if err != nil {
 		if err.Error() == "akses ditolak" {
 			return utils.ErrorResponse(c, fiber.StatusForbidden, err.Error())
@@ -113,7 +121,7 @@ func UpdateJobHandler(c *fiber.Ctx) error {
 	return utils.SuccessResponse(c, fiber.StatusOK, job)
 }
 
-func DeleteJobHandler(c *fiber.Ctx) error {
+func (ctrl *JobController) DeleteJobHandler(c *fiber.Ctx) error {
 	userID, err := getUserIDFromToken(c)
 	if err != nil {
 		return utils.ErrorResponse(c, fiber.StatusUnauthorized, err.Error())
@@ -122,7 +130,7 @@ func DeleteJobHandler(c *fiber.Ctx) error {
 	if err != nil {
 		return utils.ErrorResponse(c, fiber.StatusBadRequest, "ID lowongan tidak valid")
 	}
-	if err := service.DeleteJob(userID, uint(jobID)); err != nil {
+	if err := ctrl.jobSvc.DeleteJob(userID, uint(jobID)); err != nil {
 		if err.Error() == "akses ditolak" {
 			return utils.ErrorResponse(c, fiber.StatusForbidden, err.Error())
 		}
@@ -133,7 +141,7 @@ func DeleteJobHandler(c *fiber.Ctx) error {
 
 // ─── Applications ─────────────────────────────────────────────────────────────
 
-func ApplyForJobHandler(c *fiber.Ctx) error {
+func (ctrl *JobController) ApplyForJobHandler(c *fiber.Ctx) error {
 	userID, err := getUserIDFromToken(c)
 	if err != nil {
 		return utils.ErrorResponse(c, fiber.StatusUnauthorized, err.Error())
@@ -147,7 +155,6 @@ func ApplyForJobHandler(c *fiber.Ctx) error {
 		return utils.ErrorResponse(c, fiber.StatusBadRequest, "ID lowongan tidak valid")
 	}
 
-	// Resume: try file upload first, fall back to resume_url form field
 	resumeURL, err := uploadRawFileIfPresent(c, "resume", "alumni-platform/resumes")
 	if err != nil {
 		return utils.ErrorResponse(c, fiber.StatusInternalServerError, err.Error())
@@ -164,7 +171,7 @@ func ApplyForJobHandler(c *fiber.Ctx) error {
 		ResumeURL:   resumeURL,
 	}
 
-	app, err := service.ApplyForJob(userID, role, uint(jobID), req)
+	app, err := ctrl.jobSvc.ApplyForJob(userID, role, uint(jobID), req)
 	if err != nil {
 		if err.Error() == "akses ditolak: hanya student atau alumni yang dapat melamar" {
 			return utils.ErrorResponse(c, fiber.StatusForbidden, err.Error())
@@ -174,7 +181,7 @@ func ApplyForJobHandler(c *fiber.Ctx) error {
 	return utils.SuccessResponse(c, fiber.StatusCreated, app)
 }
 
-func GetApplicantsHandler(c *fiber.Ctx) error {
+func (ctrl *JobController) GetApplicantsHandler(c *fiber.Ctx) error {
 	userID, err := getUserIDFromToken(c)
 	if err != nil {
 		return utils.ErrorResponse(c, fiber.StatusUnauthorized, err.Error())
@@ -183,7 +190,7 @@ func GetApplicantsHandler(c *fiber.Ctx) error {
 	if err != nil {
 		return utils.ErrorResponse(c, fiber.StatusBadRequest, "ID lowongan tidak valid")
 	}
-	apps, err := service.GetApplicants(userID, uint(jobID))
+	apps, err := ctrl.jobSvc.GetApplicants(userID, uint(jobID))
 	if err != nil {
 		if err.Error() == "akses ditolak" {
 			return utils.ErrorResponse(c, fiber.StatusForbidden, err.Error())
@@ -193,19 +200,19 @@ func GetApplicantsHandler(c *fiber.Ctx) error {
 	return utils.SuccessResponse(c, fiber.StatusOK, apps)
 }
 
-func GetMyApplicationsHandler(c *fiber.Ctx) error {
+func (ctrl *JobController) GetMyApplicationsHandler(c *fiber.Ctx) error {
 	userID, err := getUserIDFromToken(c)
 	if err != nil {
 		return utils.ErrorResponse(c, fiber.StatusUnauthorized, err.Error())
 	}
-	apps, err := service.GetMyApplications(userID)
+	apps, err := ctrl.jobSvc.GetMyApplications(userID)
 	if err != nil {
 		return utils.ErrorResponse(c, fiber.StatusInternalServerError, err.Error())
 	}
 	return utils.SuccessResponse(c, fiber.StatusOK, apps)
 }
 
-func UpdateApplicationStatusHandler(c *fiber.Ctx) error {
+func (ctrl *JobController) UpdateApplicationStatusHandler(c *fiber.Ctx) error {
 	userID, err := getUserIDFromToken(c)
 	if err != nil {
 		return utils.ErrorResponse(c, fiber.StatusUnauthorized, err.Error())
@@ -222,7 +229,7 @@ func UpdateApplicationStatusHandler(c *fiber.Ctx) error {
 		return utils.ErrorResponse(c, fiber.StatusBadRequest, "isi permintaan tidak valid")
 	}
 
-	app, err := service.UpdateApplicationStatus(userID, uint(appID), body.Status)
+	app, err := ctrl.jobSvc.UpdateApplicationStatus(userID, uint(appID), body.Status)
 	if err != nil {
 		if err.Error() == "akses ditolak" {
 			return utils.ErrorResponse(c, fiber.StatusForbidden, err.Error())

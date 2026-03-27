@@ -9,9 +9,17 @@ import (
 	"github.com/reganputra/skripsi-backend/utils"
 )
 
+type EventController struct {
+	eventSvc service.EventService
+}
+
+func NewEventController(eventSvc service.EventService) *EventController {
+	return &EventController{eventSvc: eventSvc}
+}
+
 // ─── Event CRUD ───────────────────────────────────────────────────────────────
 
-func CreateEvent(c *fiber.Ctx) error {
+func (ctrl *EventController) CreateEvent(c *fiber.Ctx) error {
 	userID, err := getUserIDFromToken(c)
 	if err != nil {
 		return utils.ErrorResponse(c, fiber.StatusUnauthorized, err.Error())
@@ -33,18 +41,18 @@ func CreateEvent(c *fiber.Ctx) error {
 		Status:      c.FormValue("status"),
 	}
 
-	event, err := service.CreateEvent(userID, req)
+	event, err := ctrl.eventSvc.CreateEvent(userID, req)
 	if err != nil {
 		return utils.ErrorResponse(c, fiber.StatusBadRequest, err.Error())
 	}
 	return utils.SuccessResponse(c, fiber.StatusCreated, event)
 }
 
-func GetEvents(c *fiber.Ctx) error {
+func (ctrl *EventController) GetEvents(c *fiber.Ctx) error {
 	page, _ := strconv.Atoi(c.Query("page", "1"))
 	limit, _ := strconv.Atoi(c.Query("limit", "10"))
 
-	events, total, err := service.GetEvents(page, limit)
+	events, total, err := ctrl.eventSvc.GetEvents(page, limit)
 	if err != nil {
 		return utils.ErrorResponse(c, fiber.StatusInternalServerError, "gagal mengambil data acara")
 	}
@@ -56,19 +64,19 @@ func GetEvents(c *fiber.Ctx) error {
 	})
 }
 
-func GetEventByID(c *fiber.Ctx) error {
+func (ctrl *EventController) GetEventByID(c *fiber.Ctx) error {
 	eventID, err := strconv.ParseUint(c.Params("id"), 10, 64)
 	if err != nil {
 		return utils.ErrorResponse(c, fiber.StatusBadRequest, "ID acara tidak valid")
 	}
-	event, err := service.GetEventByID(uint(eventID))
+	event, err := ctrl.eventSvc.GetEventByID(uint(eventID))
 	if err != nil {
 		return utils.ErrorResponse(c, fiber.StatusNotFound, err.Error())
 	}
 	return utils.SuccessResponse(c, fiber.StatusOK, event)
 }
 
-func UpdateEvent(c *fiber.Ctx) error {
+func (ctrl *EventController) UpdateEvent(c *fiber.Ctx) error {
 	userID, err := getUserIDFromToken(c)
 	if err != nil {
 		return utils.ErrorResponse(c, fiber.StatusUnauthorized, err.Error())
@@ -92,7 +100,7 @@ func UpdateEvent(c *fiber.Ctx) error {
 		Status:      c.FormValue("status"),
 	}
 
-	event, err := service.UpdateEvent(userID, uint(eventID), req)
+	event, err := ctrl.eventSvc.UpdateEvent(userID, uint(eventID), req)
 	if err != nil {
 		if err.Error() == "akses ditolak" {
 			return utils.ErrorResponse(c, fiber.StatusForbidden, err.Error())
@@ -102,7 +110,7 @@ func UpdateEvent(c *fiber.Ctx) error {
 	return utils.SuccessResponse(c, fiber.StatusOK, event)
 }
 
-func DeleteEvent(c *fiber.Ctx) error {
+func (ctrl *EventController) DeleteEvent(c *fiber.Ctx) error {
 	userID, err := getUserIDFromToken(c)
 	if err != nil {
 		return utils.ErrorResponse(c, fiber.StatusUnauthorized, err.Error())
@@ -111,7 +119,7 @@ func DeleteEvent(c *fiber.Ctx) error {
 	if err != nil {
 		return utils.ErrorResponse(c, fiber.StatusBadRequest, "ID acara tidak valid")
 	}
-	if err := service.DeleteEvent(userID, uint(eventID)); err != nil {
+	if err := ctrl.eventSvc.DeleteEvent(userID, uint(eventID)); err != nil {
 		if err.Error() == "akses ditolak" {
 			return utils.ErrorResponse(c, fiber.StatusForbidden, err.Error())
 		}
@@ -122,7 +130,7 @@ func DeleteEvent(c *fiber.Ctx) error {
 
 // ─── Registration ─────────────────────────────────────────────────────────────
 
-func RegisterForEvent(c *fiber.Ctx) error {
+func (ctrl *EventController) RegisterForEvent(c *fiber.Ctx) error {
 	userID, err := getUserIDFromToken(c)
 	if err != nil {
 		return utils.ErrorResponse(c, fiber.StatusUnauthorized, err.Error())
@@ -131,13 +139,13 @@ func RegisterForEvent(c *fiber.Ctx) error {
 	if err != nil {
 		return utils.ErrorResponse(c, fiber.StatusBadRequest, "ID acara tidak valid")
 	}
-	if err := service.RegisterForEvent(userID, uint(eventID)); err != nil {
+	if err := ctrl.eventSvc.RegisterForEvent(userID, uint(eventID)); err != nil {
 		return utils.ErrorResponse(c, fiber.StatusBadRequest, err.Error())
 	}
 	return utils.SuccessResponse(c, fiber.StatusOK, fiber.Map{"message": "berhasil mendaftar"})
 }
 
-func CancelRegistration(c *fiber.Ctx) error {
+func (ctrl *EventController) CancelRegistration(c *fiber.Ctx) error {
 	userID, err := getUserIDFromToken(c)
 	if err != nil {
 		return utils.ErrorResponse(c, fiber.StatusUnauthorized, err.Error())
@@ -146,18 +154,18 @@ func CancelRegistration(c *fiber.Ctx) error {
 	if err != nil {
 		return utils.ErrorResponse(c, fiber.StatusBadRequest, "ID acara tidak valid")
 	}
-	if err := service.CancelRegistration(userID, uint(eventID)); err != nil {
+	if err := ctrl.eventSvc.CancelRegistration(userID, uint(eventID)); err != nil {
 		return utils.ErrorResponse(c, fiber.StatusBadRequest, err.Error())
 	}
 	return utils.SuccessResponse(c, fiber.StatusOK, fiber.Map{"message": "pendaftaran berhasil dibatalkan"})
 }
 
-func GetParticipants(c *fiber.Ctx) error {
+func (ctrl *EventController) GetParticipants(c *fiber.Ctx) error {
 	eventID, err := strconv.ParseUint(c.Params("id"), 10, 64)
 	if err != nil {
 		return utils.ErrorResponse(c, fiber.StatusBadRequest, "ID acara tidak valid")
 	}
-	participants, err := service.GetParticipants(uint(eventID))
+	participants, err := ctrl.eventSvc.GetParticipants(uint(eventID))
 	if err != nil {
 		return utils.ErrorResponse(c, fiber.StatusNotFound, err.Error())
 	}
@@ -166,7 +174,7 @@ func GetParticipants(c *fiber.Ctx) error {
 
 // ─── Agenda ───────────────────────────────────────────────────────────────────
 
-func AddAgenda(c *fiber.Ctx) error {
+func (ctrl *EventController) AddAgenda(c *fiber.Ctx) error {
 	userID, err := getUserIDFromToken(c)
 	if err != nil {
 		return utils.ErrorResponse(c, fiber.StatusUnauthorized, err.Error())
@@ -181,7 +189,7 @@ func AddAgenda(c *fiber.Ctx) error {
 		return utils.ErrorResponse(c, fiber.StatusBadRequest, "isi permintaan tidak valid")
 	}
 
-	agenda, err := service.AddAgenda(userID, uint(eventID), req)
+	agenda, err := ctrl.eventSvc.AddAgenda(userID, uint(eventID), req)
 	if err != nil {
 		if err.Error() == "akses ditolak" {
 			return utils.ErrorResponse(c, fiber.StatusForbidden, err.Error())
@@ -191,7 +199,7 @@ func AddAgenda(c *fiber.Ctx) error {
 	return utils.SuccessResponse(c, fiber.StatusCreated, agenda)
 }
 
-func UpdateAgenda(c *fiber.Ctx) error {
+func (ctrl *EventController) UpdateAgenda(c *fiber.Ctx) error {
 	userID, err := getUserIDFromToken(c)
 	if err != nil {
 		return utils.ErrorResponse(c, fiber.StatusUnauthorized, err.Error())
@@ -206,7 +214,7 @@ func UpdateAgenda(c *fiber.Ctx) error {
 		return utils.ErrorResponse(c, fiber.StatusBadRequest, "isi permintaan tidak valid")
 	}
 
-	agenda, err := service.UpdateAgenda(userID, uint(agendaID), req)
+	agenda, err := ctrl.eventSvc.UpdateAgenda(userID, uint(agendaID), req)
 	if err != nil {
 		if err.Error() == "akses ditolak" {
 			return utils.ErrorResponse(c, fiber.StatusForbidden, err.Error())
@@ -216,7 +224,7 @@ func UpdateAgenda(c *fiber.Ctx) error {
 	return utils.SuccessResponse(c, fiber.StatusOK, agenda)
 }
 
-func DeleteAgenda(c *fiber.Ctx) error {
+func (ctrl *EventController) DeleteAgenda(c *fiber.Ctx) error {
 	userID, err := getUserIDFromToken(c)
 	if err != nil {
 		return utils.ErrorResponse(c, fiber.StatusUnauthorized, err.Error())
@@ -225,7 +233,7 @@ func DeleteAgenda(c *fiber.Ctx) error {
 	if err != nil {
 		return utils.ErrorResponse(c, fiber.StatusBadRequest, "ID agenda tidak valid")
 	}
-	if err := service.DeleteAgenda(userID, uint(agendaID)); err != nil {
+	if err := ctrl.eventSvc.DeleteAgenda(userID, uint(agendaID)); err != nil {
 		if err.Error() == "akses ditolak" {
 			return utils.ErrorResponse(c, fiber.StatusForbidden, err.Error())
 		}
@@ -234,8 +242,7 @@ func DeleteAgenda(c *fiber.Ctx) error {
 	return utils.SuccessResponse(c, fiber.StatusOK, fiber.Map{"message": "item agenda berhasil dihapus"})
 }
 
-// parseEventTime is a helper for parsing time strings in event tests.
-// It lives here so it's available to the controller for future use.
+// parseEventTime parses an RFC3339 time string into a *time.Time.
 func parseEventTime(val string) *time.Time {
 	if val == "" {
 		return nil

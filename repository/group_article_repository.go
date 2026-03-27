@@ -1,17 +1,34 @@
 package repository
 
 import (
-	"github.com/reganputra/skripsi-backend/config"
 	"github.com/reganputra/skripsi-backend/models"
+	"gorm.io/gorm"
 )
 
-func CreateGroupArticle(article *models.GroupArticle) error {
-	return config.DB.Create(article).Error
+type GroupArticleRepository interface {
+	CreateGroupArticle(article *models.GroupArticle) error
+	FindGroupArticles(groupID uint) ([]models.GroupArticle, error)
+	FindGroupArticleByID(id uint) (*models.GroupArticle, error)
+	FindAllCommentsByArticleID(articleID uint) ([]models.GroupComment, error)
+	UpdateGroupArticle(article *models.GroupArticle) error
+	DeleteGroupArticle(id uint) error
 }
 
-func FindGroupArticles(groupID uint) ([]models.GroupArticle, error) {
+type groupArticleRepository struct {
+	db *gorm.DB
+}
+
+func NewGroupArticleRepository(db *gorm.DB) GroupArticleRepository {
+	return &groupArticleRepository{db: db}
+}
+
+func (r *groupArticleRepository) CreateGroupArticle(article *models.GroupArticle) error {
+	return r.db.Create(article).Error
+}
+
+func (r *groupArticleRepository) FindGroupArticles(groupID uint) ([]models.GroupArticle, error) {
 	var articles []models.GroupArticle
-	err := config.DB.
+	err := r.db.
 		Where("group_id = ?", groupID).
 		Preload("User").
 		Order("created_at desc").
@@ -19,9 +36,9 @@ func FindGroupArticles(groupID uint) ([]models.GroupArticle, error) {
 	return articles, err
 }
 
-func FindGroupArticleByID(id uint) (*models.GroupArticle, error) {
+func (r *groupArticleRepository) FindGroupArticleByID(id uint) (*models.GroupArticle, error) {
 	var article models.GroupArticle
-	err := config.DB.
+	err := r.db.
 		Preload("User").
 		Preload("Reactions").
 		First(&article, id).Error
@@ -31,9 +48,9 @@ func FindGroupArticleByID(id uint) (*models.GroupArticle, error) {
 	return &article, nil
 }
 
-func FindAllCommentsByArticleID(articleID uint) ([]models.GroupComment, error) {
+func (r *groupArticleRepository) FindAllCommentsByArticleID(articleID uint) ([]models.GroupComment, error) {
 	var comments []models.GroupComment
-	err := config.DB.
+	err := r.db.
 		Where("article_id = ?", articleID).
 		Preload("User").
 		Preload("Reactions").
@@ -42,13 +59,13 @@ func FindAllCommentsByArticleID(articleID uint) ([]models.GroupComment, error) {
 	return comments, err
 }
 
-func UpdateGroupArticle(article *models.GroupArticle) error {
-	return config.DB.Save(article).Error
+func (r *groupArticleRepository) UpdateGroupArticle(article *models.GroupArticle) error {
+	return r.db.Save(article).Error
 }
 
-func DeleteGroupArticle(id uint) error {
-	config.DB.Where("article_id = ?", id).Delete(&models.GroupReaction{})
-	config.DB.Where("comment_id IN (SELECT id FROM group_comments WHERE article_id = ?)", id).Delete(&models.GroupReaction{})
-	config.DB.Where("article_id = ?", id).Delete(&models.GroupComment{})
-	return config.DB.Delete(&models.GroupArticle{}, id).Error
+func (r *groupArticleRepository) DeleteGroupArticle(id uint) error {
+	r.db.Where("article_id = ?", id).Delete(&models.GroupReaction{})
+	r.db.Where("comment_id IN (SELECT id FROM group_comments WHERE article_id = ?)", id).Delete(&models.GroupReaction{})
+	r.db.Where("article_id = ?", id).Delete(&models.GroupComment{})
+	return r.db.Delete(&models.GroupArticle{}, id).Error
 }

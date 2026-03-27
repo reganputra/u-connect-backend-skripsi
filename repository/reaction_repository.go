@@ -1,14 +1,28 @@
 package repository
 
 import (
-	"github.com/reganputra/skripsi-backend/config"
 	"github.com/reganputra/skripsi-backend/models"
+	"gorm.io/gorm"
 )
 
-// FindReaction finds a user's existing reaction on a post or comment
-func FindReaction(userID uint, postID *uint, commentID *uint) (*models.Reaction, error) {
+type ReactionRepository interface {
+	FindReaction(userID uint, postID *uint, commentID *uint) (*models.Reaction, error)
+	CreateReaction(reaction *models.Reaction) error
+	UpdateReaction(reaction *models.Reaction) error
+	DeleteReaction(id uint) error
+}
+
+type reactionRepository struct {
+	db *gorm.DB
+}
+
+func NewReactionRepository(db *gorm.DB) ReactionRepository {
+	return &reactionRepository{db: db}
+}
+
+func (r *reactionRepository) FindReaction(userID uint, postID *uint, commentID *uint) (*models.Reaction, error) {
 	var reaction models.Reaction
-	query := config.DB.Where("user_id = ?", userID)
+	query := r.db.Where("user_id = ?", userID)
 	if postID != nil {
 		query = query.Where("post_id = ?", *postID)
 	} else if commentID != nil {
@@ -20,14 +34,14 @@ func FindReaction(userID uint, postID *uint, commentID *uint) (*models.Reaction,
 	return &reaction, nil
 }
 
-func CreateReaction(reaction *models.Reaction) error {
-	return config.DB.Create(reaction).Error
+func (r *reactionRepository) CreateReaction(reaction *models.Reaction) error {
+	return r.db.Create(reaction).Error
 }
 
-func UpdateReaction(reaction *models.Reaction) error {
-	return config.DB.Save(reaction).Error
+func (r *reactionRepository) UpdateReaction(reaction *models.Reaction) error {
+	return r.db.Save(reaction).Error
 }
 
-func DeleteReaction(id uint) error {
-	return config.DB.Delete(&models.Reaction{}, id).Error
+func (r *reactionRepository) DeleteReaction(id uint) error {
+	return r.db.Delete(&models.Reaction{}, id).Error
 }

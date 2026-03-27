@@ -39,17 +39,45 @@ type JobRequest struct {
 	JobType     string  `json:"job_type"`
 	Status      string  `json:"status"`
 	SalaryRange *string `json:"salary_range"`
-	ImageURL    *string `json:"image_url"` // set by controller after upload
+	ImageURL    *string `json:"image_url"`
 }
 
 type JobApplicationRequest struct {
 	CoverLetter *string `json:"cover_letter"`
-	ResumeURL   string  `json:"resume_url"` // set by controller after upload
+	ResumeURL   string  `json:"resume_url"`
+}
+
+// ─── Interface ────────────────────────────────────────────────────────────────
+
+type JobService interface {
+	CreateJob(userID uint, role string, req JobRequest) (*models.Job, error)
+	GetJobs(search, jobType, status string, page, limit int) ([]models.Job, int64, error)
+	GetJobByID(id uint) (*models.Job, error)
+	UpdateJob(userID, jobID uint, req JobRequest) (*models.Job, error)
+	DeleteJob(userID, jobID uint) error
+	ApplyForJob(userID uint, role string, jobID uint, req JobApplicationRequest) (*models.JobApplication, error)
+	GetApplicants(userID, jobID uint) ([]models.JobApplication, error)
+	GetMyApplications(userID uint) ([]models.JobApplication, error)
+	UpdateApplicationStatus(userID, applicationID uint, status string) (*models.JobApplication, error)
+}
+
+// ─── Implementation ───────────────────────────────────────────────────────────
+
+type jobService struct {
+	jobRepo    repository.JobRepository
+	jobAppRepo repository.JobApplicationRepository
+}
+
+func NewJobService(jobRepo repository.JobRepository, jobAppRepo repository.JobApplicationRepository) JobService {
+	return &jobService{
+		jobRepo:    jobRepo,
+		jobAppRepo: jobAppRepo,
+	}
 }
 
 // ─── Job CRUD ─────────────────────────────────────────────────────────────────
 
-func CreateJob(userID uint, role string, req JobRequest) (*models.Job, error) {
+func (s *jobService) CreateJob(userID uint, role string, req JobRequest) (*models.Job, error) {
 	if role != "alumni" && role != "partner" {
 		return nil, errors.New("akses ditolak: hanya alumni atau partner yang dapat membuat lowongan")
 	}
@@ -84,27 +112,27 @@ func CreateJob(userID uint, role string, req JobRequest) (*models.Job, error) {
 		SalaryRange: req.SalaryRange,
 		ImageURL:    req.ImageURL,
 	}
-	if err := repository.CreateJob(job); err != nil {
+	if err := s.jobRepo.CreateJob(job); err != nil {
 		return nil, errors.New("gagal membuat lowongan")
 	}
 	return job, nil
 }
 
-func GetJobs(search, jobType, status string, page, limit int) ([]models.Job, int64, error) {
+func (s *jobService) GetJobs(search, jobType, status string, page, limit int) ([]models.Job, int64, error) {
 	offset := (page - 1) * limit
-	return repository.FindJobs(search, jobType, status, offset, limit)
+	return s.jobRepo.FindJobs(search, jobType, status, offset, limit)
 }
 
-func GetJobByID(id uint) (*models.Job, error) {
-	job, err := repository.FindJobByID(id)
+func (s *jobService) GetJobByID(id uint) (*models.Job, error) {
+	job, err := s.jobRepo.FindJobByID(id)
 	if err != nil {
 		return nil, errors.New("lowongan tidak ditemukan")
 	}
 	return job, nil
 }
 
-func UpdateJob(userID, jobID uint, req JobRequest) (*models.Job, error) {
-	job, err := repository.FindJobByID(jobID)
+func (s *jobService) UpdateJob(userID, jobID uint, req JobRequest) (*models.Job, error) {
+	job, err := s.jobRepo.FindJobByID(jobID)
 	if err != nil {
 		return nil, errors.New("lowongan tidak ditemukan")
 	}
@@ -143,21 +171,21 @@ func UpdateJob(userID, jobID uint, req JobRequest) (*models.Job, error) {
 		job.Status = req.Status
 	}
 
-	if err := repository.UpdateJob(job); err != nil {
+	if err := s.jobRepo.UpdateJob(job); err != nil {
 		return nil, errors.New("gagal memperbarui lowongan")
 	}
 	return job, nil
 }
 
-func DeleteJob(userID, jobID uint) error {
-	job, err := repository.FindJobByID(jobID)
+func (s *jobService) DeleteJob(userID, jobID uint) error {
+	job, err := s.jobRepo.FindJobByID(jobID)
 	if err != nil {
 		return errors.New("lowongan tidak ditemukan")
 	}
 	if job.UserID != userID {
 		return errors.New("akses ditolak")
 	}
-	if err := repository.DeleteJob(jobID); err != nil {
+	if err := s.jobRepo.DeleteJob(jobID); err != nil {
 		return errors.New("gagal menghapus lowongan")
 	}
 	return nil
@@ -165,7 +193,7 @@ func DeleteJob(userID, jobID uint) error {
 
 // ─── Applications ─────────────────────────────────────────────────────────────
 
-func ApplyForJob(userID uint, role string, jobID uint, req JobApplicationRequest) (*models.JobApplication, error) {
+func (s *jobService) ApplyForJob(userID uint, role string, jobID uint, req JobApplicationRequest) (*models.JobApplication, error) {
 	if role != "student" && role != "alumni" {
 		return nil, errors.New("akses ditolak: hanya student atau alumni yang dapat melamar")
 	}
@@ -173,14 +201,11 @@ func ApplyForJob(userID uint, role string, jobID uint, req JobApplicationRequest
 		return nil, errors.New("resume wajib diunggah")
 	}
 
-	// Check job exists
-	_, err := repository.FindJobByID(jobID)
-	if err != nil {
+	if _, err := s.jobRepo.FindJobByID(jobID); err != nil {
 		return nil, errors.New("lowongan tidak ditemukan")
 	}
 
-	// Duplicate check
-	existing, err := repository.FindJobApplication(jobID, userID)
+	existing, err := s.jobAppRepo.FindJobApplication(jobID, userID)
 	if err == nil && existing != nil {
 		return nil, errors.New("sudah melamar pekerjaan ini")
 	}
@@ -195,52 +220,51 @@ func ApplyForJob(userID uint, role string, jobID uint, req JobApplicationRequest
 		ResumeURL:   req.ResumeURL,
 		Status:      "pending",
 	}
-	if err := repository.CreateJobApplication(app); err != nil {
+	if err := s.jobAppRepo.CreateJobApplication(app); err != nil {
 		return nil, errors.New("gagal melamar pekerjaan")
 	}
 	return app, nil
 }
 
-func GetApplicants(userID, jobID uint) ([]models.JobApplication, error) {
-	job, err := repository.FindJobByID(jobID)
+func (s *jobService) GetApplicants(userID, jobID uint) ([]models.JobApplication, error) {
+	job, err := s.jobRepo.FindJobByID(jobID)
 	if err != nil {
 		return nil, errors.New("lowongan tidak ditemukan")
 	}
 	if job.UserID != userID {
 		return nil, errors.New("akses ditolak")
 	}
-	apps, err := repository.FindApplicantsByJobID(jobID)
+	apps, err := s.jobAppRepo.FindApplicantsByJobID(jobID)
 	if err != nil {
 		return nil, errors.New("gagal mengambil data pelamar")
 	}
 	return apps, nil
 }
 
-func GetMyApplications(userID uint) ([]models.JobApplication, error) {
-	apps, err := repository.FindApplicationsByUserID(userID)
+func (s *jobService) GetMyApplications(userID uint) ([]models.JobApplication, error) {
+	apps, err := s.jobAppRepo.FindApplicationsByUserID(userID)
 	if err != nil {
 		return nil, errors.New("gagal mengambil lamaran saya")
 	}
 	return apps, nil
 }
 
-func UpdateApplicationStatus(userID, applicationID uint, status string) (*models.JobApplication, error) {
+func (s *jobService) UpdateApplicationStatus(userID, applicationID uint, status string) (*models.JobApplication, error) {
 	if !validApplicationStatuses[status] {
 		return nil, errors.New("status tidak valid: harus pending, reviewed, accepted, atau rejected")
 	}
 
-	app, err := repository.FindJobApplicationByID(applicationID)
+	app, err := s.jobAppRepo.FindJobApplicationByID(applicationID)
 	if err != nil {
 		return nil, errors.New("lamaran tidak ditemukan")
 	}
 
-	// Only job owner can update status
 	if app.Job.UserID != userID {
 		return nil, errors.New("akses ditolak")
 	}
 
 	app.Status = status
-	if err := repository.UpdateJobApplication(app); err != nil {
+	if err := s.jobAppRepo.UpdateJobApplication(app); err != nil {
 		return nil, errors.New("gagal memperbarui status lamaran")
 	}
 	return app, nil

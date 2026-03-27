@@ -1,23 +1,40 @@
 package repository
 
 import (
-	"github.com/reganputra/skripsi-backend/config"
 	"github.com/reganputra/skripsi-backend/models"
+	"gorm.io/gorm"
 )
 
-func CreatePost(post *models.Post) error {
-	return config.DB.Create(post).Error
+type PostRepository interface {
+	CreatePost(post *models.Post) error
+	FindPosts(page, limit int) ([]models.Post, int64, error)
+	FindPostByID(id uint) (*models.Post, error)
+	FindAllCommentsByPostID(postID uint) ([]models.Comment, error)
+	UpdatePost(post *models.Post) error
+	DeletePost(id uint) error
 }
 
-func FindPosts(page, limit int) ([]models.Post, int64, error) {
+type postRepository struct {
+	db *gorm.DB
+}
+
+func NewPostRepository(db *gorm.DB) PostRepository {
+	return &postRepository{db: db}
+}
+
+func (r *postRepository) CreatePost(post *models.Post) error {
+	return r.db.Create(post).Error
+}
+
+func (r *postRepository) FindPosts(page, limit int) ([]models.Post, int64, error) {
 	var posts []models.Post
 	var total int64
 
 	offset := (page - 1) * limit
 
-	config.DB.Model(&models.Post{}).Count(&total)
+	r.db.Model(&models.Post{}).Count(&total)
 
-	err := config.DB.
+	err := r.db.
 		Preload("User").
 		Preload("Reactions").
 		Preload("Votes").
@@ -30,9 +47,9 @@ func FindPosts(page, limit int) ([]models.Post, int64, error) {
 	return posts, total, err
 }
 
-func FindPostByID(id uint) (*models.Post, error) {
+func (r *postRepository) FindPostByID(id uint) (*models.Post, error) {
 	var post models.Post
-	err := config.DB.
+	err := r.db.
 		Preload("User").
 		Preload("Reactions").
 		Preload("Votes").
@@ -43,11 +60,9 @@ func FindPostByID(id uint) (*models.Post, error) {
 	return &post, nil
 }
 
-// FindAllCommentsByPostID loads every comment for a post (all depths) in one query,
-// including User, Reactions, and Votes so they can be tree-built in the service layer.
-func FindAllCommentsByPostID(postID uint) ([]models.Comment, error) {
+func (r *postRepository) FindAllCommentsByPostID(postID uint) ([]models.Comment, error) {
 	var comments []models.Comment
-	err := config.DB.
+	err := r.db.
 		Where("post_id = ?", postID).
 		Preload("User").
 		Preload("Reactions").
@@ -57,10 +72,10 @@ func FindAllCommentsByPostID(postID uint) ([]models.Comment, error) {
 	return comments, err
 }
 
-func UpdatePost(post *models.Post) error {
-	return config.DB.Save(post).Error
+func (r *postRepository) UpdatePost(post *models.Post) error {
+	return r.db.Save(post).Error
 }
 
-func DeletePost(id uint) error {
-	return config.DB.Delete(&models.Post{}, id).Error
+func (r *postRepository) DeletePost(id uint) error {
+	return r.db.Delete(&models.Post{}, id).Error
 }

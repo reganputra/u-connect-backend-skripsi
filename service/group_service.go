@@ -20,13 +20,13 @@ type GroupRequest struct {
 	Title       string  `json:"title"`
 	Description *string `json:"description"`
 	Rules       *string `json:"rules"`
-	BannerURL   *string `json:"banner_url"` // set by controller after upload
+	BannerURL   *string `json:"banner_url"`
 }
 
 type GroupArticleRequest struct {
 	Title    string  `json:"title"`
 	Content  string  `json:"content"`
-	MediaURL *string `json:"media_url"` // set by controller after upload
+	MediaURL *string `json:"media_url"`
 }
 
 type GroupCommentRequest struct {
@@ -104,21 +104,75 @@ func buildGroupCommentTree(comments []models.GroupComment) []*GroupCommentNode {
 	return roots
 }
 
+// ─── Interface ────────────────────────────────────────────────────────────────
+
+type GroupService interface {
+	CreateGroup(userID uint, req GroupRequest) (*models.Group, error)
+	GetGroups() ([]models.Group, error)
+	GetGroupByID(id uint) (*models.Group, error)
+	UpdateGroup(userID uint, groupID uint, req GroupRequest) (*models.Group, error)
+	DeleteGroup(userID uint, groupID uint) error
+
+	JoinGroup(userID uint, groupID uint) error
+	LeaveGroup(userID uint, groupID uint) error
+	GetGroupMembers(groupID uint) ([]models.GroupMember, error)
+	GetJoinedGroups(userID uint) ([]models.Group, error)
+	KickMember(ownerID uint, groupID uint, targetUserID uint) error
+
+	CreateGroupArticle(userID uint, groupID uint, req GroupArticleRequest) (*models.GroupArticle, error)
+	GetGroupArticleDetail(userID uint, articleID uint) (*GroupArticleDetailResponse, error)
+	UpdateGroupArticle(userID uint, articleID uint, req GroupArticleRequest) (*models.GroupArticle, error)
+	DeleteGroupArticle(userID uint, articleID uint) error
+
+	AddGroupComment(userID uint, articleID uint, req GroupCommentRequest) (*models.GroupComment, error)
+	UpdateGroupComment(userID uint, commentID uint, req GroupCommentRequest) (*models.GroupComment, error)
+	DeleteGroupComment(userID uint, commentID uint) error
+
+	ReactToGroupArticle(userID uint, articleID uint, req GroupReactionRequest) (string, error)
+	ReactToGroupComment(userID uint, commentID uint, req GroupReactionRequest) (string, error)
+}
+
+// ─── Struct ───────────────────────────────────────────────────────────────────
+
+type groupService struct {
+	groupRepo         repository.GroupRepository
+	memberRepo        repository.GroupMemberRepository
+	articleRepo       repository.GroupArticleRepository
+	commentRepo       repository.GroupCommentRepository
+	groupReactionRepo repository.GroupReactionRepository
+}
+
+func NewGroupService(
+	groupRepo repository.GroupRepository,
+	memberRepo repository.GroupMemberRepository,
+	articleRepo repository.GroupArticleRepository,
+	commentRepo repository.GroupCommentRepository,
+	groupReactionRepo repository.GroupReactionRepository,
+) GroupService {
+	return &groupService{
+		groupRepo:         groupRepo,
+		memberRepo:        memberRepo,
+		articleRepo:       articleRepo,
+		commentRepo:       commentRepo,
+		groupReactionRepo: groupReactionRepo,
+	}
+}
+
 // ─── helpers ──────────────────────────────────────────────────────────────────
 
-func isMember(groupID, userID uint) bool {
-	_, err := repository.FindGroupMember(groupID, userID)
+func (s *groupService) isMember(groupID, userID uint) bool {
+	_, err := s.memberRepo.FindGroupMember(groupID, userID)
 	return err == nil
 }
 
-func isOwner(groupID, userID uint) bool {
-	m, err := repository.FindGroupMember(groupID, userID)
+func (s *groupService) isOwner(groupID, userID uint) bool {
+	m, err := s.memberRepo.FindGroupMember(groupID, userID)
 	return err == nil && m.Role == "owner"
 }
 
 // ─── Group CRUD ───────────────────────────────────────────────────────────────
 
-func CreateGroup(userID uint, req GroupRequest) (*models.Group, error) {
+func (s *groupService) CreateGroup(userID uint, req GroupRequest) (*models.Group, error) {
 	if req.Category == "" || req.Title == "" {
 		return nil, errors.New("kategori dan judul wajib diisi")
 	}
@@ -130,32 +184,33 @@ func CreateGroup(userID uint, req GroupRequest) (*models.Group, error) {
 		Rules:       req.Rules,
 		BannerURL:   req.BannerURL,
 	}
-	if err := repository.CreateGroup(group); err != nil {
+	if err := s.groupRepo.CreateGroup(group); err != nil {
 		return nil, errors.New("gagal membuat grup")
 	}
-	// Auto-join creator as owner
 	member := &models.GroupMember{GroupID: group.ID, UserID: userID, Role: "owner"}
-	_ = repository.AddGroupMember(member)
+	if err := s.memberRepo.AddGroupMember(member); err != nil {
+		return nil, errors.New("gagal menambahkan pemilik sebagai anggota grup")
+	}
 	return group, nil
 }
 
-func GetGroups() ([]models.Group, error) {
-	return repository.FindGroups()
+func (s *groupService) GetGroups() ([]models.Group, error) {
+	return s.groupRepo.FindGroups()
 }
 
-func GetGroupByID(id uint) (*models.Group, error) {
-	group, err := repository.FindGroupByID(id)
+func (s *groupService) GetGroupByID(id uint) (*models.Group, error) {
+	group, err := s.groupRepo.FindGroupByID(id)
 	if err != nil {
 		return nil, errors.New("grup tidak ditemukan")
 	}
 	return group, nil
 }
 
-func UpdateGroup(userID uint, groupID uint, req GroupRequest) (*models.Group, error) {
-	if !isOwner(groupID, userID) {
+func (s *groupService) UpdateGroup(userID uint, groupID uint, req GroupRequest) (*models.Group, error) {
+	if !s.isOwner(groupID, userID) {
 		return nil, errors.New("akses ditolak: hanya pemilik grup")
 	}
-	group, err := repository.FindGroupByID(groupID)
+	group, err := s.groupRepo.FindGroupByID(groupID)
 	if err != nil {
 		return nil, errors.New("grup tidak ditemukan")
 	}
@@ -174,66 +229,66 @@ func UpdateGroup(userID uint, groupID uint, req GroupRequest) (*models.Group, er
 	if req.BannerURL != nil {
 		group.BannerURL = req.BannerURL
 	}
-	if err := repository.UpdateGroup(group); err != nil {
+	if err := s.groupRepo.UpdateGroup(group); err != nil {
 		return nil, errors.New("gagal memperbarui grup")
 	}
 	return group, nil
 }
 
-func DeleteGroup(userID uint, groupID uint) error {
-	if !isOwner(groupID, userID) {
+func (s *groupService) DeleteGroup(userID uint, groupID uint) error {
+	if !s.isOwner(groupID, userID) {
 		return errors.New("akses ditolak: hanya pemilik grup")
 	}
-	return repository.DeleteGroup(groupID)
+	return s.groupRepo.DeleteGroup(groupID)
 }
 
 // ─── Membership ───────────────────────────────────────────────────────────────
 
-func JoinGroup(userID uint, groupID uint) error {
-	if _, err := repository.FindGroupByID(groupID); err != nil {
+func (s *groupService) JoinGroup(userID uint, groupID uint) error {
+	if _, err := s.groupRepo.FindGroupByID(groupID); err != nil {
 		return errors.New("grup tidak ditemukan")
 	}
-	if isMember(groupID, userID) {
+	if s.isMember(groupID, userID) {
 		return errors.New("sudah menjadi anggota grup ini")
 	}
-	return repository.AddGroupMember(&models.GroupMember{GroupID: groupID, UserID: userID, Role: "member"})
+	return s.memberRepo.AddGroupMember(&models.GroupMember{GroupID: groupID, UserID: userID, Role: "member"})
 }
 
-func LeaveGroup(userID uint, groupID uint) error {
-	if isOwner(groupID, userID) {
+func (s *groupService) LeaveGroup(userID uint, groupID uint) error {
+	if s.isOwner(groupID, userID) {
 		return errors.New("pemilik grup tidak dapat meninggalkan grup")
 	}
-	if !isMember(groupID, userID) {
+	if !s.isMember(groupID, userID) {
 		return errors.New("Anda bukan anggota grup ini")
 	}
-	return repository.RemoveGroupMember(groupID, userID)
+	return s.memberRepo.RemoveGroupMember(groupID, userID)
 }
 
-func GetGroupMembers(groupID uint) ([]models.GroupMember, error) {
-	return repository.FindGroupMembers(groupID)
+func (s *groupService) GetGroupMembers(groupID uint) ([]models.GroupMember, error) {
+	return s.memberRepo.FindGroupMembers(groupID)
 }
 
-func GetJoinedGroups(userID uint) ([]models.Group, error) {
-	return repository.FindJoinedGroups(userID)
+func (s *groupService) GetJoinedGroups(userID uint) ([]models.Group, error) {
+	return s.memberRepo.FindJoinedGroups(userID)
 }
 
-func KickMember(ownerID uint, groupID uint, targetUserID uint) error {
-	if !isOwner(groupID, ownerID) {
+func (s *groupService) KickMember(ownerID uint, groupID uint, targetUserID uint) error {
+	if !s.isOwner(groupID, ownerID) {
 		return errors.New("akses ditolak: hanya pemilik grup")
 	}
 	if ownerID == targetUserID {
 		return errors.New("pemilik tidak dapat mengeluarkan dirinya sendiri")
 	}
-	if !isMember(groupID, targetUserID) {
+	if !s.isMember(groupID, targetUserID) {
 		return errors.New("pengguna yang dituju bukan anggota grup")
 	}
-	return repository.RemoveGroupMember(groupID, targetUserID)
+	return s.memberRepo.RemoveGroupMember(groupID, targetUserID)
 }
 
 // ─── Articles ─────────────────────────────────────────────────────────────────
 
-func CreateGroupArticle(userID uint, groupID uint, req GroupArticleRequest) (*models.GroupArticle, error) {
-	if !isMember(groupID, userID) {
+func (s *groupService) CreateGroupArticle(userID uint, groupID uint, req GroupArticleRequest) (*models.GroupArticle, error) {
+	if !s.isMember(groupID, userID) {
 		return nil, errors.New("akses ditolak: hanya anggota grup")
 	}
 	if req.Title == "" || req.Content == "" {
@@ -246,20 +301,19 @@ func CreateGroupArticle(userID uint, groupID uint, req GroupArticleRequest) (*mo
 		Content:  req.Content,
 		MediaURL: req.MediaURL,
 	}
-	if err := repository.CreateGroupArticle(article); err != nil {
+	if err := s.articleRepo.CreateGroupArticle(article); err != nil {
 		return nil, errors.New("gagal membuat artikel")
 	}
 	return article, nil
 }
 
-func GetGroupArticleDetail(userID uint, articleID uint) (*GroupArticleDetailResponse, error) {
-	article, err := repository.FindGroupArticleByID(articleID)
+func (s *groupService) GetGroupArticleDetail(userID uint, articleID uint) (*GroupArticleDetailResponse, error) {
+	article, err := s.articleRepo.FindGroupArticleByID(articleID)
 	if err != nil {
 		return nil, errors.New("artikel tidak ditemukan")
 	}
-	// Non-members: return article but no comments
-	comments, _ := repository.FindAllCommentsByArticleID(articleID)
-	if !isMember(article.GroupID, userID) {
+	comments, _ := s.articleRepo.FindAllCommentsByArticleID(articleID)
+	if !s.isMember(article.GroupID, userID) {
 		comments = []models.GroupComment{}
 	}
 	return &GroupArticleDetailResponse{
@@ -277,13 +331,12 @@ func GetGroupArticleDetail(userID uint, articleID uint) (*GroupArticleDetailResp
 	}, nil
 }
 
-func UpdateGroupArticle(userID uint, articleID uint, req GroupArticleRequest) (*models.GroupArticle, error) {
-	article, err := repository.FindGroupArticleByID(articleID)
+func (s *groupService) UpdateGroupArticle(userID uint, articleID uint, req GroupArticleRequest) (*models.GroupArticle, error) {
+	article, err := s.articleRepo.FindGroupArticleByID(articleID)
 	if err != nil {
 		return nil, errors.New("artikel tidak ditemukan")
 	}
-	// Article owner or group owner can update
-	if article.UserID != userID && !isOwner(article.GroupID, userID) {
+	if article.UserID != userID && !s.isOwner(article.GroupID, userID) {
 		return nil, errors.New("akses ditolak")
 	}
 	if req.Title != "" {
@@ -295,31 +348,31 @@ func UpdateGroupArticle(userID uint, articleID uint, req GroupArticleRequest) (*
 	if req.MediaURL != nil {
 		article.MediaURL = req.MediaURL
 	}
-	if err := repository.UpdateGroupArticle(article); err != nil {
+	if err := s.articleRepo.UpdateGroupArticle(article); err != nil {
 		return nil, errors.New("gagal memperbarui artikel")
 	}
 	return article, nil
 }
 
-func DeleteGroupArticle(userID uint, articleID uint) error {
-	article, err := repository.FindGroupArticleByID(articleID)
+func (s *groupService) DeleteGroupArticle(userID uint, articleID uint) error {
+	article, err := s.articleRepo.FindGroupArticleByID(articleID)
 	if err != nil {
 		return errors.New("artikel tidak ditemukan")
 	}
-	if article.UserID != userID && !isOwner(article.GroupID, userID) {
+	if article.UserID != userID && !s.isOwner(article.GroupID, userID) {
 		return errors.New("akses ditolak")
 	}
-	return repository.DeleteGroupArticle(articleID)
+	return s.articleRepo.DeleteGroupArticle(articleID)
 }
 
 // ─── Comments ─────────────────────────────────────────────────────────────────
 
-func AddGroupComment(userID uint, articleID uint, req GroupCommentRequest) (*models.GroupComment, error) {
-	article, err := repository.FindGroupArticleByID(articleID)
+func (s *groupService) AddGroupComment(userID uint, articleID uint, req GroupCommentRequest) (*models.GroupComment, error) {
+	article, err := s.articleRepo.FindGroupArticleByID(articleID)
 	if err != nil {
 		return nil, errors.New("artikel tidak ditemukan")
 	}
-	if !isMember(article.GroupID, userID) {
+	if !s.isMember(article.GroupID, userID) {
 		return nil, errors.New("akses ditolak: hanya anggota grup")
 	}
 	if req.Content == "" {
@@ -331,17 +384,17 @@ func AddGroupComment(userID uint, articleID uint, req GroupCommentRequest) (*mod
 		Content:         req.Content,
 		ParentCommentID: req.ParentCommentID,
 	}
-	if err := repository.CreateGroupComment(comment); err != nil {
+	if err := s.commentRepo.CreateGroupComment(comment); err != nil {
 		return nil, errors.New("gagal menambahkan komentar")
 	}
 	return comment, nil
 }
 
-func UpdateGroupComment(userID uint, commentID uint, req GroupCommentRequest) (*models.GroupComment, error) {
+func (s *groupService) UpdateGroupComment(userID uint, commentID uint, req GroupCommentRequest) (*models.GroupComment, error) {
 	if req.Content == "" {
 		return nil, errors.New("konten wajib diisi")
 	}
-	comment, err := repository.FindGroupCommentByID(commentID)
+	comment, err := s.commentRepo.FindGroupCommentByID(commentID)
 	if err != nil {
 		return nil, errors.New("komentar tidak ditemukan")
 	}
@@ -349,74 +402,85 @@ func UpdateGroupComment(userID uint, commentID uint, req GroupCommentRequest) (*
 		return nil, errors.New("akses ditolak")
 	}
 	comment.Content = req.Content
-	if err := repository.UpdateGroupComment(comment); err != nil {
+	if err := s.commentRepo.UpdateGroupComment(comment); err != nil {
 		return nil, errors.New("gagal memperbarui komentar")
 	}
 	return comment, nil
 }
 
-func DeleteGroupComment(userID uint, commentID uint) error {
-	comment, err := repository.FindGroupCommentByID(commentID)
+func (s *groupService) DeleteGroupComment(userID uint, commentID uint) error {
+	comment, err := s.commentRepo.FindGroupCommentByID(commentID)
 	if err != nil {
 		return errors.New("komentar tidak ditemukan")
 	}
-	// Comment owner or group owner can delete
-	article, _ := repository.FindGroupArticleByID(comment.ArticleID)
-	if comment.UserID != userID && (article == nil || !isOwner(article.GroupID, userID)) {
+	article, _ := s.articleRepo.FindGroupArticleByID(comment.ArticleID)
+	if comment.UserID != userID && (article == nil || !s.isOwner(article.GroupID, userID)) {
 		return errors.New("akses ditolak")
 	}
-	return repository.DeleteGroupComment(commentID)
+	return s.commentRepo.DeleteGroupComment(commentID)
 }
 
 // ─── Reactions ────────────────────────────────────────────────────────────────
 
-func ReactToGroupArticle(userID uint, articleID uint, req GroupReactionRequest) (string, error) {
+func (s *groupService) ReactToGroupArticle(userID uint, articleID uint, req GroupReactionRequest) (string, error) {
 	if !validGroupReactionTypes[req.Type] {
 		return "", errors.New("jenis reaksi tidak valid")
 	}
-	article, err := repository.FindGroupArticleByID(articleID)
+	article, err := s.articleRepo.FindGroupArticleByID(articleID)
 	if err != nil {
 		return "", errors.New("artikel tidak ditemukan")
 	}
-	if !isMember(article.GroupID, userID) {
+	if !s.isMember(article.GroupID, userID) {
 		return "", errors.New("akses ditolak: hanya anggota grup")
 	}
-	existing, err := repository.FindGroupReaction(userID, &articleID, nil)
+	existing, err := s.groupReactionRepo.FindGroupReaction(userID, &articleID, nil)
 	if err == nil {
 		if existing.Type == req.Type {
-			_ = repository.DeleteGroupReaction(existing.ID)
+			if err := s.groupReactionRepo.DeleteGroupReaction(existing.ID); err != nil {
+				return "", errors.New("gagal menghapus reaksi")
+			}
 			return "removed", nil
 		}
 		existing.Type = req.Type
-		_ = repository.UpdateGroupReaction(existing)
+		if err := s.groupReactionRepo.UpdateGroupReaction(existing); err != nil {
+			return "", errors.New("gagal memperbarui reaksi")
+		}
 		return "updated", nil
 	}
-	_ = repository.CreateGroupReaction(&models.GroupReaction{UserID: userID, ArticleID: &articleID, Type: req.Type})
+	if err := s.groupReactionRepo.CreateGroupReaction(&models.GroupReaction{UserID: userID, ArticleID: &articleID, Type: req.Type}); err != nil {
+		return "", errors.New("gagal menambahkan reaksi")
+	}
 	return "added", nil
 }
 
-func ReactToGroupComment(userID uint, commentID uint, req GroupReactionRequest) (string, error) {
+func (s *groupService) ReactToGroupComment(userID uint, commentID uint, req GroupReactionRequest) (string, error) {
 	if !validGroupReactionTypes[req.Type] {
 		return "", errors.New("jenis reaksi tidak valid")
 	}
-	comment, err := repository.FindGroupCommentByID(commentID)
+	comment, err := s.commentRepo.FindGroupCommentByID(commentID)
 	if err != nil {
 		return "", errors.New("komentar tidak ditemukan")
 	}
-	article, _ := repository.FindGroupArticleByID(comment.ArticleID)
-	if article != nil && !isMember(article.GroupID, userID) {
+	article, _ := s.articleRepo.FindGroupArticleByID(comment.ArticleID)
+	if article != nil && !s.isMember(article.GroupID, userID) {
 		return "", errors.New("akses ditolak: hanya anggota grup")
 	}
-	existing, err := repository.FindGroupReaction(userID, nil, &commentID)
+	existing, err := s.groupReactionRepo.FindGroupReaction(userID, nil, &commentID)
 	if err == nil {
 		if existing.Type == req.Type {
-			_ = repository.DeleteGroupReaction(existing.ID)
+			if err := s.groupReactionRepo.DeleteGroupReaction(existing.ID); err != nil {
+				return "", errors.New("gagal menghapus reaksi")
+			}
 			return "removed", nil
 		}
 		existing.Type = req.Type
-		_ = repository.UpdateGroupReaction(existing)
+		if err := s.groupReactionRepo.UpdateGroupReaction(existing); err != nil {
+			return "", errors.New("gagal memperbarui reaksi")
+		}
 		return "updated", nil
 	}
-	_ = repository.CreateGroupReaction(&models.GroupReaction{UserID: userID, CommentID: &commentID, Type: req.Type})
+	if err := s.groupReactionRepo.CreateGroupReaction(&models.GroupReaction{UserID: userID, CommentID: &commentID, Type: req.Type}); err != nil {
+		return "", errors.New("gagal menambahkan reaksi")
+	}
 	return "added", nil
 }
