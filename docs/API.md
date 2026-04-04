@@ -20,6 +20,7 @@ Request body must include `Content-Type: application/json` for JSON  endpoints o
 - [Content Reporting](#content-reporting)
 - [Admin Module](#admin-module)
 - [Categories](#categories)
+- [Mentoring Module](#mentoring-module)
 - [Cloudinary Upload Reference](#cloudinary-upload-reference)
 
 ---
@@ -159,11 +160,9 @@ Every response wraps data in a consistent envelope.
 {
   "success": true,
   "data": {
-    "ID": 1,
-    "Name": "Regan Putra",
-    "Email": "regan@test.com",
-    "Role": "alumni",
-    "IsActive": true
+    "user_id": 1,
+    "email": "regan@test.com",
+    "role": "alumni"
   }
 }
 ```
@@ -821,6 +820,316 @@ To reply to an existing comment:
   ]
 }
 ```
+
+---
+
+## Mentoring Module
+
+> Connects **students** (mentees) with **alumni** (mentors) using a Content-Based Filtering recommendation engine (TF-IDF + Cosine Similarity implemented in pure Go).
+
+### Role Matrix
+
+| Action | alumni | student | partner | admin |
+|---|---|---|---|---|
+| Register / manage as mentor | ✅ | ❌ | ❌ | ❌ |
+| Browse & request mentors | ❌ | ✅ | ❌ | ❌ |
+| Get recommendations | ❌ | ✅ | ❌ | ❌ |
+| Create / manage sessions | ✅ (mentor side) | ❌ | ❌ | ❌ |
+| View own sessions | ✅ | ✅ | ❌ | ❌ |
+
+---
+
+### 🎓 Alumni (Mentor) Endpoints — `/api/mentor`
+
+> All require `alumni` role.
+
+#### POST `/api/mentor/register` — Register as Mentor
+
+**Body (JSON):**
+```json
+{
+  "mentor_bio": "5+ years in Python and ML. Happy to guide students.",
+  "mentor_quota": 3
+}
+```
+
+> `mentor_quota` allowed values: `1` · `2` · `3` · `5`
+
+**Response `201`:** returns updated `UserProfile` with `MentorQuota` and `MentorDescription` set.
+
+**Business Rules:**
+- Only alumni accounts can register
+- Must have created a profile first (`POST /api/profile`)
+- Cannot register twice
+- `mentor_bio` is required; quota must be `1`, `2`, `3`, or `5`
+
+---
+
+#### GET `/api/mentor/profile` — Get Own Mentor Profile
+
+**Response `200`:** returns `UserProfile` with `User` and `Experiences` preloaded.
+
+---
+
+#### PUT `/api/mentor/profile` — Update Mentor Profile
+
+```json
+{
+  "mentor_bio": "Updated specialization: Python, ML and Cloud.",
+  "mentor_quota": 5
+}
+```
+> New quota cannot be less than the current number of active mentees.
+
+---
+
+#### DELETE `/api/mentor/unregister` — Unregister as Mentor
+
+> Blocked if the mentor still has approved (active) mentees.
+
+**Response `200`:**
+```json
+{ "success": true, "data": { "message": "berhasil berhenti menjadi mentor" } }
+```
+
+---
+
+#### GET `/api/mentor/requests` — View Incoming Requests
+
+Returns all mentoring requests (pending + approved + rejected) sent to this mentor.
+
+---
+
+#### PATCH `/api/mentor/requests/:id/approve` — Approve Request
+
+**Business Rules before approval:**
+- Request must be `pending`
+- Student must not already have 2 approved mentors
+- Mentor must have remaining quota capacity
+
+**Response `200`:**
+```json
+{
+  "success": true,
+  "data": {
+    "ID": 5,
+    "MentorID": 2,
+    "StudentID": 8,
+    "Status": "approved",
+    "SimilarityScore": 0.5263
+  }
+}
+```
+
+---
+
+#### PATCH `/api/mentor/requests/:id/reject` — Reject Request
+
+```json
+{ "reason": "Not aligned with my current expertise." }
+```
+
+**Response `200`:** returns `MentorRequest` with `Status: "rejected"` and `RejectReason` set.
+
+---
+
+#### GET `/api/mentor/mentees` — List Active Mentees
+
+Returns approved `MentorRequest` records (approved mentees only).
+
+---
+
+#### POST `/api/mentor/sessions` — Create Session
+
+```json
+{
+  "student_id": 8,
+  "topic": "Introduction to Python & ML basics",
+  "notes": "Bring your laptop with VS Code installed",
+  "session_date": "2026-07-01T10:00:00Z"
+}
+```
+
+> `student_id` must have an **approved** mentoring request with this mentor. `session_date` uses ISO 8601.
+
+**Response `201`:**
+```json
+{
+  "success": true,
+  "data": {
+    "ID": 1,
+    "RequestID": 5,
+    "MentorID": 2,
+    "StudentID": 8,
+    "Topic": "Introduction to Python & ML basics",
+    "Notes": "Bring your laptop with VS Code installed",
+    "SessionDate": "2026-07-01T10:00:00Z",
+    "Status": "scheduled"
+  }
+}
+```
+
+---
+
+#### GET `/api/mentor/sessions` — List My Sessions (Mentor)
+
+Returns all sessions where the caller is the mentor. Preloads `Student`.
+
+---
+
+#### PATCH `/api/mentor/sessions/:id` — Update Session
+
+```json
+{
+  "topic": "Advanced Python: decorators and async",
+  "status": "completed",
+  "session_date": "2026-07-05T14:00:00Z"
+}
+```
+
+> Valid `status` values: `scheduled` · `completed` · `cancelled`  
+> Only the owning mentor can update (403 for others).
+
+---
+
+### 🎒 Student Endpoints — `/api/mentors` & `/api/student`
+
+> All require `student` role.
+
+#### GET `/api/mentors` — Browse Available Mentors
+
+**Query params:** `?page=1&limit=10&search=Python`
+
+Returns alumni who are registered as mentors **and still have capacity**.
+
+**Response `200`:**
+```json
+{
+  "success": true,
+  "data": {
+    "total": 8,
+    "page": 1,
+    "limit": 10,
+    "data": [
+      {
+        "ID": 3,
+        "UserID": 2,
+        "MentorDescription": "5+ years in Python and ML.",
+        "MentorQuota": 3,
+        "Skills": "Python, Machine Learning, Docker",
+        "Interests": "AI, Data Science",
+        "User": { "ID": 2, "Name": "Mentor Alumni", "Role": "alumni" }
+      }
+    ]
+  }
+}
+```
+
+---
+
+#### GET `/api/mentors/:id` — Mentor Detail
+
+Returns the mentor's full profile including `User` and `Experiences`. Returns `404` if user is not a registered mentor.
+
+---
+
+#### GET `/api/mentors/recommend` — Get Recommendations  ⭐ NLP Engine
+
+> Uses **TF-IDF + Cosine Similarity** (pure Go, no external ML dependency) to rank mentors by relevance to the student's profile or a custom query.
+
+**Query params:**
+
+| Param | Description | Default |
+|---|---|---|
+| `q` | Custom free-text query (e.g. `python machine learning cloud`) | Student's `skills + interests` from profile |
+| `top` | Number of results to return | `10` |
+
+**How it works:**
+1. Tokenizes each mentor's `skills + interests + mentor_bio + position + company + industry`
+2. Tokenizes the student's query (or falls back to profile skills/interests)
+3. Builds a TF-IDF corpus (mentors + student query)
+4. Ranks mentors by cosine similarity to the student query vector
+
+**NLP Pipeline:** case folding → special character removal → tokenization → Indonesian + English stopword removal → Indonesian suffix/prefix stemming
+
+**Response `200`:**
+```json
+{
+  "success": true,
+  "data": [
+    {
+      "user_id": 2,
+      "name": "Mentor Alumni",
+      "profile_picture": "https://res.cloudinary.com/.../profile.jpg",
+      "mentor_bio": "5+ years in Python and ML.",
+      "skills": "Python, Machine Learning, Docker",
+      "interests": "AI, Data Science",
+      "position": "Senior Software Engineer",
+      "company_name": "PT Tech Indonesia",
+      "industry_name": "",
+      "mentor_quota": 3,
+      "similarity_score": 0.5263
+    }
+  ]
+}
+```
+
+> Results are sorted by `similarity_score` descending. Score of `0` means no textual overlap.
+
+---
+
+#### POST `/api/mentors/:id/request` — Request Mentoring
+
+```json
+{
+  "message": "Hi! I'd love to learn Python and ML from you.",
+  "similarity_score": 0.5263
+}
+```
+
+> `message` and `similarity_score` are optional. Pass `similarity_score` from the recommendation response to record it for analytics.
+
+**Business Rules:**
+- Cannot request yourself
+- Cannot send a duplicate request (pending or approved to same mentor)
+- Student may have **at most 2 approved mentors simultaneously**
+- Mentor's quota must not be exceeded
+
+**Response `201`:** returns `MentorRequest` with `Status: "pending"`.
+
+---
+
+#### GET `/api/student/mentors` — My Approved Mentors
+
+Returns `MentorRequest` records where `Status = "approved"` for the current student.
+
+---
+
+#### GET `/api/student/requests` — My Sent Requests
+
+Returns all `MentorRequest` records sent by the current student (all statuses).
+
+---
+
+#### GET `/api/student/sessions` — My Sessions (Student)
+
+Returns all `MentoringSession` records where the caller is the student. Preloads `Mentor`.
+
+---
+
+### Business Rules Summary
+
+| Rule | Detail |
+|---|---|
+| Mentor role | `alumni` only |
+| Mentor quota | Must be `1`, `2`, `3`, or `5` |
+| Mentee limit per student | Max **2 approved mentors** at a time |
+| Capacity enforcement | Request blocked when mentor's active mentees ≥ quota |
+| Duplicate request | Only one `pending` or `approved` request per student-mentor pair |
+| Session guard | Session can only be created if an **approved** request exists |
+| Unregister guard | Cannot unregister while active mentees exist |
+| Status flow (Request) | `pending` → `approved` \| `rejected` |
+| Status flow (Session) | `scheduled` → `completed` \| `cancelled` |
 
 ---
 
