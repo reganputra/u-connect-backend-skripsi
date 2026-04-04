@@ -7,8 +7,6 @@ import (
 	"github.com/gofiber/fiber/v2"
 	"github.com/gofiber/fiber/v2/middleware/cors"
 	"github.com/gofiber/fiber/v2/middleware/logger"
-	"golang.org/x/crypto/bcrypt"
-	"gorm.io/gorm"
 	"github.com/reganputra/skripsi-backend/config"
 	"github.com/reganputra/skripsi-backend/controllers"
 	"github.com/reganputra/skripsi-backend/models"
@@ -16,6 +14,8 @@ import (
 	"github.com/reganputra/skripsi-backend/routes"
 	"github.com/reganputra/skripsi-backend/service"
 	"github.com/reganputra/skripsi-backend/utils"
+	"golang.org/x/crypto/bcrypt"
+	"gorm.io/gorm"
 )
 
 func main() {
@@ -56,6 +56,8 @@ func main() {
 		&models.JobApplication{},
 		&models.Report{},
 		&models.Category{},
+		&models.MentorRequest{},
+		&models.MentoringSession{},
 	); err != nil {
 		log.Fatalf("❌ AutoMigrate failed: %v", err)
 	}
@@ -88,6 +90,9 @@ func main() {
 	reportRepo := repository.NewReportRepository(db)
 	adminRepo := repository.NewAdminRepository(db)
 	categoryRepo := repository.NewCategoryRepository(db)
+	mentorRepo := repository.NewMentorRepository(db)
+	mentorRequestRepo := repository.NewMentorRequestRepository(db)
+	mentoringSessionRepo := repository.NewMentoringSessionRepository(db)
 
 	// ── Services ──────────────────────────────────────────────────────────────
 	authSvc := service.NewAuthService(userRepo)
@@ -100,6 +105,8 @@ func main() {
 	jobSvc := service.NewJobService(jobRepo, jobAppRepo)
 	reportSvc := service.NewReportService(reportRepo)
 	adminSvc := service.NewAdminService(adminRepo, reportRepo, categoryRepo)
+	recommendSvc := service.NewRecommendationService(mentorRepo)
+	mentorSvc := service.NewMentorService(profileRepo, mentorRepo, mentorRequestRepo, mentoringSessionRepo, recommendSvc)
 
 	// ── Controllers ───────────────────────────────────────────────────────────
 	authCtrl := controllers.NewAuthController(authSvc)
@@ -112,6 +119,7 @@ func main() {
 	jobCtrl := controllers.NewJobController(jobSvc)
 	reportCtrl := controllers.NewReportController(reportSvc)
 	adminCtrl := controllers.NewAdminController(adminSvc)
+	mentorCtrl := controllers.NewMentorController(mentorSvc)
 
 	// ── Fiber app ─────────────────────────────────────────────────────────────
 	app := fiber.New(fiber.Config{
@@ -123,13 +131,13 @@ func main() {
 	// ── CORS ──────────────────────────────────────────────────────────────────
 	allowedOrigins := os.Getenv("CORS_ALLOWED_ORIGINS")
 	if allowedOrigins == "" {
-		allowedOrigins = "*" // dev default — restrict in production
+		allowedOrigins = "http://localhost:5173/" // dev default — restrict in production
 	}
 	app.Use(cors.New(cors.Config{
-		AllowOrigins: allowedOrigins,
-		AllowMethods: "GET,POST,PUT,PATCH,DELETE,OPTIONS",
-		AllowHeaders: "Origin, Content-Type, Accept, Authorization",
-		ExposeHeaders: "Content-Length",
+		AllowOrigins:     allowedOrigins,
+		AllowMethods:     "GET,POST,PUT,PATCH,DELETE,OPTIONS",
+		AllowHeaders:     "Origin, Content-Type, Accept, Authorization",
+		ExposeHeaders:    "Content-Length",
 		AllowCredentials: allowedOrigins != "*", // credentials not allowed with wildcard
 	}))
 
@@ -152,6 +160,7 @@ func main() {
 	routes.RegisterJobRoutes(app, jobCtrl)
 	routes.RegisterReportRoutes(app, reportCtrl)
 	routes.RegisterAdminRoutes(app, adminCtrl)
+	routes.RegisterMentorRoutes(app, mentorCtrl)
 
 	// ── Start server ──────────────────────────────────────────────────────────
 	port := os.Getenv("APP_PORT")

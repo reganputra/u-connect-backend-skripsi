@@ -463,6 +463,7 @@ Each applicant contains:
 - When a job is deleted, all related applications must also be deleted
 
 # 11 Admin Module
+
 The **Admin Module** introduces a new role: `admin`, which is responsible for managing, moderating, and maintaining the overall system.
 
 Admins have elevated privileges to monitor platform activity, manage users, moderate content, and oversee system-wide configurations such as categories.
@@ -470,6 +471,7 @@ Admins have elevated privileges to monitor platform activity, manage users, mode
 This module ensures platform integrity, safety, and proper content governance.
 
 Admin responsibilities:
+
 - Monitor system activity
 - Moderate user-generated content
 - Manage users and roles
@@ -477,11 +479,14 @@ Admin responsibilities:
 - Manage categories
 
 ## 11.1 Features
+
 Dashboard Admin
+
 - View platform statistics
 - Overview of system activity
 
 Content Moderation
+
 - Admin can received a report from user
 - Admin can delete or reject with reason
 - Delete posts
@@ -490,12 +495,175 @@ Content Moderation
 - Delete jobs
 
 User Management
+
 - View all users
 - Update user status (active / inactive)
 - Change user role (student, alumni, partner, admin)
 
 Category Management
+
 - Create category
 - Update category
 - Delete category
 - View category list
+
+# 12. Mentoring Module
+
+The **Mentoring Module** enables interaction between alumni and students through structured mentoring sessions.  
+This feature allows alumni to share career advice, industry insights, and professional experiences with students.
+
+Students can request mentoring from alumni mentors, while mentors can manage mentoring requests and sessions through their dashboard.
+
+The system also provides **automatic mentor recommendation using Content-Based Filtering** to help students find suitable mentors.
+
+## 12.1 Authorization Roles
+
+Mentor:
+
+- `alumni`
+
+Mentee:
+
+- `student`
+
+Restrictions:
+
+- A student can have **maximum 2 mentors**
+- A mentor must define **maximum mentees capacity**
+
+## 12.2 Features
+
+Mentor Features
+
+- Register as mentor
+- Define maximum mentees capacity
+- Write mentor bio (mentoring approach, expertise, availability)
+- View mentoring requests
+- Approve or reject mentoring requests with message
+- View mentee list
+- Manage mentoring sessions
+- Create mentoring sessions
+
+Student Features
+
+- Search mentors
+- Request mentoring
+- View mentor list
+- View mentoring sessions
+- Create session request with mentor
+
+Recommendation System
+
+- Automatic mentor recommendation
+- Based on student profile and input query
+- Uses Content-Based Filtering
+
+Dashboard
+
+- Mentor dashboard
+- Student dashboard
+
+## 12.3 Mentoring Workflow
+
+1. Alumni registers as mentor
+2. Student searches mentor (automatic recommendation or manual search)
+3. Student sends mentoring request
+4. Mentor receives request
+5. Mentor approves or rejects request
+6. If approved → mentoring relationship created
+7. Mentor and student can create mentoring sessions
+
+## 12.4 Fields
+
+Mentor profile includes can be inserted to User Profile:
+
+- mentor_bio
+- maximum_mentees
+- current_mentees
+
+Allowed maximum mentees values:
+
+- 1
+- 2
+- 3
+- 5
+
+Each session contains:
+
+- session_id
+- mentor_id
+- student_id
+- topic
+- notes
+- similarity_score
+- session_date
+
+## 12.4 Recommendation System
+
+The mentoring system uses **Content-Based Filtering** to recommend suitable mentors for students.
+
+The recommendation system analyzes similarities between student profiles and mentor profiles.
+
+Student data used:
+
+- Skills
+- Interests
+- Query input (optional)
+
+Mentor data used:
+
+- Skills
+- Interests
+- Industry
+- Experience
+- Mentor bio
+
+## 12.5 Recommendation Process
+
+Step 1 – Data Collection
+
+- Retrieve student profile data
+- Retrieve mentor profile data
+
+Step 2 – Text Preprocessing
+
+- Case folding
+- Tokenizing
+- Stopword removal
+- Stemming
+
+Step 3 – Feature Extraction
+
+- Convert text data into vector representation using **TF-IDF**
+
+Step 4 – Similarity Calculation
+
+- Compute similarity using **Cosine Similarity**
+
+Step 5 – Ranking
+
+- Sort mentors based on similarity score
+- Return top recommended mentors
+
+# 12.6 Recommendation Approaches
+
+Students can search mentors using two approaches:
+
+Automatic Recommendation
+
+- System uses student profile data (skills and interests)
+
+Query-Based Recommendation
+
+- Student enters custom query such as:
+  "Need a mentor in Excel and Cloud with 2 years experience in IT industry"
+
+The system processes this query and matches it with mentor profiles.
+
+# 12.7 Business Rules
+
+- Only alumni can become mentors
+- A student can have maximum 2 mentors
+- A mentor cannot exceed maximum mentees capacity
+- Mentoring sessions only available for approved mentor relationships
+- Mentor must approve mentoring request before session creation
