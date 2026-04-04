@@ -14,6 +14,7 @@ import (
 	"github.com/reganputra/skripsi-backend/routes"
 	"github.com/reganputra/skripsi-backend/service"
 	"github.com/reganputra/skripsi-backend/utils"
+	"github.com/reganputra/skripsi-backend/ws"
 	"golang.org/x/crypto/bcrypt"
 	"gorm.io/gorm"
 )
@@ -58,6 +59,8 @@ func main() {
 		&models.Category{},
 		&models.MentorRequest{},
 		&models.MentoringSession{},
+		&models.Follow{},
+		&models.Message{},
 	); err != nil {
 		log.Fatalf("❌ AutoMigrate failed: %v", err)
 	}
@@ -93,6 +96,8 @@ func main() {
 	mentorRepo := repository.NewMentorRepository(db)
 	mentorRequestRepo := repository.NewMentorRequestRepository(db)
 	mentoringSessionRepo := repository.NewMentoringSessionRepository(db)
+	followRepo := repository.NewFollowRepository(db)
+	messageRepo := repository.NewMessageRepository(db)
 
 	// ── Services ──────────────────────────────────────────────────────────────
 	authSvc := service.NewAuthService(userRepo)
@@ -107,6 +112,8 @@ func main() {
 	adminSvc := service.NewAdminService(adminRepo, reportRepo, categoryRepo)
 	recommendSvc := service.NewRecommendationService(mentorRepo)
 	mentorSvc := service.NewMentorService(profileRepo, mentorRepo, mentorRequestRepo, mentoringSessionRepo, recommendSvc)
+	followSvc := service.NewFollowService(followRepo)
+	messageSvc := service.NewMessageService(messageRepo, followRepo)
 
 	// ── Controllers ───────────────────────────────────────────────────────────
 	authCtrl := controllers.NewAuthController(authSvc)
@@ -120,6 +127,12 @@ func main() {
 	reportCtrl := controllers.NewReportController(reportSvc)
 	adminCtrl := controllers.NewAdminController(adminSvc)
 	mentorCtrl := controllers.NewMentorController(mentorSvc)
+	followCtrl := controllers.NewFollowController(followSvc)
+	messageCtrl := controllers.NewMessageController(messageSvc)
+
+	// ── WebSocket Hub ──────────────────────────────────────────────────────────
+	hub := ws.NewHub()
+	go hub.Run()
 
 	// ── Fiber app ─────────────────────────────────────────────────────────────
 	app := fiber.New(fiber.Config{
@@ -161,6 +174,8 @@ func main() {
 	routes.RegisterReportRoutes(app, reportCtrl)
 	routes.RegisterAdminRoutes(app, adminCtrl)
 	routes.RegisterMentorRoutes(app, mentorCtrl)
+	routes.SetupFollowRoutes(app, followCtrl)
+	routes.SetupMessageRoutes(app, messageCtrl, hub, messageSvc)
 
 	// ── Start server ──────────────────────────────────────────────────────────
 	port := os.Getenv("APP_PORT")

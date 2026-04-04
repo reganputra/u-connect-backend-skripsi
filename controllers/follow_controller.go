@@ -1,0 +1,94 @@
+package controllers
+
+import (
+	"strconv"
+
+	"github.com/gofiber/fiber/v2"
+	"github.com/reganputra/skripsi-backend/service"
+	"github.com/reganputra/skripsi-backend/utils"
+)
+
+type FollowController struct {
+	followSvc service.FollowService
+}
+
+func NewFollowController(followSvc service.FollowService) *FollowController {
+	return &FollowController{followSvc: followSvc}
+}
+
+// POST /api/users/:id/follow
+func (ctrl *FollowController) Follow(c *fiber.Ctx) error {
+	callerID, err := getUserIDFromToken(c)
+	if err != nil {
+		return utils.ErrorResponse(c, fiber.StatusUnauthorized, err.Error())
+	}
+	role, err := getUserRoleFromToken(c)
+	if err != nil {
+		return utils.ErrorResponse(c, fiber.StatusUnauthorized, err.Error())
+	}
+
+	targetID, err := strconv.ParseUint(c.Params("id"), 10, 64)
+	if err != nil {
+		return utils.ErrorResponse(c, fiber.StatusBadRequest, "ID pengguna tidak valid")
+	}
+
+	if err := ctrl.followSvc.Follow(callerID, uint(targetID), role); err != nil {
+		switch err.Error() {
+		case "anda sudah mengikuti pengguna ini":
+			return utils.ErrorResponse(c, fiber.StatusConflict, err.Error())
+		case "tidak dapat mengikuti diri sendiri":
+			return utils.ErrorResponse(c, fiber.StatusBadRequest, err.Error())
+		case "hanya student dan alumni yang dapat mengikuti pengguna":
+			return utils.ErrorResponse(c, fiber.StatusForbidden, err.Error())
+		default:
+			return utils.ErrorResponse(c, fiber.StatusInternalServerError, err.Error())
+		}
+	}
+	return utils.SuccessResponse(c, fiber.StatusCreated, fiber.Map{"message": "berhasil mengikuti pengguna"})
+}
+
+// DELETE /api/users/:id/follow
+func (ctrl *FollowController) Unfollow(c *fiber.Ctx) error {
+	callerID, err := getUserIDFromToken(c)
+	if err != nil {
+		return utils.ErrorResponse(c, fiber.StatusUnauthorized, err.Error())
+	}
+
+	targetID, err := strconv.ParseUint(c.Params("id"), 10, 64)
+	if err != nil {
+		return utils.ErrorResponse(c, fiber.StatusBadRequest, "ID pengguna tidak valid")
+	}
+
+	if err := ctrl.followSvc.Unfollow(callerID, uint(targetID)); err != nil {
+		return utils.ErrorResponse(c, fiber.StatusBadRequest, err.Error())
+	}
+	return utils.SuccessResponse(c, fiber.StatusOK, fiber.Map{"message": "berhasil berhenti mengikuti pengguna"})
+}
+
+// GET /api/users/:id/followers
+func (ctrl *FollowController) GetFollowers(c *fiber.Ctx) error {
+	targetID, err := strconv.ParseUint(c.Params("id"), 10, 64)
+	if err != nil {
+		return utils.ErrorResponse(c, fiber.StatusBadRequest, "ID pengguna tidak valid")
+	}
+
+	users, err := ctrl.followSvc.GetFollowers(uint(targetID))
+	if err != nil {
+		return utils.ErrorResponse(c, fiber.StatusInternalServerError, err.Error())
+	}
+	return utils.SuccessResponse(c, fiber.StatusOK, users)
+}
+
+// GET /api/users/:id/following
+func (ctrl *FollowController) GetFollowing(c *fiber.Ctx) error {
+	targetID, err := strconv.ParseUint(c.Params("id"), 10, 64)
+	if err != nil {
+		return utils.ErrorResponse(c, fiber.StatusBadRequest, "ID pengguna tidak valid")
+	}
+
+	users, err := ctrl.followSvc.GetFollowing(uint(targetID))
+	if err != nil {
+		return utils.ErrorResponse(c, fiber.StatusInternalServerError, err.Error())
+	}
+	return utils.SuccessResponse(c, fiber.StatusOK, users)
+}
