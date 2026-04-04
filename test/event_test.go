@@ -198,7 +198,7 @@ func TestEvent(t *testing.T) {
 	})
 
 	t.Run("update_agenda", func(t *testing.T) {
-		code, res := jsonReq(t, http.MethodPut, fmt.Sprintf("/api/events/agenda/%.0f", agendaID), ownerToken, map[string]any{
+		code, res := jsonReq(t, http.MethodPut, fmt.Sprintf("/api/agenda/%.0f", agendaID), ownerToken, map[string]any{
 			"description": "Opening Ceremony & Welcome Speech",
 		})
 		assertStatus(t, 200, code, res)
@@ -206,7 +206,7 @@ func TestEvent(t *testing.T) {
 	})
 
 	t.Run("non_owner_cannot_update_agenda", func(t *testing.T) {
-		code, res := jsonReq(t, http.MethodPut, fmt.Sprintf("/api/events/agenda/%.0f", agendaID), guestToken, map[string]any{
+		code, res := jsonReq(t, http.MethodPut, fmt.Sprintf("/api/agenda/%.0f", agendaID), guestToken, map[string]any{
 			"description": "hijacked agenda",
 		})
 		assertStatus(t, 403, code, res)
@@ -214,7 +214,7 @@ func TestEvent(t *testing.T) {
 	})
 
 	t.Run("delete_agenda", func(t *testing.T) {
-		code, res := jsonReq(t, http.MethodDelete, fmt.Sprintf("/api/events/agenda/%.0f", agendaID), ownerToken, nil)
+		code, res := jsonReq(t, http.MethodDelete, fmt.Sprintf("/api/agenda/%.0f", agendaID), ownerToken, nil)
 		assertStatus(t, 200, code, res)
 		t.Log("✅ Agenda item deleted")
 	})
