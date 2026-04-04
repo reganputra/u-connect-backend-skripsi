@@ -2,7 +2,7 @@
 
 Base URL: `http://localhost:8080`  
 All protected endpoints require: `Authorization: Bearer <token>`  
-Request body must include `Content-Type: application/json` for JSON  endpoints or `Content-Type: multipart/form-data` for file/form endpoints.
+Request body must include `Content-Type: application/json` for JSON endpoints or `Content-Type: multipart/form-data` for file/form endpoints.
 
 ---
 
@@ -18,6 +18,7 @@ Request body must include `Content-Type: application/json` for JSON  endpoints o
 - [Events](#events)
 - [Jobs](#jobs)
 - [Content Reporting](#content-reporting)
+- [Notifications](#notifications)
 - [Admin Module](#admin-module)
 - [Categories](#categories)
 - [Mentoring Module](#mentoring-module)
@@ -31,6 +32,7 @@ Request body must include `Content-Type: application/json` for JSON  endpoints o
 Every response wraps data in a consistent envelope.
 
 **Success**
+
 ```json
 {
   "success": true,
@@ -39,6 +41,7 @@ Every response wraps data in a consistent envelope.
 ```
 
 **Error**
+
 ```json
 {
   "success": false,
@@ -49,6 +52,7 @@ Every response wraps data in a consistent envelope.
 > ⚠️ Error messages are currently in **Bahasa Indonesia**.
 
 **Paginated responses** include:
+
 ```json
 {
   "success": true,
@@ -70,6 +74,7 @@ Every response wraps data in a consistent envelope.
 **No auth required.**
 
 **Body (JSON):**
+
 ```json
 // Alumni / Student
 {
@@ -93,6 +98,7 @@ Every response wraps data in a consistent envelope.
 ```
 
 **Response `201`:**
+
 ```json
 {
   "success": true,
@@ -116,6 +122,7 @@ Every response wraps data in a consistent envelope.
 **No auth required.**
 
 **Body (JSON):**
+
 ```json
 {
   "email": "regan@test.com",
@@ -124,6 +131,7 @@ Every response wraps data in a consistent envelope.
 ```
 
 **Response `200`:**
+
 ```json
 {
   "success": true,
@@ -141,6 +149,7 @@ Every response wraps data in a consistent envelope.
 ```
 
 **JWT Payload (decoded):**
+
 ```json
 {
   "user_id": 1,
@@ -157,6 +166,7 @@ Every response wraps data in a consistent envelope.
 **Auth required.**
 
 **Response `200`:**
+
 ```json
 {
   "success": true,
@@ -174,38 +184,39 @@ Every response wraps data in a consistent envelope.
 
 > `alumni` and `student` only. All create/update use `multipart/form-data`.
 
-| Method | Endpoint                      | Auth | Description                       |
-| ------ | ----------------------------- | ---- | --------------------------------- |
-| POST   | `/api/profile`                | ✅   | Create profile                    |
-| GET    | `/api/profile`                | ✅   | Get own profile                   |
-| PUT    | `/api/profile`                | ✅   | Update profile                    |
-| DELETE | `/api/profile`                | ✅   | Delete profile                    |
-| POST   | `/api/profile/experience`     | ✅   | Add experience entry              |
-| PUT    | `/api/profile/experience/:id` | ✅   | Update experience entry           |
-| DELETE | `/api/profile/experience/:id` | ✅   | Delete experience entry           |
+| Method | Endpoint                      | Auth | Description             |
+| ------ | ----------------------------- | ---- | ----------------------- |
+| POST   | `/api/profile`                | ✅   | Create profile          |
+| GET    | `/api/profile`                | ✅   | Get own profile         |
+| PUT    | `/api/profile`                | ✅   | Update profile          |
+| DELETE | `/api/profile`                | ✅   | Delete profile          |
+| POST   | `/api/profile/experience`     | ✅   | Add experience entry    |
+| PUT    | `/api/profile/experience/:id` | ✅   | Update experience entry |
+| DELETE | `/api/profile/experience/:id` | ✅   | Delete experience entry |
 
 ### POST/PUT `/api/profile` — Create / Update Profile
 
 **Content-Type:** `multipart/form-data`
 
-| Field                   | Required | Notes                                    |
-| ----------------------- | -------- | ---------------------------------------- |
-| `job_status`            | ✅       | See values below                         |
-| `bio`                   | ❌       | —                                        |
-| `phone`                 | ❌       | —                                        |
-| `linkedin_url`          | ❌       | —                                        |
-| `picture`               | ❌       | Image file → Cloudinary                  |
-| `position`              | if `employed` | Current job title                 |
-| `company_name`          | if `employed` | Current company name              |
-| `industry_name`         | if `entrepreneur` | Industry                      |
-| `educational_level`     | if `continuing_study` | Degree level              |
-| `advanced_study_program`| if `continuing_study` | Study program             |
-| `institution_name`      | if `continuing_study` | University name           |
-| `status_description`    | if `unemployed`/`freelance` | Description         |
+| Field                    | Required                    | Notes                   |
+| ------------------------ | --------------------------- | ----------------------- |
+| `job_status`             | ✅                          | See values below        |
+| `bio`                    | ❌                          | —                       |
+| `phone`                  | ❌                          | —                       |
+| `linkedin_url`           | ❌                          | —                       |
+| `picture`                | ❌                          | Image file → Cloudinary |
+| `position`               | if `employed`               | Current job title       |
+| `company_name`           | if `employed`               | Current company name    |
+| `industry_name`          | if `entrepreneur`           | Industry                |
+| `educational_level`      | if `continuing_study`       | Degree level            |
+| `advanced_study_program` | if `continuing_study`       | Study program           |
+| `institution_name`       | if `continuing_study`       | University name         |
+| `status_description`     | if `unemployed`/`freelance` | Description             |
 
 **`job_status` values:** `employed` · `entrepreneur` · `continuing_study` · `unemployed` · `freelance` · `student`
 
 **Response `201` (create) / `200` (update):**
+
 ```json
 {
   "success": true,
@@ -225,6 +236,7 @@ Every response wraps data in a consistent envelope.
 ### POST `/api/profile/experience` — Add Experience
 
 **Body (JSON):**
+
 ```json
 {
   "company_name": "PT Startup Indonesia",
@@ -234,6 +246,7 @@ Every response wraps data in a consistent envelope.
   "description": "Built REST APIs using Go."
 }
 ```
+
 > `end_year: null` = currently working there.
 
 ---
@@ -242,16 +255,17 @@ Every response wraps data in a consistent envelope.
 
 > `partner` role only.
 
-| Method | Endpoint       | Auth | Description                        |
-| ------ | -------------- | ---- | ---------------------------------- |
-| POST   | `/api/company` | ✅   | Create or join company profile     |
-| GET    | `/api/company` | ✅   | View own company profile           |
-| PUT    | `/api/company` | ✅   | Update company profile             |
-| DELETE | `/api/company` | ✅   | Delete company profile             |
+| Method | Endpoint       | Auth | Description                    |
+| ------ | -------------- | ---- | ------------------------------ |
+| POST   | `/api/company` | ✅   | Create or join company profile |
+| GET    | `/api/company` | ✅   | View own company profile       |
+| PUT    | `/api/company` | ✅   | Update company profile         |
+| DELETE | `/api/company` | ✅   | Delete company profile         |
 
 > Partners with the same `company_name` (from registration) **share one profile**. POST returns `201` if created, `200` if joined.
 
 **Body (JSON):**
+
 ```json
 {
   "industry_type": "Technology",
@@ -267,8 +281,8 @@ Every response wraps data in a consistent envelope.
 
 > `alumni` and `student` only. Create/update use `multipart/form-data`.
 
-| Method | Endpoint             | Auth | Description          |
-| ------ | -------------------- | ---- | -------------------- |
+| Method | Endpoint             | Auth | Description           |
+| ------ | -------------------- | ---- | --------------------- |
 | POST   | `/api/portfolio`     | ✅   | Create portfolio item |
 | GET    | `/api/portfolio`     | ✅   | List own items        |
 | PUT    | `/api/portfolio/:id` | ✅   | Update item           |
@@ -276,15 +290,15 @@ Every response wraps data in a consistent envelope.
 
 **Fields (form-data):**
 
-| Field         | Required | Notes                      |
-| ------------- | -------- | -------------------------- |
-| `title`       | ✅       | —                          |
-| `description` | ❌       | —                          |
+| Field         | Required | Notes                       |
+| ------------- | -------- | --------------------------- |
+| `title`       | ✅       | —                           |
+| `description` | ❌       | —                           |
 | `category`    | ❌       | e.g. `"Mobile Development"` |
-| `tags`        | ❌       | Comma-separated            |
-| `start_date`  | ❌       | Format: `YYYY-MM`          |
-| `end_date`    | ❌       | Format: `YYYY-MM`          |
-| `media`       | ❌       | Image file → Cloudinary    |
+| `tags`        | ❌       | Comma-separated             |
+| `start_date`  | ❌       | Format: `YYYY-MM`           |
+| `end_date`    | ❌       | Format: `YYYY-MM`           |
+| `media`       | ❌       | Image file → Cloudinary     |
 
 ---
 
@@ -294,37 +308,38 @@ Every response wraps data in a consistent envelope.
 
 ### Endpoints
 
-| Method | Endpoint                  | Auth | Body        | Description                           |
-| ------ | ------------------------- | ---- | ----------- | ------------------------------------- |
-| GET    | `/api/feed`               | ✅   | —           | List posts (paginated, counts only)   |
-| GET    | `/api/feed/:id`           | ✅   | —           | Full post with nested comments        |
-| POST   | `/api/feed`               | ✅   | `form-data` | Create post                           |
-| PUT    | `/api/feed/:id`           | ✅   | `form-data` | Update own post                       |
-| DELETE | `/api/feed/:id`           | ✅   | —           | Delete own post                       |
-| POST   | `/api/feed/:id/comments`  | ✅   | JSON        | Add comment or reply                  |
-| POST   | `/api/feed/:id/react`     | ✅   | JSON        | React to a post                       |
-| POST   | `/api/feed/:id/vote`      | ✅   | JSON        | Vote on a post                        |
-| PUT    | `/api/comments/:id`       | ✅   | JSON        | Update own comment                    |
-| DELETE | `/api/comments/:id`       | ✅   | —           | Delete own comment                    |
-| POST   | `/api/comments/:id/react` | ✅   | JSON        | React to a comment                    |
-| POST   | `/api/comments/:id/vote`  | ✅   | JSON        | Vote on a comment                     |
+| Method | Endpoint                  | Auth | Body        | Description                         |
+| ------ | ------------------------- | ---- | ----------- | ----------------------------------- |
+| GET    | `/api/feed`               | ✅   | —           | List posts (paginated, counts only) |
+| GET    | `/api/feed/:id`           | ✅   | —           | Full post with nested comments      |
+| POST   | `/api/feed`               | ✅   | `form-data` | Create post                         |
+| PUT    | `/api/feed/:id`           | ✅   | `form-data` | Update own post                     |
+| DELETE | `/api/feed/:id`           | ✅   | —           | Delete own post                     |
+| POST   | `/api/feed/:id/comments`  | ✅   | JSON        | Add comment or reply                |
+| POST   | `/api/feed/:id/react`     | ✅   | JSON        | React to a post                     |
+| POST   | `/api/feed/:id/vote`      | ✅   | JSON        | Vote on a post                      |
+| PUT    | `/api/comments/:id`       | ✅   | JSON        | Update own comment                  |
+| DELETE | `/api/comments/:id`       | ✅   | —           | Delete own comment                  |
+| POST   | `/api/comments/:id/react` | ✅   | JSON        | React to a comment                  |
+| POST   | `/api/comments/:id/vote`  | ✅   | JSON        | Vote on a comment                   |
 
 ### POST `/api/feed` — Create Post
 
 **Content-Type:** `multipart/form-data`
 
-| Field      | Required | Notes                    |
-| ---------- | -------- | ------------------------ |
-| `title`    | ✅       | —                        |
-| `content`  | ✅       | —                        |
-| `category` | ❌       | Free text                |
-| `image`    | ❌       | Image file → Cloudinary  |
+| Field      | Required | Notes                   |
+| ---------- | -------- | ----------------------- |
+| `title`    | ✅       | —                       |
+| `content`  | ✅       | —                       |
+| `category` | ❌       | Free text               |
+| `image`    | ❌       | Image file → Cloudinary |
 
 ### GET `/api/feed` — List Posts (paginated)
 
 **Query params:** `?page=1&limit=10`
 
 **Response `200`:**
+
 ```json
 {
   "success": true,
@@ -353,6 +368,7 @@ Every response wraps data in a consistent envelope.
 ### GET `/api/feed/:id` — Post Detail
 
 **Response `200`:**
+
 ```json
 {
   "success": true,
@@ -389,6 +405,7 @@ Every response wraps data in a consistent envelope.
 ```json
 { "type": "like" }
 ```
+
 > Types: `like` · `love` · `haha` · `wow` · `sad` · `angry`  
 > Same type → **removed**. Different type → **updated**.
 
@@ -397,6 +414,7 @@ Every response wraps data in a consistent envelope.
 ```json
 { "value": 1 }
 ```
+
 > Values: `1` (upvote) · `-1` (downvote)  
 > Same value → **removed**. Opposite → **flipped**.
 
@@ -405,7 +423,9 @@ Every response wraps data in a consistent envelope.
 ```json
 { "content": "Great post!" }
 ```
+
 To reply to an existing comment:
+
 ```json
 { "content": "Thanks!", "parent_comment_id": 8 }
 ```
@@ -418,44 +438,45 @@ To reply to an existing comment:
 
 ### Group Endpoints
 
-| Method | Endpoint                          | Auth | Body        | Description                      |
-| ------ | --------------------------------- | ---- | ----------- | -------------------------------- |
-| GET    | `/api/groups`                     | ✅   | —           | List all groups                  |
-| POST   | `/api/groups`                     | ✅   | `form-data` | Create group                     |
-| GET    | `/api/groups/joined`              | ✅   | —           | Groups current user belongs to   |
-| GET    | `/api/groups/:id`                 | ✅   | —           | Group detail                     |
-| PUT    | `/api/groups/:id`                 | ✅   | `form-data` | Update group (owner only)        |
-| DELETE | `/api/groups/:id`                 | ✅   | —           | Delete group + all data          |
-| POST   | `/api/groups/:id/join`            | ✅   | —           | Join group                       |
-| DELETE | `/api/groups/:id/leave`           | ✅   | —           | Leave group                      |
-| GET    | `/api/groups/:id/members`         | ✅   | —           | List members                     |
-| DELETE | `/api/groups/:id/members/:userID` | ✅   | —           | Kick member (owner only)         |
+| Method | Endpoint                          | Auth | Body        | Description                    |
+| ------ | --------------------------------- | ---- | ----------- | ------------------------------ |
+| GET    | `/api/groups`                     | ✅   | —           | List all groups                |
+| POST   | `/api/groups`                     | ✅   | `form-data` | Create group                   |
+| GET    | `/api/groups/joined`              | ✅   | —           | Groups current user belongs to |
+| GET    | `/api/groups/:id`                 | ✅   | —           | Group detail                   |
+| PUT    | `/api/groups/:id`                 | ✅   | `form-data` | Update group (owner only)      |
+| DELETE | `/api/groups/:id`                 | ✅   | —           | Delete group + all data        |
+| POST   | `/api/groups/:id/join`            | ✅   | —           | Join group                     |
+| DELETE | `/api/groups/:id/leave`           | ✅   | —           | Leave group                    |
+| GET    | `/api/groups/:id/members`         | ✅   | —           | List members                   |
+| DELETE | `/api/groups/:id/members/:userID` | ✅   | —           | Kick member (owner only)       |
 
 ### Group Article Endpoints
 
-| Method | Endpoint                            | Auth | Body        | Description                        |
-| ------ | ----------------------------------- | ---- | ----------- | ---------------------------------- |
-| POST   | `/api/groups/:id/articles`          | ✅   | `form-data` | Create article (members only)      |
-| GET    | `/api/groups/articles/:id`          | ✅   | —           | Article detail + nested comments   |
-| PUT    | `/api/groups/articles/:id`          | ✅   | `form-data` | Update own article                 |
-| DELETE | `/api/groups/articles/:id`          | ✅   | —           | Delete own article                 |
-| POST   | `/api/groups/articles/:id/comments` | ✅   | JSON        | Add comment or reply               |
-| POST   | `/api/groups/articles/:id/react`    | ✅   | JSON        | React to article (members only)    |
-| PUT    | `/api/groups/comments/:id`          | ✅   | JSON        | Update own comment                 |
-| DELETE | `/api/groups/comments/:id`          | ✅   | —           | Delete own comment                 |
-| POST   | `/api/groups/comments/:id/react`    | ✅   | JSON        | React to comment (members only)    |
+| Method | Endpoint                            | Auth | Body        | Description                      |
+| ------ | ----------------------------------- | ---- | ----------- | -------------------------------- |
+| POST   | `/api/groups/:id/articles`          | ✅   | `form-data` | Create article (members only)    |
+| GET    | `/api/groups/articles/:id`          | ✅   | —           | Article detail + nested comments |
+| PUT    | `/api/groups/articles/:id`          | ✅   | `form-data` | Update own article               |
+| DELETE | `/api/groups/articles/:id`          | ✅   | —           | Delete own article               |
+| POST   | `/api/groups/articles/:id/comments` | ✅   | JSON        | Add comment or reply             |
+| POST   | `/api/groups/articles/:id/react`    | ✅   | JSON        | React to article (members only)  |
+| PUT    | `/api/groups/comments/:id`          | ✅   | JSON        | Update own comment               |
+| DELETE | `/api/groups/comments/:id`          | ✅   | —           | Delete own comment               |
+| POST   | `/api/groups/comments/:id/react`    | ✅   | JSON        | React to comment (members only)  |
 
 ### POST `/api/groups` — Create Group (form-data)
 
-| Field         | Required | Notes                    |
-| ------------- | -------- | ------------------------ |
-| `title`       | ✅       | —                        |
-| `category`    | ✅       | —                        |
-| `description` | ❌       | —                        |
-| `rules`       | ❌       | —                        |
-| `banner`      | ❌       | Image file → Cloudinary  |
+| Field         | Required | Notes                   |
+| ------------- | -------- | ----------------------- |
+| `title`       | ✅       | —                       |
+| `category`    | ✅       | —                       |
+| `description` | ❌       | —                       |
+| `rules`       | ❌       | —                       |
+| `banner`      | ❌       | Image file → Cloudinary |
 
 **Response `201`:**
+
 ```json
 {
   "success": true,
@@ -485,32 +506,36 @@ To reply to an existing comment:
 
 ### Endpoints
 
-| Method | Endpoint                       | Auth | Body        | Description                           |
-| ------ | ------------------------------ | ---- | ----------- | ------------------------------------- |
-| GET    | `/api/events`                  | ✅   | —           | List events (paginated)               |
-| POST   | `/api/events`                  | ✅   | `form-data` | Create event                          |
+| Method | Endpoint                       | Auth | Body        | Description                              |
+| ------ | ------------------------------ | ---- | ----------- | ---------------------------------------- |
+| GET    | `/api/events`                  | ✅   | —           | List events (paginated)                  |
+| POST   | `/api/events`                  | ✅   | `form-data` | Create event                             |
 | GET    | `/api/events/:id`              | ✅   | —           | Event detail with agendas & participants |
-| PUT    | `/api/events/:id`              | ✅   | `form-data` | Update own event                      |
-| DELETE | `/api/events/:id`              | ✅   | —           | Delete event + cascade                |
-| POST   | `/api/events/:id/register`     | ✅   | —           | Register for event                    |
-| DELETE | `/api/events/:id/register`     | ✅   | —           | Cancel registration                   |
-| GET    | `/api/events/:id/participants` | ✅   | —           | List participants                     |
-| POST   | `/api/events/:id/agenda`       | ✅   | JSON        | Add agenda item (owner only)          |
-| PUT    | `/api/agenda/:id`              | ✅   | JSON        | Update agenda item (owner only)       |
-| DELETE | `/api/agenda/:id`              | ✅   | —           | Delete agenda item (owner only)       |
+| PUT    | `/api/events/:id`              | ✅   | `form-data` | Update own event                         |
+| DELETE | `/api/events/:id`              | ✅   | —           | Delete event + cascade                   |
+| POST   | `/api/events/:id/register`     | ✅   | —           | Register for event                       |
+| DELETE | `/api/events/:id/register`     | ✅   | —           | Cancel registration                      |
+| GET    | `/api/events/:id/participants` | ✅   | —           | List participants                        |
+| POST   | `/api/events/:id/agenda`       | ✅   | JSON        | Add agenda item (owner only)             |
+| PUT    | `/api/agenda/:id`              | ✅   | JSON        | Update agenda item (owner only)          |
+| DELETE | `/api/agenda/:id`              | ✅   | —           | Delete agenda item (owner only)          |
 
 ### POST `/api/events` — Create Event (form-data)
 
-| Field         | Required | Notes                                                         |
-| ------------- | -------- | ------------------------------------------------------------- |
-| `title`       | ✅       | —                                                             |
-| `description` | ❌       | —                                                             |
-| `location`    | ❌       | —                                                             |
-| `capacity`    | ❌       | Integer ≥ 0 (0 = unlimited)                                   |
-| `status`      | ❌       | `upcoming` (default) · `ongoing` · `completed` · `cancelled`  |
-| `photo`       | ❌       | Image file → Cloudinary                                       |
+| Field         | Required | Notes                                                        |
+| ------------- | -------- | ------------------------------------------------------------ |
+| `title`       | ✅       | —                                                            |
+| `description` | ❌       | —                                                            |
+| `location`    | ❌       | —                                                            |
+| `capacity`    | ❌       | Integer ≥ 0 (0 = unlimited)                                  |
+| `start_time`  | ❌       | ISO 8601 date-time used by the reminder scheduler            |
+| `status`      | ❌       | `upcoming` (default) · `ongoing` · `completed` · `cancelled` |
+| `photo`       | ❌       | Image file → Cloudinary                                      |
+
+> `PUT /api/events/:id` accepts the same form-data fields, including optional `start_time`.
 
 **Response `201`:**
+
 ```json
 {
   "success": true,
@@ -518,6 +543,7 @@ To reply to an existing comment:
     "ID": 5,
     "Title": "Alumni Seminar 2026",
     "Location": "Aula Besar, Kampus A",
+    "StartTime": "2026-06-01T09:00:00Z",
     "Capacity": 50,
     "Status": "upcoming",
     "PhotoURL": null,
@@ -538,11 +564,111 @@ To reply to an existing comment:
 
 ### Business Rules
 
+- Event reminders are scheduled from `start_time` approximately 24 hours before the event
+- `start_time` should be provided when you want reminder notifications to be generated
 - Registration blocked when `status` is `completed` or `cancelled`
 - Maximum registrations enforced when `capacity > 0`
 - Duplicate registration rejected
 - Only the creator can update, delete, and manage agendas
 - Delete cascades: all agendas + registrations removed
+
+---
+
+## Notifications
+
+> Notifications are persisted in the database and delivered in real time over WebSocket when the recipient is online.
+
+### Endpoints
+
+| Method | Endpoint                      | Auth | Description                    |
+| ------ | ----------------------------- | ---- | ------------------------------ |
+| GET    | `/api/notifications`          | ✅   | List my notifications          |
+| GET    | `/api/notifications/unread`   | ✅   | Count unread notifications     |
+| PATCH  | `/api/notifications/:id/read` | ✅   | Mark one notification as read  |
+| PATCH  | `/api/notifications/read-all` | ✅   | Mark all notifications as read |
+
+### GET `/api/notifications` — List My Notifications
+
+**Query params:** `?page=1&limit=20`
+
+**Response `200`:**
+
+```json
+{
+  "success": true,
+  "data": {
+    "total": 12,
+    "page": 1,
+    "limit": 20,
+    "notifications": [
+      {
+        "ID": 1,
+        "UserID": 8,
+        "NotificationType": "new_follower",
+        "Title": "Pengikut baru",
+        "Body": "Ani mulai mengikutimu",
+        "ReferenceType": "follow",
+        "ReferenceID": 5,
+        "IsRead": false,
+        "CreatedAt": "2026-04-04T10:30:00Z"
+      }
+    ]
+  }
+}
+```
+
+### GET `/api/notifications/unread` — Count Unread
+
+**Response `200`:**
+
+```json
+{ "success": true, "data": { "unread_count": 3 } }
+```
+
+### PATCH `/api/notifications/:id/read` — Mark One as Read
+
+**Response `200`:**
+
+```json
+{
+  "success": true,
+  "data": { "message": "notifikasi berhasil ditandai sudah dibaca" }
+}
+```
+
+### PATCH `/api/notifications/read-all` — Mark All as Read
+
+**Response `200`:**
+
+```json
+{
+  "success": true,
+  "data": { "message": "semua notifikasi ditandai sudah dibaca" }
+}
+```
+
+### Notification Types
+
+| Type                      | Source                        |
+| ------------------------- | ----------------------------- |
+| `new_follower`            | Follow system                 |
+| `post_commented`          | Feed comment                  |
+| `post_reacted`            | Feed reaction                 |
+| `group_kicked`            | Group kick                    |
+| `job_application_updated` | Job application status update |
+| `mentor_request_received` | New mentor request            |
+| `mentor_request_approved` | Mentor approved request       |
+| `mentor_request_rejected` | Mentor rejected request       |
+| `new_session`             | Mentor scheduled session      |
+| `report_rejected`         | Admin rejected report         |
+| `new_message`             | WebSocket message delivery    |
+| `event_reminder`          | Event reminder scheduler      |
+
+### Business Rules
+
+- Notifications are created on relevant domain actions and persisted even if WebSocket delivery fails
+- Unread counts and read flags are scoped to the authenticated user
+- WebSocket-delivered notifications are also retrievable later through REST
 
 ---
 
@@ -566,45 +692,47 @@ To reply to an existing comment:
 
 ### GET `/api/jobs` — Query Parameters
 
-| Param      | Description                                          |
-| ---------- | ---------------------------------------------------- |
-| `search`   | Search by title or company name                      |
+| Param      | Description                                                       |
+| ---------- | ----------------------------------------------------------------- |
+| `search`   | Search by title or company name                                   |
 | `job_type` | `full-time` · `part-time` · `internship` · `freelance` · `remote` |
-| `status`   | `open` · `closed`                                    |
-| `page`     | Default: `1`                                         |
-| `limit`    | Default: `10`                                        |
+| `status`   | `open` · `closed`                                                 |
+| `page`     | Default: `1`                                                      |
+| `limit`    | Default: `10`                                                     |
 
 ### POST `/api/jobs` — Create Job (form-data)
 
-| Field          | Required | Notes                                                            |
-| -------------- | -------- | ---------------------------------------------------------------- |
-| `title`        | ✅       | —                                                                |
-| `company_name` | ✅       | —                                                                |
+| Field          | Required | Notes                                                             |
+| -------------- | -------- | ----------------------------------------------------------------- |
+| `title`        | ✅       | —                                                                 |
+| `company_name` | ✅       | —                                                                 |
 | `job_type`     | ✅       | `full-time` · `part-time` · `internship` · `freelance` · `remote` |
-| `description`  | ❌       | —                                                                |
-| `location`     | ❌       | —                                                                |
-| `salary_range` | ❌       | e.g. `"5.000.000 - 8.000.000"`                                   |
-| `status`       | ❌       | `open` (default) · `closed`                                      |
-| `image`        | ❌       | Image file → Cloudinary                                          |
+| `description`  | ❌       | —                                                                 |
+| `location`     | ❌       | —                                                                 |
+| `salary_range` | ❌       | e.g. `"5.000.000 - 8.000.000"`                                    |
+| `status`       | ❌       | `open` (default) · `closed`                                       |
+| `image`        | ❌       | Image file → Cloudinary                                           |
 
 ### POST `/api/jobs/:id/apply` — Apply for Job (form-data)
 
-| Field          | Required | Notes                           |
-| -------------- | -------- | ------------------------------- |
-| `resume`       | ✅*      | PDF file → Cloudinary           |
-| `resume_url`   | ✅*      | URL (if not uploading file)     |
-| `cover_letter` | ❌       | Optional text                   |
+| Field          | Required | Notes                       |
+| -------------- | -------- | --------------------------- |
+| `resume`       | ✅\*     | PDF file → Cloudinary       |
+| `resume_url`   | ✅\*     | URL (if not uploading file) |
+| `cover_letter` | ❌       | Optional text               |
 
-> *One of `resume` (file) or `resume_url` (link) is required.
+> \*One of `resume` (file) or `resume_url` (link) is required.
 
 ### PUT `/api/jobs/applications/:id/status` — Update Status (JSON)
 
 ```json
 { "status": "accepted" }
 ```
+
 > Status values: `pending` · `reviewed` · `accepted` · `rejected`
 
 **Response `200`:**
+
 ```json
 {
   "success": true,
@@ -625,10 +753,10 @@ To reply to an existing comment:
 
 > `alumni`, `student`, and `admin` can submit reports.
 
-| Method | Endpoint            | Auth | Description                 |
-| ------ | ------------------- | ---- | --------------------------- |
-| POST   | `/api/reports`      | ✅   | Submit a report             |
-| GET    | `/api/reports/mine` | ✅   | View own submitted reports  |
+| Method | Endpoint            | Auth | Description                |
+| ------ | ------------------- | ---- | -------------------------- |
+| POST   | `/api/reports`      | ✅   | Submit a report            |
+| GET    | `/api/reports/mine` | ✅   | View own submitted reports |
 
 ### POST `/api/reports` — Submit Report (JSON)
 
@@ -646,6 +774,7 @@ To reply to an existing comment:
 **`report_type` values:** `harassment` · `violence` · `hate_speech` · `spam` · `inappropriate` · `misinformation` · `copyright` · `other`
 
 **Response `201`:**
+
 ```json
 {
   "success": true,
@@ -679,6 +808,7 @@ To reply to an existing comment:
 #### GET `/api/admin/dashboard`
 
 **Response `200`:**
+
 ```json
 {
   "success": true,
@@ -707,17 +837,21 @@ To reply to an existing comment:
 **GET `/api/admin/users` query params:** `?page=1&limit=20&role=alumni`
 
 **PATCH `/api/admin/users/:id/status`:**
+
 ```json
 { "is_active": false }
 ```
 
 **PATCH `/api/admin/users/:id/role`:**
+
 ```json
 { "role": "student" }
 ```
+
 > Valid roles: `alumni` · `student` · `partner` · `admin`
 
 **Response `200` (status update):**
+
 ```json
 {
   "success": true,
@@ -735,25 +869,28 @@ To reply to an existing comment:
 
 ### Report Moderation
 
-| Method | Endpoint                         | Auth  | Description                              |
-| ------ | -------------------------------- | ----- | ---------------------------------------- |
-| GET    | `/api/admin/reports`             | admin | List all reports (filter by status)      |
-| GET    | `/api/admin/reports/:id`         | admin | Report detail                            |
+| Method | Endpoint                         | Auth  | Description                                |
+| ------ | -------------------------------- | ----- | ------------------------------------------ |
+| GET    | `/api/admin/reports`             | admin | List all reports (filter by status)        |
+| GET    | `/api/admin/reports/:id`         | admin | Report detail                              |
 | PATCH  | `/api/admin/reports/:id/resolve` | admin | Resolve report (optionally delete content) |
-| PATCH  | `/api/admin/reports/:id/reject`  | admin | Reject report with reason                |
+| PATCH  | `/api/admin/reports/:id/reject`  | admin | Reject report with reason                  |
 
 **GET `/api/admin/reports` query params:** `?status=pending&page=1&limit=10`
 
 **PATCH `/api/admin/reports/:id/resolve`:**
+
 ```json
 {
   "admin_note": "Content violates community guidelines.",
   "delete_content": true
 }
 ```
+
 > `delete_content: true` → cascades-delete the reported post/group/event/job.
 
 **PATCH `/api/admin/reports/:id/reject`:**
+
 ```json
 {
   "admin_note": "Does not violate our policies."
@@ -761,6 +898,7 @@ To reply to an existing comment:
 ```
 
 **Response `200` (resolved):**
+
 ```json
 {
   "success": true,
@@ -788,6 +926,7 @@ To reply to an existing comment:
 | DELETE | `/api/admin/jobs/:id`   | admin | Delete any job   |
 
 **Response `200`:**
+
 ```json
 { "success": true, "data": { "message": "postingan berhasil dihapus" } }
 ```
@@ -798,12 +937,13 @@ To reply to an existing comment:
 
 | Method | Endpoint                    | Auth  | Description                                    |
 | ------ | --------------------------- | ----- | ---------------------------------------------- |
-| GET    | `/api/categories`           | ✅    | List all categories *(any authenticated user)* |
+| GET    | `/api/categories`           | ✅    | List all categories _(any authenticated user)_ |
 | POST   | `/api/admin/categories`     | admin | Create category                                |
 | PUT    | `/api/admin/categories/:id` | admin | Update category                                |
 | DELETE | `/api/admin/categories/:id` | admin | Delete category                                |
 
 **POST/PUT body (JSON):**
+
 ```json
 {
   "name": "Technology",
@@ -812,6 +952,7 @@ To reply to an existing comment:
 ```
 
 **GET `/api/categories` response `200`:**
+
 ```json
 {
   "success": true,
@@ -830,13 +971,13 @@ To reply to an existing comment:
 
 ### Role Matrix
 
-| Action | alumni | student | partner | admin |
-|---|---|---|---|---|
-| Register / manage as mentor | ✅ | ❌ | ❌ | ❌ |
-| Browse & request mentors | ❌ | ✅ | ❌ | ❌ |
-| Get recommendations | ❌ | ✅ | ❌ | ❌ |
-| Create / manage sessions | ✅ (mentor side) | ❌ | ❌ | ❌ |
-| View own sessions | ✅ | ✅ | ❌ | ❌ |
+| Action                      | alumni           | student | partner | admin |
+| --------------------------- | ---------------- | ------- | ------- | ----- |
+| Register / manage as mentor | ✅               | ❌      | ❌      | ❌    |
+| Browse & request mentors    | ❌               | ✅      | ❌      | ❌    |
+| Get recommendations         | ❌               | ✅      | ❌      | ❌    |
+| Create / manage sessions    | ✅ (mentor side) | ❌      | ❌      | ❌    |
+| View own sessions           | ✅               | ✅      | ❌      | ❌    |
 
 ---
 
@@ -847,6 +988,7 @@ To reply to an existing comment:
 #### POST `/api/mentor/register` — Register as Mentor
 
 **Body (JSON):**
+
 ```json
 {
   "mentor_bio": "5+ years in Python and ML. Happy to guide students.",
@@ -859,6 +1001,7 @@ To reply to an existing comment:
 **Response `201`:** returns updated `UserProfile` with `MentorQuota` and `MentorDescription` set.
 
 **Business Rules:**
+
 - Only alumni accounts can register
 - Must have created a profile first (`POST /api/profile`)
 - Cannot register twice
@@ -880,6 +1023,7 @@ To reply to an existing comment:
   "mentor_quota": 5
 }
 ```
+
 > New quota cannot be less than the current number of active mentees.
 
 ---
@@ -889,6 +1033,7 @@ To reply to an existing comment:
 > Blocked if the mentor still has approved (active) mentees.
 
 **Response `200`:**
+
 ```json
 { "success": true, "data": { "message": "berhasil berhenti menjadi mentor" } }
 ```
@@ -904,11 +1049,13 @@ Returns all mentoring requests (pending + approved + rejected) sent to this ment
 #### PATCH `/api/mentor/requests/:id/approve` — Approve Request
 
 **Business Rules before approval:**
+
 - Request must be `pending`
 - Student must not already have 2 approved mentors
 - Mentor must have remaining quota capacity
 
 **Response `200`:**
+
 ```json
 {
   "success": true,
@@ -954,6 +1101,7 @@ Returns approved `MentorRequest` records (approved mentees only).
 > `student_id` must have an **approved** mentoring request with this mentor. `session_date` uses ISO 8601.
 
 **Response `201`:**
+
 ```json
 {
   "success": true,
@@ -1004,6 +1152,7 @@ Returns all sessions where the caller is the mentor. Preloads `Student`.
 Returns alumni who are registered as mentors **and still have capacity**.
 
 **Response `200`:**
+
 ```json
 {
   "success": true,
@@ -1034,18 +1183,19 @@ Returns the mentor's full profile including `User` and `Experiences`. Returns `4
 
 ---
 
-#### GET `/api/mentors/recommend` — Get Recommendations  ⭐ NLP Engine
+#### GET `/api/mentors/recommend` — Get Recommendations ⭐ NLP Engine
 
 > Uses **TF-IDF + Cosine Similarity** (pure Go, no external ML dependency) to rank mentors by relevance to the student's profile or a custom query.
 
 **Query params:**
 
-| Param | Description | Default |
-|---|---|---|
-| `q` | Custom free-text query (e.g. `python machine learning cloud`) | Student's `skills + interests` from profile |
-| `top` | Number of results to return | `10` |
+| Param | Description                                                   | Default                                     |
+| ----- | ------------------------------------------------------------- | ------------------------------------------- |
+| `q`   | Custom free-text query (e.g. `python machine learning cloud`) | Student's `skills + interests` from profile |
+| `top` | Number of results to return                                   | `10`                                        |
 
 **How it works:**
+
 1. Tokenizes each mentor's `skills + interests + mentor_bio + position + company + industry`
 2. Tokenizes the student's query (or falls back to profile skills/interests)
 3. Builds a TF-IDF corpus (mentors + student query)
@@ -1054,6 +1204,7 @@ Returns the mentor's full profile including `User` and `Experiences`. Returns `4
 **NLP Pipeline:** case folding → special character removal → tokenization → Indonesian + English stopword removal → Indonesian suffix/prefix stemming
 
 **Response `200`:**
+
 ```json
 {
   "success": true,
@@ -1091,6 +1242,7 @@ Returns the mentor's full profile including `User` and `Experiences`. Returns `4
 > `message` and `similarity_score` are optional. Pass `similarity_score` from the recommendation response to record it for analytics.
 
 **Business Rules:**
+
 - Cannot request yourself
 - Cannot send a duplicate request (pending or approved to same mentor)
 - Student may have **at most 2 approved mentors simultaneously**
@@ -1120,17 +1272,17 @@ Returns all `MentoringSession` records where the caller is the student. Preloads
 
 ### Business Rules Summary
 
-| Rule | Detail |
-|---|---|
-| Mentor role | `alumni` only |
-| Mentor quota | Must be `1`, `2`, `3`, or `5` |
-| Mentee limit per student | Max **2 approved mentors** at a time |
-| Capacity enforcement | Request blocked when mentor's active mentees ≥ quota |
-| Duplicate request | Only one `pending` or `approved` request per student-mentor pair |
-| Session guard | Session can only be created if an **approved** request exists |
-| Unregister guard | Cannot unregister while active mentees exist |
-| Status flow (Request) | `pending` → `approved` \| `rejected` |
-| Status flow (Session) | `scheduled` → `completed` \| `cancelled` |
+| Rule                     | Detail                                                           |
+| ------------------------ | ---------------------------------------------------------------- |
+| Mentor role              | `alumni` only                                                    |
+| Mentor quota             | Must be `1`, `2`, `3`, or `5`                                    |
+| Mentee limit per student | Max **2 approved mentors** at a time                             |
+| Capacity enforcement     | Request blocked when mentor's active mentees ≥ quota             |
+| Duplicate request        | Only one `pending` or `approved` request per student-mentor pair |
+| Session guard            | Session can only be created if an **approved** request exists    |
+| Unregister guard         | Cannot unregister while active mentees exist                     |
+| Status flow (Request)    | `pending` → `approved` \| `rejected`                             |
+| Status flow (Session)    | `scheduled` → `completed` \| `cancelled`                         |
 
 ---
 
@@ -1156,16 +1308,17 @@ messages persisted to DB first, then delivered live if recipient is connected
 
 > Requires `student` or `alumni` role. Partners and admins are blocked.
 
-| Method | Endpoint | Auth | Description |
-|---|---|---|---|
-| POST | `/api/users/:id/follow` | ✅ | Follow a user |
-| DELETE | `/api/users/:id/follow` | ✅ | Unfollow a user |
-| GET | `/api/users/:id/followers` | ✅ | List users who follow `:id` |
-| GET | `/api/users/:id/following` | ✅ | List users that `:id` follows |
+| Method | Endpoint                   | Auth | Description                   |
+| ------ | -------------------------- | ---- | ----------------------------- |
+| POST   | `/api/users/:id/follow`    | ✅   | Follow a user                 |
+| DELETE | `/api/users/:id/follow`    | ✅   | Unfollow a user               |
+| GET    | `/api/users/:id/followers` | ✅   | List users who follow `:id`   |
+| GET    | `/api/users/:id/following` | ✅   | List users that `:id` follows |
 
 #### POST `/api/users/:id/follow` — Follow User
 
 **Response `201`:**
+
 ```json
 { "success": true, "data": { "message": "berhasil mengikuti pengguna" } }
 ```
@@ -1181,8 +1334,12 @@ messages persisted to DB first, then delivered live if recipient is connected
 #### DELETE `/api/users/:id/follow` — Unfollow User
 
 **Response `200`:**
+
 ```json
-{ "success": true, "data": { "message": "berhasil berhenti mengikuti pengguna" } }
+{
+  "success": true,
+  "data": { "message": "berhasil berhenti mengikuti pengguna" }
+}
 ```
 
 #### GET `/api/users/:id/followers` — List Followers
@@ -1199,16 +1356,17 @@ messages persisted to DB first, then delivered live if recipient is connected
 
 > Requires `student` or `alumni` role.
 
-| Method | Endpoint | Auth | Description |
-|---|---|---|---|
-| GET | `/api/messages` | ✅ | List all conversations (last message per partner, unread count) |
-| GET | `/api/messages/unread` | ✅ | Total unread message count |
-| GET | `/api/messages/:userID` | ✅ | Conversation history with a specific user (paginated) |
-| PATCH | `/api/messages/:userID/read` | ✅ | Mark all messages from `:userID` as read |
+| Method | Endpoint                     | Auth | Description                                                     |
+| ------ | ---------------------------- | ---- | --------------------------------------------------------------- |
+| GET    | `/api/messages`              | ✅   | List all conversations (last message per partner, unread count) |
+| GET    | `/api/messages/unread`       | ✅   | Total unread message count                                      |
+| GET    | `/api/messages/:userID`      | ✅   | Conversation history with a specific user (paginated)           |
+| PATCH  | `/api/messages/:userID/read` | ✅   | Mark all messages from `:userID` as read                        |
 
 #### GET `/api/messages` — Conversation List
 
 **Response `200`:**
+
 ```json
 {
   "success": true,
@@ -1227,6 +1385,7 @@ messages persisted to DB first, then delivered live if recipient is connected
 #### GET `/api/messages/unread` — Total Unread Count
 
 **Response `200`:**
+
 ```json
 { "success": true, "data": { "unread_count": 5 } }
 ```
@@ -1238,6 +1397,7 @@ messages persisted to DB first, then delivered live if recipient is connected
 Returns paginated messages newest-first between the caller and `:userID`.
 
 **Response `200`:**
+
 ```json
 {
   "success": true,
@@ -1264,8 +1424,12 @@ Returns paginated messages newest-first between the caller and `:userID`.
 Marks all messages **from `:userID` to the caller** as read.
 
 **Response `200`:**
+
 ```json
-{ "success": true, "data": { "message": "pesan berhasil ditandai sudah dibaca" } }
+{
+  "success": true,
+  "data": { "message": "pesan berhasil ditandai sudah dibaca" }
+}
 ```
 
 ---
@@ -1281,6 +1445,7 @@ ws://localhost:8080/api/ws?token=<jwt>
 ```
 
 **Connection flow:**
+
 1. Server validates JWT from `?token=`
 2. Verifies role is `student` or `alumni`
 3. Registers client in the Hub (one connection per user; old connection replaced)
@@ -1335,16 +1500,16 @@ ws://localhost:8080/api/ws?token=<jwt>
 
 ### Business Rules Summary
 
-| Rule | Detail |
-|---|---|
-| Role restriction | Only `student` and `alumni` can follow or message |
-| Follow prerequisite | **At least one** follow must exist between two users (either direction) |
-| Symmetric messaging | A follows B → both A→B and B→A messages are permitted |
-| Self-follow / self-message | Blocked |
-| Duplicate follow | Returns `409 Conflict` |
-| Message immutability | Messages **cannot be edited or deleted** |
-| Privacy | Users can only view their own conversation history |
-| Offline delivery | Messages persisted to DB; fetched via REST when recipient comes back online |
+| Rule                       | Detail                                                                      |
+| -------------------------- | --------------------------------------------------------------------------- |
+| Role restriction           | Only `student` and `alumni` can follow or message                           |
+| Follow prerequisite        | **At least one** follow must exist between two users (either direction)     |
+| Symmetric messaging        | A follows B → both A→B and B→A messages are permitted                       |
+| Self-follow / self-message | Blocked                                                                     |
+| Duplicate follow           | Returns `409 Conflict`                                                      |
+| Message immutability       | Messages **cannot be edited or deleted**                                    |
+| Privacy                    | Users can only view their own conversation history                          |
+| Offline delivery           | Messages persisted to DB; fetched via REST when recipient comes back online |
 
 ---
 
@@ -1352,16 +1517,16 @@ ws://localhost:8080/api/ws?token=<jwt>
 
 Every file field is **optional** — omit to skip upload. Accepted formats: `jpg` · `jpeg` · `png` · `webp`
 
-| Module           | Form field | Cloudinary folder                 | Endpoint                    |
-| ---------------- | ---------- | --------------------------------- | --------------------------- |
-| Profile picture  | `picture`  | `alumni-platform/profiles`        | POST/PUT `/api/profile`     |
-| Feed post image  | `image`    | `alumni-platform/feed`            | POST/PUT `/api/feed`        |
-| Group banner     | `banner`   | `alumni-platform/groups/banners`  | POST/PUT `/api/groups`      |
+| Module           | Form field | Cloudinary folder                 | Endpoint                            |
+| ---------------- | ---------- | --------------------------------- | ----------------------------------- |
+| Profile picture  | `picture`  | `alumni-platform/profiles`        | POST/PUT `/api/profile`             |
+| Feed post image  | `image`    | `alumni-platform/feed`            | POST/PUT `/api/feed`                |
+| Group banner     | `banner`   | `alumni-platform/groups/banners`  | POST/PUT `/api/groups`              |
 | Group article    | `media`    | `alumni-platform/groups/articles` | POST/PUT `/api/groups/articles/:id` |
-| Portfolio item   | `media`    | `alumni-platform/portfolio`       | POST/PUT `/api/portfolio`   |
-| Event photo      | `photo`    | `alumni-platform/events`          | POST/PUT `/api/events`      |
-| Job image        | `image`    | `alumni-platform/jobs`            | POST/PUT `/api/jobs`        |
-| Job resume (PDF) | `resume`   | `alumni-platform/resumes`         | POST `/api/jobs/:id/apply`  |
+| Portfolio item   | `media`    | `alumni-platform/portfolio`       | POST/PUT `/api/portfolio`           |
+| Event photo      | `photo`    | `alumni-platform/events`          | POST/PUT `/api/events`              |
+| Job image        | `image`    | `alumni-platform/jobs`            | POST/PUT `/api/jobs`                |
+| Job resume (PDF) | `resume`   | `alumni-platform/resumes`         | POST `/api/jobs/:id/apply`          |
 
 ---
 

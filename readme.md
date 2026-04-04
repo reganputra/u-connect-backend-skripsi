@@ -109,21 +109,22 @@ Server starts at `http://localhost:8080`. Tables are auto-migrated on startup.
 
 ## Modules Overview
 
-| Module             | Base Path            | Docs                                             |
-| ------------------ | -------------------- | ------------------------------------------------ |
-| Auth               | `/api/auth`          | [→ Auth](docs/API.md#auth)                       |
-| User Profile       | `/api/profile`       | [→ Profile](docs/API.md#user-profile)            |
-| Company Profile    | `/api/company`       | [→ Company](docs/API.md#company-profile)         |
-| Portfolio          | `/api/portfolio`     | [→ Portfolio](docs/API.md#portfolio)             |
-| Feed               | `/api/feed`          | [→ Feed](docs/API.md#feed-posting)               |
-| Group Forum        | `/api/groups`        | [→ Groups](docs/API.md#group-forum)              |
-| Events             | `/api/events`        | [→ Events](docs/API.md#events)                   |
-| Jobs               | `/api/jobs`          | [→ Jobs](docs/API.md#jobs)                       |
-| Content Reporting  | `/api/reports`       | [→ Reports](docs/API.md#content-reporting)       |
-| Admin              | `/api/admin`         | [→ Admin](docs/API.md#admin-module)              |
-| Categories (public)| `/api/categories`    | [→ Categories](docs/API.md#categories)           |
-| **Mentoring**      | `/api/mentors` · `/api/mentor` · `/api/student` | [→ Mentoring](docs/API.md#mentoring-module) |
-| **Messaging**      | `/api/messages` · `/api/users/:id/follow` · `/api/ws` | [→ Messaging](docs/API.md#message-module) |
+| Module              | Base Path                                             | Docs                                         |
+| ------------------- | ----------------------------------------------------- | -------------------------------------------- |
+| Auth                | `/api/auth`                                           | [→ Auth](docs/API.md#auth)                   |
+| User Profile        | `/api/profile`                                        | [→ Profile](docs/API.md#user-profile)        |
+| Company Profile     | `/api/company`                                        | [→ Company](docs/API.md#company-profile)     |
+| Portfolio           | `/api/portfolio`                                      | [→ Portfolio](docs/API.md#portfolio)         |
+| Feed                | `/api/feed`                                           | [→ Feed](docs/API.md#feed-posting)           |
+| Group Forum         | `/api/groups`                                         | [→ Groups](docs/API.md#group-forum)          |
+| Events              | `/api/events`                                         | [→ Events](docs/API.md#events)               |
+| Jobs                | `/api/jobs`                                           | [→ Jobs](docs/API.md#jobs)                   |
+| Content Reporting   | `/api/reports`                                        | [→ Reports](docs/API.md#content-reporting)   |
+| Notifications       | `/api/notifications`                                  | [→ Notifications](docs/API.md#notifications) |
+| Admin               | `/api/admin`                                          | [→ Admin](docs/API.md#admin-module)          |
+| Categories (public) | `/api/categories`                                     | [→ Categories](docs/API.md#categories)       |
+| **Mentoring**       | `/api/mentors` · `/api/mentor` · `/api/student`       | [→ Mentoring](docs/API.md#mentoring-module)  |
+| **Messaging**       | `/api/messages` · `/api/users/:id/follow` · `/api/ws` | [→ Messaging](docs/API.md#message-module)    |
 
 ---
 
@@ -161,6 +162,7 @@ go test -v -run TestGroup     ./test/...
 go test -v -run TestEvent     ./test/...
 go test -v -run TestJob       ./test/...
 go test -v -run TestReport    ./test/...
+go test -v -run TestNotificationFlows ./test/...
 go test -v -run TestAdmin     ./test/...
 go test -v -run TestMentor    ./test/...
 go test -v -run TestFollow    ./test/...
