@@ -21,6 +21,7 @@ Request body must include `Content-Type: application/json` for JSON  endpoints o
 - [Admin Module](#admin-module)
 - [Categories](#categories)
 - [Mentoring Module](#mentoring-module)
+- [Message Module](#message-module)
 - [Cloudinary Upload Reference](#cloudinary-upload-reference)
 
 ---
@@ -1130,6 +1131,220 @@ Returns all `MentoringSession` records where the caller is the student. Preloads
 | Unregister guard | Cannot unregister while active mentees exist |
 | Status flow (Request) | `pending` → `approved` \| `rejected` |
 | Status flow (Session) | `scheduled` → `completed` \| `cancelled` |
+
+---
+
+## Message Module
+
+> Enables private real-time messaging between users with a prerequisite follow system.
+> Only `student` and `alumni` can follow or send messages. One follow in either direction unlocks messaging for both users.
+
+### How It Works
+
+```
+User A follows User B
+  → Both A→B and B→A messaging is now permitted (symmetric)
+
+WebSocket (real-time)  +  REST (history / unread count)
+  ↓                           ↓
+messages persisted to DB first, then delivered live if recipient is connected
+```
+
+---
+
+### Follow System — `/api/users`
+
+> Requires `student` or `alumni` role. Partners and admins are blocked.
+
+| Method | Endpoint | Auth | Description |
+|---|---|---|---|
+| POST | `/api/users/:id/follow` | ✅ | Follow a user |
+| DELETE | `/api/users/:id/follow` | ✅ | Unfollow a user |
+| GET | `/api/users/:id/followers` | ✅ | List users who follow `:id` |
+| GET | `/api/users/:id/following` | ✅ | List users that `:id` follows |
+
+#### POST `/api/users/:id/follow` — Follow User
+
+**Response `201`:**
+```json
+{ "success": true, "data": { "message": "berhasil mengikuti pengguna" } }
+```
+
+**Error cases:**
+| Status | Reason |
+|---|---|
+| `400` | Self-follow or unfollowing someone not followed |
+| `401` | Not authenticated |
+| `403` | Role is not `student` or `alumni` |
+| `409` | Already following this user |
+
+#### DELETE `/api/users/:id/follow` — Unfollow User
+
+**Response `200`:**
+```json
+{ "success": true, "data": { "message": "berhasil berhenti mengikuti pengguna" } }
+```
+
+#### GET `/api/users/:id/followers` — List Followers
+
+**Response `200`:** returns array of `User` objects who follow `:id`.
+
+#### GET `/api/users/:id/following` — List Following
+
+**Response `200`:** returns array of `User` objects that `:id` follows.
+
+---
+
+### REST Messaging — `/api/messages`
+
+> Requires `student` or `alumni` role.
+
+| Method | Endpoint | Auth | Description |
+|---|---|---|---|
+| GET | `/api/messages` | ✅ | List all conversations (last message per partner, unread count) |
+| GET | `/api/messages/unread` | ✅ | Total unread message count |
+| GET | `/api/messages/:userID` | ✅ | Conversation history with a specific user (paginated) |
+| PATCH | `/api/messages/:userID/read` | ✅ | Mark all messages from `:userID` as read |
+
+#### GET `/api/messages` — Conversation List
+
+**Response `200`:**
+```json
+{
+  "success": true,
+  "data": [
+    {
+      "partner_id": 8,
+      "partner_name": "Student Budi",
+      "last_message": "Halo kak, ada waktu untuk diskusi?",
+      "last_message_at": "2026-04-04T10:30:00Z",
+      "unread_count": 3
+    }
+  ]
+}
+```
+
+#### GET `/api/messages/unread` — Total Unread Count
+
+**Response `200`:**
+```json
+{ "success": true, "data": { "unread_count": 5 } }
+```
+
+#### GET `/api/messages/:userID` — Conversation History
+
+**Query params:** `?page=1&limit=20`
+
+Returns paginated messages newest-first between the caller and `:userID`.
+
+**Response `200`:**
+```json
+{
+  "success": true,
+  "data": {
+    "total": 42,
+    "page": 1,
+    "limit": 20,
+    "messages": [
+      {
+        "ID": 15,
+        "SenderID": 8,
+        "ReceiverID": 2,
+        "Content": "Halo kak!",
+        "IsRead": true,
+        "CreatedAt": "2026-04-04T10:30:00Z"
+      }
+    ]
+  }
+}
+```
+
+#### PATCH `/api/messages/:userID/read` — Mark as Read
+
+Marks all messages **from `:userID` to the caller** as read.
+
+**Response `200`:**
+```json
+{ "success": true, "data": { "message": "pesan berhasil ditandai sudah dibaca" } }
+```
+
+---
+
+### WebSocket — Real-time Messaging
+
+#### `GET /api/ws` — Connect
+
+> Auth via query param (not header) because WebSocket upgrade is a GET request.
+
+```
+ws://localhost:8080/api/ws?token=<jwt>
+```
+
+**Connection flow:**
+1. Server validates JWT from `?token=`
+2. Verifies role is `student` or `alumni`
+3. Registers client in the Hub (one connection per user; old connection replaced)
+4. Starts write pump (Hub → client) and read pump (client → Hub → DB → recipient)
+
+#### Client → Server (send message)
+
+```json
+{
+  "receiver_id": 8,
+  "content": "Halo! Ada waktu untuk diskusi Python?"
+}
+```
+
+#### Server → Client (new message received)
+
+```json
+{
+  "type": "message",
+  "data": {
+    "ID": 15,
+    "SenderID": 2,
+    "ReceiverID": 8,
+    "Content": "Halo! Ada waktu untuk diskusi Python?",
+    "IsRead": false,
+    "CreatedAt": "2026-04-04T10:30:00Z"
+  }
+}
+```
+
+> The sender also receives an echo of their own sent message as confirmation.
+
+#### Server → Client (error)
+
+```json
+{
+  "type": "error",
+  "message": "anda harus mengikuti pengguna ini sebelum mengirim pesan"
+}
+```
+
+**Error cases over WebSocket:**
+| Cause | Error message |
+|---|---|
+| Not following recipient | `anda harus mengikuti pengguna ini sebelum mengirim pesan` |
+| Missing `receiver_id` or `content` | `receiver_id dan content wajib diisi` |
+| Invalid JSON | `format pesan tidak valid` |
+| Token missing or invalid | Connection closed immediately |
+| Wrong role | Connection closed immediately |
+
+---
+
+### Business Rules Summary
+
+| Rule | Detail |
+|---|---|
+| Role restriction | Only `student` and `alumni` can follow or message |
+| Follow prerequisite | **At least one** follow must exist between two users (either direction) |
+| Symmetric messaging | A follows B → both A→B and B→A messages are permitted |
+| Self-follow / self-message | Blocked |
+| Duplicate follow | Returns `409 Conflict` |
+| Message immutability | Messages **cannot be edited or deleted** |
+| Privacy | Users can only view their own conversation history |
+| Offline delivery | Messages persisted to DB; fetched via REST when recipient comes back online |
 
 ---
 
