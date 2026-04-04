@@ -64,6 +64,11 @@ DB_SSLMODE=disable
 APP_PORT=8080
 JWT_SECRET=your_secret_key
 CLOUDINARY_URL=cloudinary://api_key:api_secret@cloud_name
+
+# Admin seeder (runs once at startup if no admin exists)
+ADMIN_EMAIL=admin@yourapp.com
+ADMIN_PASSWORD=yoursecurepassword
+ADMIN_NAME=Administrator
 ```
 
 ### 2. Start the database
@@ -80,6 +85,8 @@ go run main.go
 
 Server starts at `http://localhost:8080`. Database tables are created automatically via GORM AutoMigrate.
 
+> On first boot, if `ADMIN_EMAIL` and `ADMIN_PASSWORD` are set and no admin exists yet, an admin account is created automatically.
+
 ---
 
 ## Roles
@@ -89,6 +96,7 @@ Server starts at `http://localhost:8080`. Database tables are created automatica
 | `alumni`  | Graduated students      |
 | `student` | Current students        |
 | `partner` | Company representatives |
+| `admin`   | Platform administrators |
 
 ---
 
@@ -402,11 +410,11 @@ Returns full nested comment tree (infinite depth) with reactions and votes at ev
 
 #### Event Agenda
 
-| Method | Endpoint                 | Body | Description                     |
-| ------ | ------------------------ | ---- | ------------------------------- |
+| Method | Endpoint              | Body | Description                     |
+| ------ | --------------------- | ---- | ------------------------------- |
 | POST   | `/api/events/:id/agenda` | JSON | Add agenda item (owner only)    |
-| PUT    | `/api/events/agenda/:id` | JSON | Update agenda item (owner only) |
-| DELETE | `/api/events/agenda/:id` | —    | Delete agenda item (owner only) |
+| PUT    | `/api/agenda/:id`     | JSON | Update agenda item (owner only) |
+| DELETE | `/api/agenda/:id`     | —    | Delete agenda item (owner only) |
 
 #### Event Fields (form-data)
 
@@ -439,6 +447,200 @@ Returns full nested comment tree (infinite depth) with reactions and votes at ev
 
 ---
 
+### Jobs
+
+> Requires JWT. Read: all roles. Create/update/delete: `alumni` and `partner` only. Apply: `alumni` and `student` only.
+
+#### Job Management
+
+| Method | Endpoint       | Body        | Description                               |
+| ------ | -------------- | ----------- | ----------------------------------------- |
+| GET    | `/api/jobs`    | —           | List jobs (paginated, filter by type/status/search) |
+| POST   | `/api/jobs`    | `form-data` | Create job posting (optional `image` file) |
+| GET    | `/api/jobs/:id` | —          | Job detail                                |
+| PUT    | `/api/jobs/:id` | `form-data` | Update own job posting                   |
+| DELETE | `/api/jobs/:id` | —          | Delete own job posting                    |
+
+#### Job Applications
+
+| Method | Endpoint                           | Body        | Description                           |
+| ------ | ---------------------------------- | ----------- | ------------------------------------- |
+| POST   | `/api/jobs/:id/apply`              | `form-data` | Apply for a job (upload `resume` file or send `resume_url`) |
+| GET    | `/api/jobs/:id/applicants`         | —           | List applicants (job owner only)      |
+| GET    | `/api/jobs/applications/mine`      | —           | List own job applications             |
+| PUT    | `/api/jobs/applications/:id/status` | JSON       | Update application status (owner only) |
+
+#### Job Fields (form-data)
+
+| Key            | Required | Notes                                         |
+| -------------- | -------- | --------------------------------------------- |
+| `title`        | ✅       | —                                             |
+| `company_name` | ✅       | —                                             |
+| `job_type`     | ✅       | `full-time` · `part-time` · `internship` · `freelance` · `remote` |
+| `description`  | ❌       | —                                             |
+| `location`     | ❌       | —                                             |
+| `salary_range` | ❌       | e.g. `"5.000.000 - 8.000.000"`               |
+| `status`       | ❌       | `open` (default) · `closed`                  |
+| `image`        | ❌       | file upload → Cloudinary                      |
+
+#### Application Fields (form-data)
+
+| Key            | Required | Notes                              |
+| -------------- | -------- | ---------------------------------- |
+| `resume`       | ✅*      | PDF/file upload → Cloudinary       |
+| `resume_url`   | ✅*      | URL if not uploading a file        |
+| `cover_letter` | ❌       | optional text                      |
+
+> *Either `resume` (file upload) or `resume_url` (link) is required.
+
+#### Application Status Values
+
+`pending` (default) · `reviewed` · `accepted` · `rejected`
+
+#### Job Business Rules
+
+- Only `alumni` and `partner` can create/update/delete job postings
+- Only `alumni` and `student` can apply for jobs
+- A user can apply to the same job **only once**
+- Only the job owner can view applicants and update application status
+- When a job is deleted, all applications are cascade-deleted
+
+#### Query Parameters for `GET /api/jobs`
+
+| Param      | Description                                |
+| ---------- | ------------------------------------------ |
+| `search`   | Search by title or company name            |
+| `job_type` | Filter by job type                         |
+| `status`   | Filter by `open` or `closed`               |
+| `page`     | Page number (default: 1)                   |
+| `limit`    | Items per page (default: 10)               |
+
+---
+
+### Content Reporting
+
+> Requires JWT. Available to `alumni`, `student`, and `admin`.
+
+| Method | Endpoint           | Body | Description                   |
+| ------ | ------------------ | ---- | ----------------------------- |
+| POST   | `/api/reports`     | JSON | Submit a report on content    |
+| GET    | `/api/reports/mine` | —   | View own submitted reports    |
+
+#### Report Fields (JSON)
+
+```json
+{
+  "target_type": "post",
+  "target_id": 12,
+  "report_type": "spam",
+  "description": "Optional — required only for 'other' type"
+}
+```
+
+#### `target_type` Values
+
+`post` · `comment` · `group` · `group_article` · `event` · `job`
+
+#### `report_type` Values
+
+`harassment` · `violence` · `hate_speech` · `spam` · `inappropriate` · `misinformation` · `copyright` · `other`
+
+> When `report_type` is `other`, `description` is **required**.
+
+#### Report Business Rules
+
+- A user cannot submit a duplicate pending report on the same content
+- Reports have status: `pending` → `resolved` or `rejected` (managed by admin)
+
+---
+
+### Admin Module
+
+> Requires JWT + `admin` role for all endpoints except `GET /api/categories` (any authenticated user).
+
+#### Dashboard
+
+| Method | Endpoint               | Description                               |
+| ------ | ---------------------- | ----------------------------------------- |
+| GET    | `/api/admin/dashboard` | Platform stats (users, posts, groups, events, jobs, pending reports) |
+
+#### User Management
+
+| Method | Endpoint                        | Body | Description                    |
+| ------ | ------------------------------- | ---- | ------------------------------ |
+| GET    | `/api/admin/users`              | —    | List all users (paginated, filter by `?role=`) |
+| GET    | `/api/admin/users/:id`          | —    | User detail                    |
+| PATCH  | `/api/admin/users/:id/status`   | JSON | Activate or deactivate a user  |
+| PATCH  | `/api/admin/users/:id/role`     | JSON | Change user role               |
+
+```json
+// PATCH /api/admin/users/:id/status
+{ "is_active": false }
+
+// PATCH /api/admin/users/:id/role
+{ "role": "student" }  // alumni | student | partner | admin
+```
+
+#### Report Moderation
+
+| Method | Endpoint                          | Body | Description                                    |
+| ------ | --------------------------------- | ---- | ---------------------------------------------- |
+| GET    | `/api/admin/reports`              | —    | List all reports (filter by `?status=pending`) |
+| GET    | `/api/admin/reports/:id`          | —    | Report detail                                  |
+| PATCH  | `/api/admin/reports/:id/resolve`  | JSON | Mark resolved (optionally delete the content)  |
+| PATCH  | `/api/admin/reports/:id/reject`   | JSON | Reject report with reason                      |
+
+```json
+// PATCH /api/admin/reports/:id/resolve
+{
+  "admin_note": "Content removed — community guidelines violation.",
+  "delete_content": true
+}
+
+// PATCH /api/admin/reports/:id/reject
+{
+  "admin_note": "Does not violate our policies."
+}
+```
+
+#### Direct Content Deletion (without report)
+
+| Method | Endpoint                | Description          |
+| ------ | ----------------------- | -------------------- |
+| DELETE | `/api/admin/posts/:id`  | Delete any post      |
+| DELETE | `/api/admin/groups/:id` | Delete any group     |
+| DELETE | `/api/admin/events/:id` | Delete any event     |
+| DELETE | `/api/admin/jobs/:id`   | Delete any job       |
+
+> All direct deletions perform the same cascading cleanup as owner-level deletes.
+
+#### Category Management
+
+| Method | Endpoint                    | Body | Description                           |
+| ------ | --------------------------- | ---- | ------------------------------------- |
+| GET    | `/api/categories`           | —    | List all categories *(public — any authenticated user)* |
+| POST   | `/api/admin/categories`     | JSON | Create category (admin only)          |
+| PUT    | `/api/admin/categories/:id` | JSON | Update category (admin only)          |
+| DELETE | `/api/admin/categories/:id` | —    | Delete category (admin only)          |
+
+```json
+// POST/PUT /api/admin/categories
+{
+  "name": "Technology",
+  "description": "Tech-related content"
+}
+```
+
+#### Admin Business Rules
+
+- `delete_content: true` in resolve-report will cascade-delete the reported post/group/event/job
+- A report can only be resolved or rejected **once** (status is immutable after processing)
+- Category names must be **unique**
+- `is_active: false` deactivates users (flag stored in DB; JWT tokens remain valid until expiry)
+- Role changes apply immediately to new logins; existing tokens retain the old role until expiry
+
+---
+
 ## Cloudinary Upload Summary
 
 Every file upload is **optional** — omit the field to skip uploading. Accepted formats: `jpg` · `jpeg` · `png` · `webp`
@@ -451,6 +653,8 @@ Every file upload is **optional** — omit the field to skip uploading. Accepted
 | Group article   | `media`    | `alumni-platform/groups/articles` |
 | Portfolio item  | `media`    | `alumni-platform/portfolio`       |
 | Event photo     | `photo`    | `alumni-platform/events`          |
+| Job image       | `image`    | `alumni-platform/jobs`            |
+| Job resume      | `resume`   | `alumni-platform/resumes`         |
 
 ---
 
@@ -494,17 +698,25 @@ go test -v -run TestPortfolio ./test/...
 go test -v -run TestFeed      ./test/...
 go test -v -run TestGroup     ./test/...
 go test -v -run TestEvent     ./test/...
+go test -v -run TestJob       ./test/...
+go test -v -run TestReport    ./test/...
+go test -v -run TestAdmin     ./test/...
 ```
 
-| Suite           | Coverage                                                                   |
-| --------------- | -------------------------------------------------------------------------- |
-| `TestAuth`      | Register (alumni/partner/duplicate), login, JWT `/me` guard                |
-| `TestProfile`   | Profile CRUD, job status variants, experience CRUD                         |
-| `TestCompany`   | Company CRUD, role guard, shared profile joining                           |
-| `TestPortfolio` | Portfolio CRUD, role guard, ownership checks                               |
-| `TestFeed`      | Post CRUD, nested comments, reactions toggle, vote flip                    |
-| `TestGroup`     | Group CRUD, membership, articles, nested comments, reactions, kick         |
-| `TestEvent`     | Event CRUD, registration, capacity enforcement, status guards, agenda CRUD |
+| Suite           | Coverage                                                                              |
+| --------------- | ------------------------------------------------------------------------------------- |
+| `TestAuth`      | Register (alumni/partner/duplicate), login, JWT `/me` guard                           |
+| `TestProfile`   | Profile CRUD, job status variants, experience CRUD                                    |
+| `TestCompany`   | Company CRUD, role guard, shared profile joining                                      |
+| `TestPortfolio` | Portfolio CRUD, role guard, ownership checks                                          |
+| `TestFeed`      | Post CRUD, nested comments, reactions toggle, vote flip                               |
+| `TestGroup`     | Group CRUD, membership, articles, nested comments, reactions, kick                    |
+| `TestEvent`     | Event CRUD, registration, capacity enforcement, status guards, agenda CRUD            |
+| `TestJob`       | Job CRUD, role guards, apply, applicant management, application status update         |
+| `TestReport`    | Submit reports, duplicate guard, type validation, `other` + description rule, my reports |
+| `TestAdmin`     | Dashboard stats, user status/role, report resolve/reject, direct deletion, category CRUD |
+
+> `TestAdmin` requires the admin account to be seeded first (`ADMIN_EMAIL` + `ADMIN_PASSWORD` in `.env`).
 
 ---
 
