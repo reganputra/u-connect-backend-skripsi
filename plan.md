@@ -461,3 +461,41 @@ Each applicant contains:
 - Job owners can view applicant profiles and application details
 - Only the job owner can change the applicant status
 - When a job is deleted, all related applications must also be deleted
+
+# 11 Admin Module
+The **Admin Module** introduces a new role: `admin`, which is responsible for managing, moderating, and maintaining the overall system.
+
+Admins have elevated privileges to monitor platform activity, manage users, moderate content, and oversee system-wide configurations such as categories.
+
+This module ensures platform integrity, safety, and proper content governance.
+
+Admin responsibilities:
+- Monitor system activity
+- Moderate user-generated content
+- Manage users and roles
+- View platform statistics
+- Manage categories
+
+## 11.1 Features
+Dashboard Admin
+- View platform statistics
+- Overview of system activity
+
+Content Moderation
+- Admin can received a report from user
+- Admin can delete or reject with reason
+- Delete posts
+- Delete group forums
+- Delete events
+- Delete jobs
+
+User Management
+- View all users
+- Update user status (active / inactive)
+- Change user role (student, alumni, partner, admin)
+
+Category Management
+- Create category
+- Update category
+- Delete category
+- View category list

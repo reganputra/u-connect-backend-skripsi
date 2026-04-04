@@ -11,6 +11,25 @@ import (
 	"time"
 )
 
+// jsonMarshalIndent marshals v to pretty-printed JSON, returning a string (for error messages).
+func jsonMarshalIndent(v any) (string, error) {
+	b, err := json.MarshalIndent(v, "", "  ")
+	return string(b), err
+}
+
+// safeID extracts the "ID" float64 from a response data map without panicking.
+// Fails the test with a descriptive message if the ID is missing or zero.
+func safeID(t *testing.T, res map[string]any, label string) float64 {
+	t.Helper()
+	d := dataMap(res)
+	id, ok := d["ID"].(float64)
+	if !ok || id == 0 {
+		b, _ := jsonMarshalIndent(res)
+		t.Fatalf("❌ Could not extract ID for %s\nresponse: %s", label, b)
+	}
+	return id
+}
+
 const baseURL = "http://localhost:8080"
 
 // newSuffix returns a unique string per test run to avoid duplicate emails.

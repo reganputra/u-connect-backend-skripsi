@@ -7,7 +7,8 @@ type User struct {
 	Name     string `gorm:"not null"`
 	Email    string `gorm:"uniqueIndex;not null"`
 	Password string `gorm:"not null" json:"-"`
-	Role     string `gorm:"not null"` // alumni | student | partner
+	Role     string `gorm:"not null"` // alumni | student | partner | admin
+	IsActive bool   `gorm:"default:true"`
 
 	// alumni & student only
 	Faculty    *string `gorm:"default:null"`

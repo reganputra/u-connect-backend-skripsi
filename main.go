@@ -51,10 +51,15 @@ func main() {
 		&models.EventRegistration{},
 		&models.Job{},
 		&models.JobApplication{},
+		&models.Report{},
+		&models.Category{},
 	); err != nil {
 		log.Fatalf("❌ AutoMigrate failed: %v", err)
 	}
 	log.Println("✅ Database migrated successfully!")
+
+	// ── Admin Seeder ──────────────────────────────────────────────────────────
+	seedAdmin(config.DB)
 
 	db := config.DB
 
@@ -77,6 +82,9 @@ func main() {
 	regRepo := repository.NewEventRegistrationRepository(db)
 	jobRepo := repository.NewJobRepository(db)
 	jobAppRepo := repository.NewJobApplicationRepository(db)
+	reportRepo := repository.NewReportRepository(db)
+	adminRepo := repository.NewAdminRepository(db)
+	categoryRepo := repository.NewCategoryRepository(db)
 
 	// ── Services ──────────────────────────────────────────────────────────────
 	authSvc := service.NewAuthService(userRepo)
@@ -87,6 +95,8 @@ func main() {
 	groupSvc := service.NewGroupService(groupRepo, memberRepo, articleRepo, gCommentRepo, gReactionRepo)
 	eventSvc := service.NewEventService(eventRepo, agendaRepo, regRepo)
 	jobSvc := service.NewJobService(jobRepo, jobAppRepo)
+	reportSvc := service.NewReportService(reportRepo)
+	adminSvc := service.NewAdminService(adminRepo, reportRepo, categoryRepo)
 
 	// ── Controllers ───────────────────────────────────────────────────────────
 	authCtrl := controllers.NewAuthController(authSvc)
@@ -97,6 +107,8 @@ func main() {
 	groupCtrl := controllers.NewGroupController(groupSvc)
 	eventCtrl := controllers.NewEventController(eventSvc)
 	jobCtrl := controllers.NewJobController(jobSvc)
+	reportCtrl := controllers.NewReportController(reportSvc)
+	adminCtrl := controllers.NewAdminController(adminSvc)
 
 	// ── Fiber app ─────────────────────────────────────────────────────────────
 	app := fiber.New(fiber.Config{
@@ -122,6 +134,8 @@ func main() {
 	routes.RegisterGroupRoutes(app, groupCtrl)
 	routes.RegisterEventRoutes(app, eventCtrl)
 	routes.RegisterJobRoutes(app, jobCtrl)
+	routes.RegisterReportRoutes(app, reportCtrl)
+	routes.RegisterAdminRoutes(app, adminCtrl)
 
 	// ── Start server ──────────────────────────────────────────────────────────
 	port := os.Getenv("APP_PORT")
