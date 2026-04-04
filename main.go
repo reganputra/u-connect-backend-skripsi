@@ -5,6 +5,7 @@ import (
 	"os"
 
 	"github.com/gofiber/fiber/v2"
+	"github.com/gofiber/fiber/v2/middleware/cors"
 	"github.com/gofiber/fiber/v2/middleware/logger"
 	"golang.org/x/crypto/bcrypt"
 	"gorm.io/gorm"
@@ -118,6 +119,19 @@ func main() {
 	})
 
 	app.Use(logger.New())
+
+	// ── CORS ──────────────────────────────────────────────────────────────────
+	allowedOrigins := os.Getenv("CORS_ALLOWED_ORIGINS")
+	if allowedOrigins == "" {
+		allowedOrigins = "*" // dev default — restrict in production
+	}
+	app.Use(cors.New(cors.Config{
+		AllowOrigins: allowedOrigins,
+		AllowMethods: "GET,POST,PUT,PATCH,DELETE,OPTIONS",
+		AllowHeaders: "Origin, Content-Type, Accept, Authorization",
+		ExposeHeaders: "Content-Length",
+		AllowCredentials: allowedOrigins != "*", // credentials not allowed with wildcard
+	}))
 
 	// Health check
 	app.Get("/health", func(c *fiber.Ctx) error {
