@@ -9,6 +9,7 @@ Request body must include `Content-Type: application/json` for JSON endpoints or
 ## Table of Contents
 
 - [Response Format](#response-format)
+- [Frontend Integration Contract](#frontend-integration-contract)
 - [Auth](#auth)
 - [User Profile](#user-profile)
 - [Company Profile](#company-profile)
@@ -64,6 +65,89 @@ Every response wraps data in a consistent envelope.
   }
 }
 ```
+
+---
+
+## Frontend Integration Contract
+
+This section defines the practical integration contract for frontend clients.
+
+### 1) Stable Envelope
+
+- Success responses always use:
+  - `{"success": true, "data": ...}`
+- Error responses always use:
+  - `{"success": false, "error": "..."}`
+
+### 2) Field Naming and Serialization
+
+- The API currently returns mixed key casing depending on endpoint and DTO/model source.
+- Some endpoints return snake_case keys (for example `user_id`, `unread_count`).
+- Many resource payloads return PascalCase keys from GORM models (for example `ID`, `CreatedAt`, `NotificationType`).
+- Frontend must read keys exactly as returned by each endpoint example in this document.
+- Recommended frontend strategy: normalize server payloads into app-level camelCase in one mapper layer.
+
+### 3) Date-Time and Nullability
+
+- Timestamps are serialized as ISO 8601 strings by Go JSON encoder.
+- Nullable backend fields may be returned as `null`.
+- Frontend should treat optional fields as nullable and avoid assuming empty strings.
+
+### 4) Pagination and Sorting Defaults
+
+- Most paginated endpoints use `page` + `limit` query params.
+- If not provided, backend applies per-endpoint defaults (commonly `page=1`).
+- Notification list hard limits: `limit <= 100`, invalid/empty values are normalized server-side.
+- Sort order is endpoint-specific. When building UI lists, rely on returned order from server.
+
+### 5) Error Handling Contract
+
+- Use HTTP status as primary error classifier:
+  - `400`: validation/business rule
+  - `401`: auth missing/invalid/expired
+  - `403`: role/ownership forbidden
+  - `404`: resource not found
+  - `409`: conflict (for example duplicate follow)
+- Error message text is human-readable and currently in Bahasa Indonesia.
+- Frontend should not hardcode business logic using exact message text unless unavoidable.
+
+### 6) Auth Lifecycle Contract
+
+- Auth uses Bearer JWT in `Authorization` header for HTTP endpoints.
+- No refresh-token endpoint is documented; frontend should handle `401` by redirecting to login or forcing re-auth.
+- WebSocket auth uses query token: `ws://localhost:8080/api/ws?token=<jwt>`.
+
+### 7) WebSocket Event Contract
+
+- WebSocket URL: `/api/ws?token=<jwt>`.
+- Outgoing event envelope from server includes `type` and optional `data`/`message`.
+
+Server event types:
+
+- `message`
+  - `data` contains persisted message payload.
+- `notification`
+  - `data` contains persisted notification payload.
+- `error`
+  - `message` contains error text.
+
+Notes:
+
+- Sender receives a message echo confirmation after successful send.
+- Notifications are persisted first, then best-effort pushed over WebSocket.
+- If user is offline, frontend can fetch missed notifications/messages via REST.
+
+### 8) File Upload Constraints
+
+- Image uploads use Cloudinary with allowed formats:
+  - `jpg`, `jpeg`, `png`, `webp`
+- Resume/raw file upload uses Cloudinary raw upload with no app-level extension whitelist.
+- This backend does not define an explicit app-level max file size in docs; effective limits may come from Fiber, reverse proxy, or Cloudinary account policy.
+
+### 9) Event Reminder Preconditions
+
+- Event reminder notifications depend on event `start_time`.
+- To receive reminder notifications, frontend should provide `start_time` when creating/updating events.
 
 ---
 

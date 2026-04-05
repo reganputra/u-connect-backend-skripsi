@@ -4,6 +4,9 @@ RESTful API for an alumni networking platform built with **Go**, **Fiber v2**, *
 
 📖 **Full API Reference → [docs/API.md](docs/API.md)**
 
+For frontend teams, read the integration guardrails in
+**[Frontend Integration Contract](docs/API.md#frontend-integration-contract)**.
+
 ---
 
 ## Tech Stack
