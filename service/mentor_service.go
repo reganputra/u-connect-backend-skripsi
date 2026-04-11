@@ -2,6 +2,7 @@ package service
 
 import (
 	"errors"
+	"fmt"
 	"strings"
 	"time"
 
@@ -68,11 +69,13 @@ type MentorService interface {
 // ─── Implementation ───────────────────────────────────────────────────────────
 
 type mentorService struct {
-	profileRepo    repository.ProfileRepository
-	mentorRepo     repository.MentorRepository
-	requestRepo    repository.MentorRequestRepository
-	sessionRepo    repository.MentoringSessionRepository
-	recommendSvc   RecommendationService
+	profileRepo  repository.ProfileRepository
+	mentorRepo   repository.MentorRepository
+	requestRepo  repository.MentorRequestRepository
+	sessionRepo  repository.MentoringSessionRepository
+	recommendSvc RecommendationService
+	userRepo     repository.UserRepository
+	notifSvc     NotificationService
 }
 
 func NewMentorService(
@@ -81,6 +84,8 @@ func NewMentorService(
 	requestRepo repository.MentorRequestRepository,
 	sessionRepo repository.MentoringSessionRepository,
 	recommendSvc RecommendationService,
+	userRepo repository.UserRepository,
+	notifSvc NotificationService,
 ) MentorService {
 	return &mentorService{
 		profileRepo:  profileRepo,
@@ -88,6 +93,8 @@ func NewMentorService(
 		requestRepo:  requestRepo,
 		sessionRepo:  sessionRepo,
 		recommendSvc: recommendSvc,
+		userRepo:     userRepo,
+		notifSvc:     notifSvc,
 	}
 }
 
@@ -210,6 +217,17 @@ func (s *mentorService) ApproveRequest(mentorUserID, requestID uint) (*models.Me
 	if err := s.requestRepo.Update(req); err != nil {
 		return nil, errors.New("gagal menyetujui permintaan")
 	}
+	// Notify student
+	if mentor, err := s.userRepo.FindUserByID(mentorUserID); err == nil {
+		_ = s.notifSvc.Notify(
+			req.StudentID,
+			"mentor_request_approved",
+			"Permintaan mentoring disetujui",
+			fmt.Sprintf("Permintaan mentoringmu ke %s disetujui", mentor.Name),
+			"mentor_request",
+			req.ID,
+		)
+	}
 	return req, nil
 }
 
@@ -229,6 +247,17 @@ func (s *mentorService) RejectRequest(mentorUserID, requestID uint, reason strin
 	req.RejectReason = &reason
 	if err := s.requestRepo.Update(req); err != nil {
 		return nil, errors.New("gagal menolak permintaan")
+	}
+	// Notify student
+	if mentor, err := s.userRepo.FindUserByID(mentorUserID); err == nil {
+		_ = s.notifSvc.Notify(
+			req.StudentID,
+			"mentor_request_rejected",
+			"Permintaan mentoring ditolak",
+			fmt.Sprintf("Permintaan mentoringmu ke %s ditolak", mentor.Name),
+			"mentor_request",
+			req.ID,
+		)
 	}
 	return req, nil
 }
@@ -273,6 +302,17 @@ func (s *mentorService) CreateSession(mentorUserID uint, req SessionRequest) (*m
 	}
 	if err := s.sessionRepo.Create(session); err != nil {
 		return nil, errors.New("gagal membuat sesi mentoring")
+	}
+	// Notify student
+	if mentor, err := s.userRepo.FindUserByID(mentorUserID); err == nil {
+		_ = s.notifSvc.Notify(
+			req.StudentID,
+			"new_session",
+			"Sesi mentoring dijadwalkan",
+			fmt.Sprintf("%s menjadwalkan sesi: %s", mentor.Name, req.Topic),
+			"mentor_request",
+			session.ID,
+		)
 	}
 	return session, nil
 }
@@ -370,6 +410,17 @@ func (s *mentorService) RequestMentoring(studentUserID, mentorUserID uint, req M
 	}
 	if err := s.requestRepo.Create(mentorReq); err != nil {
 		return nil, errors.New("gagal mengirim permintaan mentoring")
+	}
+	// Notify mentor
+	if student, err := s.userRepo.FindUserByID(studentUserID); err == nil {
+		_ = s.notifSvc.Notify(
+			mentorUserID,
+			"mentor_request_received",
+			"Permintaan mentoring baru",
+			fmt.Sprintf("%s mengirim permintaan mentoring", student.Name),
+			"mentor_request",
+			mentorReq.ID,
+		)
 	}
 	return mentorReq, nil
 }

@@ -178,7 +178,11 @@ func (ctrl *GroupController) KickMember(c *fiber.Ctx) error {
 	if err != nil {
 		return utils.ErrorResponse(c, fiber.StatusBadRequest, "ID pengguna tidak valid")
 	}
-	if err := ctrl.groupSvc.KickMember(userID, uint(groupID), uint(targetID)); err != nil {
+	var body struct {
+		Reason string `json:"reason"`
+	}
+	_ = c.BodyParser(&body)
+	if err := ctrl.groupSvc.KickMember(userID, uint(groupID), uint(targetID), body.Reason); err != nil {
 		if err.Error() == "akses ditolak: hanya pemilik grup" {
 			return utils.ErrorResponse(c, fiber.StatusForbidden, err.Error())
 		}

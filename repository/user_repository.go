@@ -9,6 +9,7 @@ type UserRepository interface {
 	FindUserByEmail(email string) (*models.User, error)
 	FindUserByID(id uint) (*models.User, error)
 	CreateUser(user *models.User) error
+	UpdateUserCompanyName(userID uint, companyName string) error
 }
 
 type userRepository struct {
@@ -38,4 +39,8 @@ func (r *userRepository) FindUserByID(id uint) (*models.User, error) {
 
 func (r *userRepository) CreateUser(user *models.User) error {
 	return r.db.Create(user).Error
+}
+
+func (r *userRepository) UpdateUserCompanyName(userID uint, companyName string) error {
+	return r.db.Model(&models.User{}).Where("id = ?", userID).Update("company_name", companyName).Error
 }

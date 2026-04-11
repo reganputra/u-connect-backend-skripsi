@@ -2,6 +2,7 @@ package service
 
 import (
 	"errors"
+	"fmt"
 
 	"github.com/reganputra/skripsi-backend/models"
 	"github.com/reganputra/skripsi-backend/repository"
@@ -66,12 +67,14 @@ type JobService interface {
 type jobService struct {
 	jobRepo    repository.JobRepository
 	jobAppRepo repository.JobApplicationRepository
+	notifSvc   NotificationService
 }
 
-func NewJobService(jobRepo repository.JobRepository, jobAppRepo repository.JobApplicationRepository) JobService {
+func NewJobService(jobRepo repository.JobRepository, jobAppRepo repository.JobApplicationRepository, notifSvc NotificationService) JobService {
 	return &jobService{
 		jobRepo:    jobRepo,
 		jobAppRepo: jobAppRepo,
+		notifSvc:   notifSvc,
 	}
 }
 
@@ -267,5 +270,14 @@ func (s *jobService) UpdateApplicationStatus(userID, applicationID uint, status 
 	if err := s.jobAppRepo.UpdateJobApplication(app); err != nil {
 		return nil, errors.New("gagal memperbarui status lamaran")
 	}
+	// Notify applicant
+	_ = s.notifSvc.Notify(
+		app.UserID,
+		"job_application_updated",
+		"Status lamaran diperbarui",
+		fmt.Sprintf("Lamaranmu untuk %s diperbarui menjadi %s", app.Job.Title, status),
+		"job_application",
+		app.ID,
+	)
 	return app, nil
 }

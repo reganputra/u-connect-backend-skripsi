@@ -12,6 +12,7 @@ import (
 type PortfolioService interface {
 	CreatePortfolioItem(userID uint, req PortfolioItemRequest) (*models.PortfolioItem, error)
 	GetPortfolioItems(userID uint) ([]models.PortfolioItem, error)
+	GetPublicPortfolioItems(userID uint) ([]models.PortfolioItem, error)
 	UpdatePortfolioItem(userID uint, itemID uint, req PortfolioItemRequest) (*models.PortfolioItem, error)
 	DeletePortfolioItem(userID uint, itemID uint) error
 	UpdatePortfolioMedia(userID uint, itemID uint, mediaURL string) error
@@ -27,6 +28,7 @@ type PortfolioItemRequest struct {
 	StartDate   *string `json:"start_date"`
 	EndDate     *string `json:"end_date"`
 	MediaURL    *string `json:"media_url"` // set by controller after Cloudinary upload
+	Link        *string `json:"link"`
 }
 
 // ─── Struct & Constructor ─────────────────────────────────────────────────────
@@ -55,6 +57,7 @@ func (s *portfolioService) CreatePortfolioItem(userID uint, req PortfolioItemReq
 		StartDate:   req.StartDate,
 		EndDate:     req.EndDate,
 		MediaURL:    req.MediaURL,
+		Link:        req.Link,
 	}
 
 	if err := s.portfolioRepo.CreatePortfolioItem(item); err != nil {
@@ -64,6 +67,10 @@ func (s *portfolioService) CreatePortfolioItem(userID uint, req PortfolioItemReq
 }
 
 func (s *portfolioService) GetPortfolioItems(userID uint) ([]models.PortfolioItem, error) {
+	return s.portfolioRepo.FindPortfolioItemsByUserID(userID)
+}
+
+func (s *portfolioService) GetPublicPortfolioItems(userID uint) ([]models.PortfolioItem, error) {
 	return s.portfolioRepo.FindPortfolioItemsByUserID(userID)
 }
 
@@ -97,6 +104,9 @@ func (s *portfolioService) UpdatePortfolioItem(userID uint, itemID uint, req Por
 	}
 	if req.MediaURL != nil {
 		item.MediaURL = req.MediaURL
+	}
+	if req.Link != nil {
+		item.Link = req.Link
 	}
 
 	if err := s.portfolioRepo.UpdatePortfolioItem(item); err != nil {

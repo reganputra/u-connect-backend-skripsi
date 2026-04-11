@@ -12,4 +12,5 @@ type PortfolioItem struct {
 	StartDate   *string `gorm:"default:null"` // YYYY-MM
 	EndDate     *string `gorm:"default:null"` // YYYY-MM
 	MediaURL    *string `gorm:"default:null"` // Cloudinary URL
+	Link        *string `gorm:"default:null"` // External URL (optional, non-Cloudinary)
 }

@@ -2,6 +2,7 @@ package ws
 
 import (
 	"encoding/json"
+	"fmt"
 	"log"
 	"os"
 	"time"
@@ -9,6 +10,7 @@ import (
 	fws "github.com/gofiber/contrib/websocket"
 	"github.com/gofiber/fiber/v2"
 	"github.com/golang-jwt/jwt/v5"
+	"github.com/reganputra/skripsi-backend/repository"
 	"github.com/reganputra/skripsi-backend/service"
 )
 
@@ -25,8 +27,8 @@ type IncomingMsg struct {
 //
 // Usage (route registration):
 //
-//	app.Get("/api/ws", websocket.IsWebSocketUpgrade, ws.WSHandler(hub, msgSvc))
-func WSHandler(hub *Hub, msgSvc service.MessageService) fiber.Handler {
+//	app.Get("/api/ws", websocket.IsWebSocketUpgrade, ws.WSHandler(hub, msgSvc, userRepo, notifSvc))
+func WSHandler(hub *Hub, msgSvc service.MessageService, userRepo repository.UserRepository, notifSvc service.NotificationService) fiber.Handler {
 	return fws.New(func(c *fws.Conn) {
 		// ── 1. Authenticate ───────────────────────────────────────────────────
 		tokenStr := c.Query("token")
@@ -115,6 +117,19 @@ func WSHandler(hub *Hub, msgSvc service.MessageService) fiber.Handler {
 
 			// Echo back to sender as confirmation
 			hub.SendToUser(userID, payload)
+
+			// 5. Throttled persistent notification
+			if sender, err := userRepo.FindUserByID(userID); err == nil {
+				_ = notifSvc.NotifyThrottled(
+					incoming.ReceiverID,
+					"new_message",
+					"Pesan baru",
+					fmt.Sprintf("Pesan dari %s: %s", sender.Name, truncateText(incoming.Content, 40)),
+					"message",
+					msg.ID,
+					5*time.Minute,
+				)
+			}
 		}
 	})
 }
@@ -149,4 +164,12 @@ func parseJWT(tokenStr string) (jwt.MapClaims, error) {
 	}
 	_ = log.Printf // suppress unused import warning if log unused later
 	return claims, nil
+}
+
+func truncateText(s string, max int) string {
+	runes := []rune(s)
+	if len(runes) <= max {
+		return s
+	}
+	return string(runes[:max]) + "…"
 }

@@ -12,6 +12,7 @@ Request body must include `Content-Type: application/json` for JSON endpoints or
 - [Frontend Integration Contract](#frontend-integration-contract)
 - [Auth](#auth)
 - [User Profile](#user-profile)
+- [Directory](#directory)
 - [Company Profile](#company-profile)
 - [Portfolio](#portfolio)
 - [Feed Posting](#feed-posting)
@@ -403,6 +404,212 @@ Notes:
 ```
 
 > `end_year: null` = currently working there.
+
+---
+
+## Directory
+
+> Browse profiles of students, alumni, and search by skills, company, or interests. Available to `student`, `alumni`, and `partner` roles.
+
+| Method | Endpoint                           | Auth | Description                              |
+| ------ | ---------------------------------- | ---- | ---------------------------------------- |
+| GET    | `/api/directory/:userID`           | ✅   | View a user's full public profile        |
+| GET    | `/api/directory/:userID/portfolio` | ✅   | View a user's public portfolio           |
+| GET    | `/api/directory`                   | ✅   | List all profiles (paginated)            |
+| GET    | `/api/directory/search?q=<query>`  | ✅   | Search profiles by name/skills/company   |
+| GET    | `/api/directory/role/:role`        | ✅   | Filter profiles by role (student/alumni) |
+
+#### GET `/api/directory/:userID` — View Public Profile
+
+Returns the full public profile for a selected user from the directory.
+Response shape is intentionally the same as `GET /api/profile` so frontend can reuse the same detail view.
+
+**Response `200`:**
+
+```json
+{
+  "success": true,
+  "data": {
+    "ID": 12,
+    "CreatedAt": "2026-04-11T10:00:00Z",
+    "UpdatedAt": "2026-04-11T10:00:00Z",
+    "DeletedAt": null,
+    "UserID": 12,
+    "User": {
+      "ID": 12,
+      "Name": "Dev Sofia",
+      "Email": "sofia@example.com",
+      "Role": "alumni",
+      "IsActive": true,
+      "Faculty": "Engineering",
+      "Major": "Informatics",
+      "YearEnroll": 2020,
+      "CompanyName": null
+    },
+    "ProfilePicture": "https://res.cloudinary.com/.../profile-12.jpg",
+    "Bio": "Python and AI enthusiast",
+    "Location": "Surabaya",
+    "JobStatus": "employed",
+    "Position": "ML Engineer",
+    "CompanyName": "AI Startup",
+    "CompanyLocation": "Jakarta",
+    "CompanySize": null,
+    "IndustryName": null,
+    "IndustryType": null,
+    "YearFounding": null,
+    "Salary": 15000000,
+    "EducationalLevel": null,
+    "AdvancedStudyProgram": null,
+    "InstitutionName": null,
+    "ExpectedGraduationYear": null,
+    "Skills": "Python, Machine Learning, TensorFlow",
+    "Interests": "AI, Data Science",
+    "MentorQuota": 3,
+    "MentorDescription": "Available for mentoring in backend and AI",
+    "StatusDescription": null,
+    "Experiences": []
+  }
+}
+```
+
+#### GET `/api/directory/:userID/portfolio` — View Public Portfolio
+
+Returns portfolio items for a selected user.
+
+**Response `200`:**
+
+```json
+{
+  "success": true,
+  "data": [
+    {
+      "ID": 21,
+      "CreatedAt": "2026-04-10T08:00:00Z",
+      "UpdatedAt": "2026-04-10T08:00:00Z",
+      "DeletedAt": null,
+      "UserID": 12,
+      "Title": "Backend API Project",
+      "Description": "Built a REST API using Go",
+      "Category": "Backend",
+      "Tags": "go, api, gorm",
+      "StartDate": "2025-01",
+      "EndDate": "2025-03",
+      "MediaURL": "https://res.cloudinary.com/.../portfolio.jpg",
+      "Link": "https://github.com/example/project"
+    }
+  ]
+}
+```
+
+**Error cases:**
+| Status | Reason |
+|---|---|
+| `400` | Invalid user ID |
+| `401` | Not authenticated |
+| `404` | Profile not found |
+
+#### GET `/api/directory` — Browse All Profiles
+
+**Query params:** `?page=1&limit=20`
+
+Returns paginated list of all student and alumni profiles (newest first).
+
+**Response `200`:**
+
+```json
+{
+  "success": true,
+  "data": {
+    "total": 127,
+    "page": 1,
+    "limit": 20,
+    "data": [
+      {
+        "user_id": 5,
+        "name": "Alumni Regan",
+        "role": "alumni",
+        "profile_picture": "https://res.cloudinary.com/.../alumni-profile-5.jpg",
+        "bio": "Software engineer passionate about backend development",
+        "location": "Jakarta",
+        "job_status": "employed",
+        "position": "Senior Backend Engineer",
+        "company_name": "Tech Company",
+        "skills": "Go, TypeScript, PostgreSQL, Docker",
+        "interests": "Cloud architecture, Open source",
+        "mentor_description": "Available for mentoring in backend development"
+      },
+      {
+        "user_id": 8,
+        "name": "Student Budi",
+        "role": "student",
+        "profile_picture": "https://res.cloudinary.com/.../student-profile-8.jpg",
+        "bio": "Final year student, interested in web development",
+        "location": "Bandung",
+        "job_status": "continuing_study",
+        "position": null,
+        "company_name": null,
+        "skills": "React, Node.js, JavaScript",
+        "interests": "Web development, UI/UX",
+        "mentor_description": null
+      }
+    ]
+  }
+}
+```
+
+#### GET `/api/directory/search?q=<query>` — Search Profiles
+
+Searches profiles by name, skills, company name, or interests (case-insensitive).
+
+**Query params:**
+
+- `q` (required): Search term (name, skill, company, interest)
+- `page` (optional, default=1): Page number
+- `limit` (optional, default=20): Results per page (max 100)
+
+**Response `200`:**
+
+```json
+{
+  "success": true,
+  "data": {
+    "total": 5,
+    "page": 1,
+    "limit": 20,
+    "query": "Python",
+    "data": [
+      {
+        "user_id": 12,
+        "name": "Dev Sofia",
+        "role": "alumni",
+        "profile_picture": "...",
+        "bio": "Python and AI enthusiast",
+        "location": "Surabaya",
+        "job_status": "employed",
+        "position": "ML Engineer",
+        "company_name": "AI Startup",
+        "skills": "Python, Machine Learning, TensorFlow",
+        "interests": null,
+        "mentor_description": null
+      }
+    ]
+  }
+}
+```
+
+#### GET `/api/directory/role/:role` — Filter by Role
+
+Returns all profiles for a specific role (`student` or `alumni`).
+
+**Query params:** `?page=1&limit=20`
+
+**Response `200`:** (same structure as `GET /api/directory`)
+
+**Error cases:**
+| Status | Reason |
+|---|---|
+| `400` | Role is not `student` or `alumni` |
+| `401` | Not authenticated |
 
 ---
 

@@ -667,3 +667,66 @@ The system processes this query and matches it with mentor profiles.
 - A mentor cannot exceed maximum mentees capacity
 - Mentoring sessions only available for approved mentor relationships
 - Mentor must approve mentoring request before session creation
+
+# 13. Message Module
+
+The **Message Module** enables direct communication between users within the Alumni Community Platform use websocket for realtime.  
+This feature allows students and alumni to exchange private messages for networking, collaboration, or mentoring discussions.
+
+To maintain a safe communication environment, messaging is only allowed when a **follow relationship exists between users**.
+Only users with the roles:
+
+- `student`
+- `alumni`
+
+are allowed to use the messaging feature.
+
+## 13.1 Authorization Roles
+
+Messaging Requirements:
+
+- A user must **follow another user before sending a message**
+- Messages can only be exchanged if the follow relationship exists
+
+## 13.2 Features
+
+Messaging
+
+- Send message
+- Receive message
+- View conversation list
+- View conversation details
+- Mark message as read
+
+Follow System
+
+- Follow user
+- Unfollow user
+- View followers
+- View following
+
+## 13.3 Fields
+
+Each message contains the following attributes:
+
+- message_id
+- sender_id
+- receiver_id
+- message_content
+- is_read
+- created_at
+
+## 13.4 Relationships
+
+- One user can follow many users (N:M relationship)
+- One user can send many messages
+- One conversation consists of messages exchanged between two users
+
+# 13.5 Business Rules
+
+- Only `student` and `alumni` can use messaging
+- A user must follow another user before sending a message
+- Messages are private between sender and receiver
+- Users can view their own conversation history
+- Messages cannot be edited after sending
+- Users cannot access messages from other conversations
