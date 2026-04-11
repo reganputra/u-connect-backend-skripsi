@@ -13,13 +13,15 @@ type UserProfile struct {
 	Location       *string `gorm:"default:null"`
 
 	// Professional (alumni)
-	JobStatus    *string `gorm:"default:null"` // employed|entrepreneur|continuing_study|unemployed|freelance|student
-	Position     *string `gorm:"default:null"`
-	CompanyName  *string `gorm:"default:null"`
-	IndustryName *string `gorm:"default:null"`
-	IndustryType *string `gorm:"default:null"` // e.g. B2B, B2C, SaaS, etc.
-	YearFounding *int    `gorm:"default:null"`
-	Salary       *int    `gorm:"default:null"` // optional
+	JobStatus       *string `gorm:"default:null"` // employed|entrepreneur|continuing_study|unemployed|freelance|student
+	Position        *string `gorm:"default:null"`
+	CompanyName     *string `gorm:"default:null"`
+	CompanyLocation *string `gorm:"default:null"`
+	CompanySize     *int    `gorm:"default:null"`
+	IndustryName    *string `gorm:"default:null"`
+	IndustryType    *string `gorm:"default:null"` // e.g. B2B, B2C, SaaS, etc.
+	YearFounding    *int    `gorm:"default:null"`
+	Salary          *int    `gorm:"default:null"` // optional
 
 	// Academic (alumni continuing study)
 	EducationalLevel       *string `gorm:"default:null"`

@@ -70,6 +70,30 @@ func (ctrl *CompanyController) UpdateCompanyProfile(c *fiber.Ctx) error {
 	return utils.SuccessResponse(c, fiber.StatusOK, profile)
 }
 
+func (ctrl *CompanyController) ChangeCompanyAffiliation(c *fiber.Ctx) error {
+	userID, err := getUserIDFromToken(c)
+	if err != nil {
+		return utils.ErrorResponse(c, fiber.StatusUnauthorized, err.Error())
+	}
+
+	var body struct {
+		CompanyName string `json:"company_name"`
+	}
+	if err := c.BodyParser(&body); err != nil {
+		return utils.ErrorResponse(c, fiber.StatusBadRequest, "isi permintaan tidak valid")
+	}
+
+	profile, joined, err := ctrl.companySvc.ChangeCompanyAffiliation(userID, body.CompanyName)
+	if err != nil {
+		return utils.ErrorResponse(c, fiber.StatusBadRequest, err.Error())
+	}
+
+	return utils.SuccessResponse(c, fiber.StatusOK, fiber.Map{
+		"joined_existing": joined,
+		"company":         profile,
+	})
+}
+
 func (ctrl *CompanyController) DeleteCompanyProfile(c *fiber.Ctx) error {
 	userID, err := getUserIDFromToken(c)
 	if err != nil {

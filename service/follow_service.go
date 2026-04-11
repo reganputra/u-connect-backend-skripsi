@@ -2,6 +2,7 @@ package service
 
 import (
 	"errors"
+	"fmt"
 
 	"github.com/reganputra/skripsi-backend/models"
 	"github.com/reganputra/skripsi-backend/repository"
@@ -15,11 +16,13 @@ type FollowService interface {
 }
 
 type followService struct {
-	repo repository.FollowRepository
+	repo     repository.FollowRepository
+	userRepo repository.UserRepository
+	notifSvc NotificationService
 }
 
-func NewFollowService(repo repository.FollowRepository) FollowService {
-	return &followService{repo: repo}
+func NewFollowService(repo repository.FollowRepository, userRepo repository.UserRepository, notifSvc NotificationService) FollowService {
+	return &followService{repo: repo, userRepo: userRepo, notifSvc: notifSvc}
 }
 
 func (s *followService) Follow(followerID, followingID uint, followerRole string) error {
@@ -39,7 +42,21 @@ func (s *followService) Follow(followerID, followingID uint, followerRole string
 	if already {
 		return errors.New("anda sudah mengikuti pengguna ini")
 	}
-	return s.repo.Follow(followerID, followingID)
+	if err := s.repo.Follow(followerID, followingID); err != nil {
+		return err
+	}
+	// Notify the followed user
+	if follower, err := s.userRepo.FindUserByID(followerID); err == nil {
+		_ = s.notifSvc.Notify(
+			followingID,
+			"new_follower",
+			"Pengikut baru",
+			fmt.Sprintf("%s mulai mengikutimu", follower.Name),
+			"follow",
+			followerID,
+		)
+	}
+	return nil
 }
 
 func (s *followService) Unfollow(followerID, followingID uint) error {

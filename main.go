@@ -12,6 +12,7 @@ import (
 	"github.com/reganputra/skripsi-backend/models"
 	"github.com/reganputra/skripsi-backend/repository"
 	"github.com/reganputra/skripsi-backend/routes"
+	"github.com/reganputra/skripsi-backend/scheduler"
 	"github.com/reganputra/skripsi-backend/service"
 	"github.com/reganputra/skripsi-backend/utils"
 	"github.com/reganputra/skripsi-backend/ws"
@@ -61,6 +62,7 @@ func main() {
 		&models.MentoringSession{},
 		&models.Follow{},
 		&models.Message{},
+		&models.Notification{},
 	); err != nil {
 		log.Fatalf("❌ AutoMigrate failed: %v", err)
 	}
@@ -98,26 +100,33 @@ func main() {
 	mentoringSessionRepo := repository.NewMentoringSessionRepository(db)
 	followRepo := repository.NewFollowRepository(db)
 	messageRepo := repository.NewMessageRepository(db)
+	notifRepo := repository.NewNotificationRepository(db)
+
+	// ── WebSocket Hub + Notification Service (must come first) ──────────────
+	hub := ws.NewHub()
+	go hub.Run()
+	notifSvc := service.NewNotificationService(notifRepo, hub)
 
 	// ── Services ──────────────────────────────────────────────────────────────
-	authSvc := service.NewAuthService(userRepo)
+	authSvc := service.NewAuthService(userRepo, profileRepo)
 	profileSvc := service.NewProfileService(profileRepo)
 	companySvc := service.NewCompanyService(companyRepo, userRepo)
 	portfolioSvc := service.NewPortfolioService(portfolioRepo)
-	feedSvc := service.NewFeedService(postRepo, commentRepo, reactionRepo, voteRepo)
-	groupSvc := service.NewGroupService(groupRepo, memberRepo, articleRepo, gCommentRepo, gReactionRepo)
+	feedSvc := service.NewFeedService(postRepo, commentRepo, reactionRepo, voteRepo, userRepo, notifSvc)
+	groupSvc := service.NewGroupService(groupRepo, memberRepo, articleRepo, gCommentRepo, gReactionRepo, notifSvc)
 	eventSvc := service.NewEventService(eventRepo, agendaRepo, regRepo)
-	jobSvc := service.NewJobService(jobRepo, jobAppRepo)
+	jobSvc := service.NewJobService(jobRepo, jobAppRepo, notifSvc)
 	reportSvc := service.NewReportService(reportRepo)
-	adminSvc := service.NewAdminService(adminRepo, reportRepo, categoryRepo)
+	adminSvc := service.NewAdminService(adminRepo, reportRepo, categoryRepo, notifSvc)
 	recommendSvc := service.NewRecommendationService(mentorRepo)
-	mentorSvc := service.NewMentorService(profileRepo, mentorRepo, mentorRequestRepo, mentoringSessionRepo, recommendSvc)
-	followSvc := service.NewFollowService(followRepo)
+	mentorSvc := service.NewMentorService(profileRepo, mentorRepo, mentorRequestRepo, mentoringSessionRepo, recommendSvc, userRepo, notifSvc)
+	followSvc := service.NewFollowService(followRepo, userRepo, notifSvc)
 	messageSvc := service.NewMessageService(messageRepo, followRepo)
 
 	// ── Controllers ───────────────────────────────────────────────────────────
 	authCtrl := controllers.NewAuthController(authSvc)
 	profileCtrl := controllers.NewProfileController(profileSvc)
+	directoryCtrl := controllers.NewDirectoryController(profileSvc, portfolioSvc)
 	companyCtrl := controllers.NewCompanyController(companySvc)
 	portfolioCtrl := controllers.NewPortfolioController(portfolioSvc)
 	feedCtrl := controllers.NewFeedController(feedSvc)
@@ -129,10 +138,7 @@ func main() {
 	mentorCtrl := controllers.NewMentorController(mentorSvc)
 	followCtrl := controllers.NewFollowController(followSvc)
 	messageCtrl := controllers.NewMessageController(messageSvc)
-
-	// ── WebSocket Hub ──────────────────────────────────────────────────────────
-	hub := ws.NewHub()
-	go hub.Run()
+	notifCtrl := controllers.NewNotificationController(notifSvc)
 
 	// ── Fiber app ─────────────────────────────────────────────────────────────
 	app := fiber.New(fiber.Config{
@@ -165,6 +171,7 @@ func main() {
 	// ── Routes ────────────────────────────────────────────────────────────────
 	routes.RegisterAuthRoutes(app, authCtrl)
 	routes.RegisterProfileRoutes(app, profileCtrl)
+	routes.SetupDirectoryRoutes(app, directoryCtrl)
 	routes.RegisterCompanyRoutes(app, companyCtrl)
 	routes.RegisterPortfolioRoutes(app, portfolioCtrl)
 	routes.RegisterFeedRoutes(app, feedCtrl)
@@ -175,7 +182,11 @@ func main() {
 	routes.RegisterAdminRoutes(app, adminCtrl)
 	routes.RegisterMentorRoutes(app, mentorCtrl)
 	routes.SetupFollowRoutes(app, followCtrl)
-	routes.SetupMessageRoutes(app, messageCtrl, hub, messageSvc)
+	routes.SetupMessageRoutes(app, messageCtrl, hub, messageSvc, userRepo, notifSvc)
+	routes.SetupNotificationRoutes(app, notifCtrl)
+
+	// ── Background Schedulers ───────────────────────────────────────────────────
+	go scheduler.StartEventReminderScheduler(db, notifSvc)
 
 	// ── Start server ──────────────────────────────────────────────────────────
 	port := os.Getenv("APP_PORT")

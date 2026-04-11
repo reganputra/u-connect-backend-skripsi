@@ -2,6 +2,7 @@ package service
 
 import (
 	"errors"
+	"fmt"
 	"time"
 
 	"github.com/reganputra/skripsi-backend/models"
@@ -68,17 +69,20 @@ type adminService struct {
 	adminRepo    repository.AdminRepository
 	reportRepo   repository.ReportRepository
 	categoryRepo repository.CategoryRepository
+	notifSvc     NotificationService
 }
 
 func NewAdminService(
 	adminRepo repository.AdminRepository,
 	reportRepo repository.ReportRepository,
 	categoryRepo repository.CategoryRepository,
+	notifSvc NotificationService,
 ) AdminService {
 	return &adminService{
 		adminRepo:    adminRepo,
 		reportRepo:   reportRepo,
 		categoryRepo: categoryRepo,
+		notifSvc:     notifSvc,
 	}
 }
 
@@ -217,6 +221,16 @@ func (s *adminService) RejectReport(adminID uint, reportID uint, req RejectRepor
 	if err := s.reportRepo.UpdateReport(report); err != nil {
 		return nil, errors.New("gagal memperbarui laporan")
 	}
+	// Notify the reporter
+	_ = s.notifSvc.Notify(
+		report.ReporterID,
+		"report_rejected",
+		"Laporanmu ditolak",
+		fmt.Sprintf("Admin: %s", req.AdminNote),
+		"report",
+		report.ID,
+	)
+
 	return report, nil
 }
 

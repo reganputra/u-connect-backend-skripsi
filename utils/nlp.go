@@ -112,8 +112,8 @@ func BuildTFIDF(corpus [][]string) []map[string]float64 {
 		vec := make(map[string]float64, len(tf))
 		for term, count := range tf {
 			tfScore := float64(count) / float64(len(doc))
-			// Smoothed IDF: log((N+1)/(df+1)) + 1
-			idfScore := math.Log(float64(N+1)/float64(df[term]+1)) + 1.0
+			// Smoothed IDF: log((N)/(df+1)) + 1
+			idfScore := math.Log(float64(N)/float64(df[term]+1)) + 1.0
 			vec[term] = tfScore * idfScore
 		}
 		vectors[i] = vec

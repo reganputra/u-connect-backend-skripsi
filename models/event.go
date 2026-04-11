@@ -1,6 +1,10 @@
 package models
 
-import "gorm.io/gorm"
+import (
+	"time"
+
+	"gorm.io/gorm"
+)
 
 type Event struct {
 	gorm.Model
@@ -11,7 +15,8 @@ type Event struct {
 	PhotoURL    *string
 	Location    *string
 	Capacity    *int
-	Status      string `gorm:"default:'upcoming'"`
+	StartTime   *time.Time `gorm:"index"`
+	Status      string     `gorm:"default:'upcoming'"`
 
 	Agendas       []EventAgenda       `gorm:"foreignKey:EventID"`
 	Registrations []EventRegistration `gorm:"foreignKey:EventID"`

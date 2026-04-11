@@ -2,6 +2,7 @@ package service
 
 import (
 	"errors"
+	"fmt"
 	"time"
 
 	"github.com/reganputra/skripsi-backend/models"
@@ -155,6 +156,8 @@ type feedService struct {
 	commentRepo  repository.CommentRepository
 	reactionRepo repository.ReactionRepository
 	voteRepo     repository.VoteRepository
+	userRepo     repository.UserRepository
+	notifSvc     NotificationService
 }
 
 func NewFeedService(
@@ -162,12 +165,16 @@ func NewFeedService(
 	commentRepo repository.CommentRepository,
 	reactionRepo repository.ReactionRepository,
 	voteRepo repository.VoteRepository,
+	userRepo repository.UserRepository,
+	notifSvc NotificationService,
 ) FeedService {
 	return &feedService{
 		postRepo:     postRepo,
 		commentRepo:  commentRepo,
 		reactionRepo: reactionRepo,
 		voteRepo:     voteRepo,
+		userRepo:     userRepo,
+		notifSvc:     notifSvc,
 	}
 }
 
@@ -213,7 +220,7 @@ func (s *feedService) GetPosts(page, limit int) ([]*PostListItem, int64, error) 
 			ImageURL:      p.ImageURL,
 			CommentCount:  len(p.Comments),
 			ReactionCount: len(p.Reactions),
-			VoteCount:     len(p.Votes),
+			VoteCount:     s.sumVoteValues(p.Votes),
 			CreatedAt:     p.CreatedAt,
 			UpdatedAt:     p.UpdatedAt,
 		})
@@ -306,6 +313,20 @@ func (s *feedService) AddComment(userID uint, postID uint, req CommentRequest) (
 	if err := s.commentRepo.CreateComment(comment); err != nil {
 		return nil, errors.New("gagal menambahkan komentar")
 	}
+	// Throttled notification to post owner (skip if commenter == owner)
+	if post, err := s.postRepo.FindPostByID(postID); err == nil && post.UserID != userID {
+		if commenter, err := s.userRepo.FindUserByID(userID); err == nil {
+			_ = s.notifSvc.NotifyThrottled(
+				post.UserID,
+				"post_commented",
+				"Komentar baru",
+				fmt.Sprintf("%s mengomentari postinganmu", commenter.Name),
+				"post",
+				postID,
+				30*time.Minute,
+			)
+		}
+	}
 	return comment, nil
 }
 
@@ -362,6 +383,20 @@ func (s *feedService) ReactToPost(userID uint, postID uint, req ReactionRequest)
 	reaction := &models.Reaction{UserID: userID, PostID: &postID, Type: req.Type}
 	if err := s.reactionRepo.CreateReaction(reaction); err != nil {
 		return "", errors.New("gagal menambahkan reaksi")
+	}
+	// Throttled notification to post owner (skip if reactor == owner)
+	if post, err := s.postRepo.FindPostByID(postID); err == nil && post.UserID != userID {
+		if reactor, err := s.userRepo.FindUserByID(userID); err == nil {
+			_ = s.notifSvc.NotifyThrottled(
+				post.UserID,
+				"post_reacted",
+				"Ada yang mereaksi",
+				fmt.Sprintf("%s mereaksi postinganmu", reactor.Name),
+				"post",
+				postID,
+				60*time.Minute,
+			)
+		}
 	}
 	return "added", nil
 }
@@ -444,4 +479,13 @@ func (s *feedService) VoteComment(userID uint, commentID uint, req VoteRequest) 
 		return "", errors.New("gagal menambahkan vote")
 	}
 	return "added", nil
+}
+
+// sumVoteValues aggregates vote value scores (1 = upvote, -1 = downvote)
+func (s *feedService) sumVoteValues(votes []models.Vote) int {
+	sum := 0
+	for _, v := range votes {
+		sum += v.Value
+	}
+	return sum
 }

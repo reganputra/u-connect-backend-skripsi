@@ -35,6 +35,7 @@ func (ctrl *PortfolioController) CreatePortfolioItem(c *fiber.Ctx) error {
 		StartDate:   parseOptionalString(c.FormValue("start_date")),
 		EndDate:     parseOptionalString(c.FormValue("end_date")),
 		MediaURL:    parseOptionalString(mediaURL),
+		Link:        parseOptionalString(c.FormValue("link")),
 	}
 
 	item, err := ctrl.portfolioSvc.CreatePortfolioItem(userID, req)
@@ -83,6 +84,7 @@ func (ctrl *PortfolioController) UpdatePortfolioItem(c *fiber.Ctx) error {
 		StartDate:   parseOptionalString(c.FormValue("start_date")),
 		EndDate:     parseOptionalString(c.FormValue("end_date")),
 		MediaURL:    parseOptionalString(mediaURL),
+		Link:        parseOptionalString(c.FormValue("link")),
 	}
 
 	item, err := ctrl.portfolioSvc.UpdatePortfolioItem(userID, uint(itemID), req)

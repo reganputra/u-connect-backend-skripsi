@@ -119,6 +119,7 @@ func (ctrl *ProfileController) CreateProfile(c *fiber.Ctx) error {
 	yearEnroll := parseOptionalInt(c.FormValue("year_enroll"))
 	salary := parseOptionalInt(c.FormValue("salary"))
 	yearFounding := parseOptionalInt(c.FormValue("year_founding"))
+	companySize := parseOptionalInt(c.FormValue("company_size"))
 	mentorQuota := parseOptionalInt(c.FormValue("mentor_quota"))
 	expectedGradYear := parseOptionalInt(c.FormValue("expected_graduation_year"))
 
@@ -129,6 +130,8 @@ func (ctrl *ProfileController) CreateProfile(c *fiber.Ctx) error {
 		JobStatus:              parseOptionalString(c.FormValue("job_status")),
 		Position:               parseOptionalString(c.FormValue("position")),
 		CompanyName:            parseOptionalString(c.FormValue("company_name")),
+		CompanyLocation:        parseOptionalString(c.FormValue("company_location")),
+		CompanySize:            companySize,
 		IndustryName:           parseOptionalString(c.FormValue("industry_name")),
 		IndustryType:           parseOptionalString(c.FormValue("industry_type")),
 		YearFounding:           yearFounding,
@@ -181,6 +184,7 @@ func (ctrl *ProfileController) UpdateProfile(c *fiber.Ctx) error {
 
 	salary := parseOptionalInt(c.FormValue("salary"))
 	yearFounding := parseOptionalInt(c.FormValue("year_founding"))
+	companySize := parseOptionalInt(c.FormValue("company_size"))
 	mentorQuota := parseOptionalInt(c.FormValue("mentor_quota"))
 	expectedGradYear := parseOptionalInt(c.FormValue("expected_graduation_year"))
 
@@ -191,6 +195,8 @@ func (ctrl *ProfileController) UpdateProfile(c *fiber.Ctx) error {
 		JobStatus:              parseOptionalString(c.FormValue("job_status")),
 		Position:               parseOptionalString(c.FormValue("position")),
 		CompanyName:            parseOptionalString(c.FormValue("company_name")),
+		CompanyLocation:        parseOptionalString(c.FormValue("company_location")),
+		CompanySize:            companySize,
 		IndustryName:           parseOptionalString(c.FormValue("industry_name")),
 		IndustryType:           parseOptionalString(c.FormValue("industry_type")),
 		YearFounding:           yearFounding,

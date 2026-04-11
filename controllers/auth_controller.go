@@ -45,14 +45,12 @@ func (ctrl *AuthController) Login(c *fiber.Ctx) error {
 		return utils.ErrorResponse(c, fiber.StatusBadRequest, "isi permintaan tidak valid")
 	}
 
-	token, err := ctrl.authSvc.Login(req)
+	loginRes, err := ctrl.authSvc.Login(req)
 	if err != nil {
 		return utils.ErrorResponse(c, fiber.StatusUnauthorized, err.Error())
 	}
 
-	return utils.SuccessResponse(c, fiber.StatusOK, fiber.Map{
-		"token": token,
-	})
+	return utils.SuccessResponse(c, fiber.StatusOK, loginRes)
 }
 
 func (ctrl *AuthController) Me(c *fiber.Ctx) error {
@@ -64,9 +62,19 @@ func (ctrl *AuthController) Me(c *fiber.Ctx) error {
 	if !ok {
 		return utils.ErrorResponse(c, fiber.StatusUnauthorized, "klaim token tidak valid")
 	}
+	uidFloat, ok := claims["user_id"].(float64)
+	if !ok || uidFloat <= 0 {
+		return utils.ErrorResponse(c, fiber.StatusUnauthorized, "user_id tidak valid dalam token")
+	}
+	user, err := ctrl.authSvc.Me(uint(uidFloat))
+	if err != nil {
+		return utils.ErrorResponse(c, fiber.StatusUnauthorized, err.Error())
+	}
+
 	return utils.SuccessResponse(c, fiber.StatusOK, fiber.Map{
-		"user_id": claims["user_id"],
-		"email":   claims["email"],
-		"role":    claims["role"],
+		"user":    user,
+		"user_id": user.ID,
+		"email":   user.Email,
+		"role":    user.Role,
 	})
 }

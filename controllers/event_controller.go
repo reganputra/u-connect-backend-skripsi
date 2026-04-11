@@ -38,6 +38,7 @@ func (ctrl *EventController) CreateEvent(c *fiber.Ctx) error {
 		PhotoURL:    parseOptionalString(photoURL),
 		Location:    parseOptionalString(c.FormValue("location")),
 		Capacity:    capacity,
+		StartTime:   parseEventTime(c.FormValue("start_time")),
 		Status:      c.FormValue("status"),
 	}
 
@@ -97,6 +98,7 @@ func (ctrl *EventController) UpdateEvent(c *fiber.Ctx) error {
 		PhotoURL:    parseOptionalString(photoURL),
 		Location:    parseOptionalString(c.FormValue("location")),
 		Capacity:    parseOptionalInt(c.FormValue("capacity")),
+		StartTime:   parseEventTime(c.FormValue("start_time")),
 		Status:      c.FormValue("status"),
 	}
 

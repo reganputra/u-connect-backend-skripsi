@@ -51,10 +51,14 @@ func TestPortfolio(t *testing.T) {
 			"tags":        "Go,Fiber,PostgreSQL",
 			"start_date":  "2024-01",
 			"end_date":    "2024-06",
+			"link":        "https://github.com/example/fyp-" + sfx,
 		})
 		assertStatus(t, 201, code, res)
 		d := dataMap(res)
 		itemID = d["ID"].(float64)
+		if d["Link"] == nil {
+			t.Fatal("expected Link to be set")
+		}
 		t.Logf("✅ Portfolio item created (id: %.0f)", itemID)
 	})
 
@@ -80,8 +84,13 @@ func TestPortfolio(t *testing.T) {
 		code, res := formReq(t, http.MethodPut, fmt.Sprintf("/api/portfolio/%.0f", itemID), tokenA, map[string]string{
 			"description": "Updated: deployed to production with Docker",
 			"tags":        "Go,Fiber,PostgreSQL,Docker",
+			"link":        "https://demo.example.com/" + sfx,
 		})
 		assertStatus(t, 200, code, res)
+		d := dataMap(res)
+		if d["Link"] == nil {
+			t.Fatal("expected Link to remain set after update")
+		}
 		t.Log("✅ Portfolio item updated")
 	})
 

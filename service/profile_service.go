@@ -24,13 +24,15 @@ type ProfileRequest struct {
 	Location       *string `json:"location"`
 
 	// Professional
-	JobStatus    *string `json:"job_status"`
-	Position     *string `json:"position"`
-	CompanyName  *string `json:"company_name"`
-	IndustryName *string `json:"industry_name"`
-	IndustryType *string `json:"industry_type"`
-	YearFounding *int    `json:"year_founding"`
-	Salary       *int    `json:"salary"`
+	JobStatus       *string `json:"job_status"`
+	Position        *string `json:"position"`
+	CompanyName     *string `json:"company_name"`
+	CompanyLocation *string `json:"company_location"`
+	CompanySize     *int    `json:"company_size"`
+	IndustryName    *string `json:"industry_name"`
+	IndustryType    *string `json:"industry_type"`
+	YearFounding    *int    `json:"year_founding"`
+	Salary          *int    `json:"salary"`
 
 	// Academic
 	EducationalLevel       *string `json:"educational_level"`
@@ -60,15 +62,22 @@ type ExperienceRequest struct {
 
 // ─── Interface ────────────────────────────────────────────────────────────────
 
+type DirectorySummary = repository.DirectorySummary
+
 type ProfileService interface {
 	CreateProfile(userID uint, req ProfileRequest) (*models.UserProfile, error)
 	GetProfile(userID uint) (*models.UserProfile, error)
+	GetPublicProfile(targetUserID uint) (*models.UserProfile, error)
 	UpdateProfile(userID uint, req ProfileRequest) (*models.UserProfile, error)
 	DeleteProfile(userID uint) error
 	AddExperience(userID uint, req ExperienceRequest) (*models.UserExperience, error)
 	UpdateExperience(userID uint, expID uint, req ExperienceRequest) (*models.UserExperience, error)
 	DeleteExperience(userID uint, expID uint) error
 	UpdateProfilePicture(userID uint, pictureURL string) error
+	// Directory browsing
+	GetProfileDirectory(page, limit int) ([]DirectorySummary, int64, error)
+	SearchProfiles(query string, page, limit int) ([]DirectorySummary, int64, error)
+	GetProfilesByRole(role string, page, limit int) ([]DirectorySummary, int64, error)
 }
 
 // ─── Implementation ───────────────────────────────────────────────────────────
@@ -128,11 +137,13 @@ func nullFieldsByStatus(profile *models.UserProfile) {
 	status := *profile.JobStatus
 	if status != "employed" {
 		profile.Position = nil
+		profile.CompanyLocation = nil
 		if status != "entrepreneur" {
 			profile.CompanyName = nil
 		}
 	}
 	if status != "entrepreneur" {
+		profile.CompanySize = nil
 		profile.IndustryName = nil
 		profile.IndustryType = nil
 		profile.YearFounding = nil
@@ -167,6 +178,8 @@ func (s *profileService) CreateProfile(userID uint, req ProfileRequest) (*models
 		JobStatus:              req.JobStatus,
 		Position:               req.Position,
 		CompanyName:            req.CompanyName,
+		CompanyLocation:        req.CompanyLocation,
+		CompanySize:            req.CompanySize,
 		IndustryName:           req.IndustryName,
 		IndustryType:           req.IndustryType,
 		YearFounding:           req.YearFounding,
@@ -202,6 +215,14 @@ func (s *profileService) GetProfile(userID uint) (*models.UserProfile, error) {
 	return profile, nil
 }
 
+func (s *profileService) GetPublicProfile(targetUserID uint) (*models.UserProfile, error) {
+	profile, err := s.profileRepo.FindProfileByUserID(targetUserID)
+	if err != nil {
+		return nil, errors.New("profil tidak ditemukan")
+	}
+	return profile, nil
+}
+
 func (s *profileService) UpdateProfile(userID uint, req ProfileRequest) (*models.UserProfile, error) {
 	profile, err := s.profileRepo.FindProfileByUserID(userID)
 	if err != nil {
@@ -222,6 +243,12 @@ func (s *profileService) UpdateProfile(userID uint, req ProfileRequest) (*models
 	}
 	if req.CompanyName != nil {
 		profile.CompanyName = req.CompanyName
+	}
+	if req.CompanyLocation != nil {
+		profile.CompanyLocation = req.CompanyLocation
+	}
+	if req.CompanySize != nil {
+		profile.CompanySize = req.CompanySize
 	}
 	if req.IndustryName != nil {
 		profile.IndustryName = req.IndustryName
@@ -368,4 +395,25 @@ func (s *profileService) UpdateProfilePicture(userID uint, pictureURL string) er
 	}
 	profile.ProfilePicture = pictureURL
 	return s.profileRepo.UpdateProfile(profile)
+}
+
+// GetProfileDirectory returns paginated list of all profiles (students + alumni).
+func (s *profileService) GetProfileDirectory(page, limit int) ([]DirectorySummary, int64, error) {
+	return s.profileRepo.GetAllProfiles(page, limit)
+}
+
+// SearchProfiles searches profiles by name, skills, company, or interests.
+func (s *profileService) SearchProfiles(query string, page, limit int) ([]DirectorySummary, int64, error) {
+	if query == "" {
+		return []DirectorySummary{}, 0, errors.New("query pencarian tidak boleh kosong")
+	}
+	return s.profileRepo.SearchProfiles(query, page, limit)
+}
+
+// GetProfilesByRole returns paginated profiles filtered by role (student or alumni).
+func (s *profileService) GetProfilesByRole(role string, page, limit int) ([]DirectorySummary, int64, error) {
+	if role != "student" && role != "alumni" {
+		return []DirectorySummary{}, 0, errors.New("peran harus student atau alumni")
+	}
+	return s.profileRepo.GetProfilesByRole(role, page, limit)
 }

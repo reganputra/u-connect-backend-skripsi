@@ -18,12 +18,13 @@ var validEventStatuses = map[string]bool{
 // ─── DTOs ─────────────────────────────────────────────────────────────────────
 
 type EventRequest struct {
-	Title       string  `json:"title"`
-	Description *string `json:"description"`
-	PhotoURL    *string `json:"photo_url"`
-	Location    *string `json:"location"`
-	Capacity    *int    `json:"capacity"`
-	Status      string  `json:"status"`
+	Title       string     `json:"title"`
+	Description *string    `json:"description"`
+	PhotoURL    *string    `json:"photo_url"`
+	Location    *string    `json:"location"`
+	Capacity    *int       `json:"capacity"`
+	StartTime   *time.Time `json:"start_time"`
+	Status      string     `json:"status"`
 }
 
 type EventAgendaRequest struct {
@@ -91,6 +92,7 @@ func (s *eventService) CreateEvent(userID uint, req EventRequest) (*models.Event
 		PhotoURL:    req.PhotoURL,
 		Location:    req.Location,
 		Capacity:    req.Capacity,
+		StartTime:   req.StartTime,
 		Status:      status,
 	}
 	if err := s.eventRepo.CreateEvent(event); err != nil {
@@ -138,6 +140,9 @@ func (s *eventService) UpdateEvent(userID, eventID uint, req EventRequest) (*mod
 			return nil, errors.New("kapasitas harus nol atau positif")
 		}
 		event.Capacity = req.Capacity
+	}
+	if req.StartTime != nil {
+		event.StartTime = req.StartTime
 	}
 	if req.Status != "" {
 		if !validEventStatuses[req.Status] {

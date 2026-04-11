@@ -3,6 +3,7 @@ package service
 import (
 	"errors"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
@@ -37,6 +38,23 @@ type LoginRequest struct {
 	Password string `json:"password"`
 }
 
+type AuthUserPayload struct {
+	ID         uint    `json:"id"`
+	Name       string  `json:"name"`
+	Email      string  `json:"email"`
+	Role       string  `json:"role"`
+	IsActive   bool    `json:"is_active"`
+	PictureURL string  `json:"picture_url"`
+	Faculty    *string `json:"faculty"`
+	Major      *string `json:"major"`
+	YearEnroll *int    `json:"year_enroll"`
+}
+
+type LoginResponse struct {
+	Token string           `json:"token,omitempty"`
+	User  *AuthUserPayload `json:"user"`
+}
+
 type AuthClaims struct {
 	UserID uint   `json:"user_id"`
 	Email  string `json:"email"`
@@ -48,17 +66,19 @@ type AuthClaims struct {
 
 type AuthService interface {
 	Register(req RegisterRequest) (*models.User, error)
-	Login(req LoginRequest) (string, error)
+	Login(req LoginRequest) (*LoginResponse, error)
+	Me(userID uint) (*AuthUserPayload, error)
 }
 
 // ─── Implementation ───────────────────────────────────────────────────────────
 
 type authService struct {
-	userRepo repository.UserRepository
+	userRepo    repository.UserRepository
+	profileRepo repository.ProfileRepository
 }
 
-func NewAuthService(userRepo repository.UserRepository) AuthService {
-	return &authService{userRepo: userRepo}
+func NewAuthService(userRepo repository.UserRepository, profileRepo repository.ProfileRepository) AuthService {
+	return &authService{userRepo: userRepo, profileRepo: profileRepo}
 }
 
 func (s *authService) Register(req RegisterRequest) (*models.User, error) {
@@ -77,9 +97,7 @@ func (s *authService) Register(req RegisterRequest) (*models.User, error) {
 		}
 	}
 	if req.Role == "partner" {
-		if req.CompanyName == "" {
-			return nil, errors.New("nama perusahaan wajib diisi untuk partner")
-		}
+		req.CompanyName = strings.TrimSpace(req.CompanyName)
 	}
 
 	// Check email uniqueness
@@ -108,7 +126,9 @@ func (s *authService) Register(req RegisterRequest) (*models.User, error) {
 		user.YearEnroll = &req.YearEnroll
 	}
 	if req.Role == "partner" {
-		user.CompanyName = &req.CompanyName
+		if req.CompanyName != "" {
+			user.CompanyName = &req.CompanyName
+		}
 	}
 
 	if err := s.userRepo.CreateUser(user); err != nil {
@@ -118,18 +138,18 @@ func (s *authService) Register(req RegisterRequest) (*models.User, error) {
 	return user, nil
 }
 
-func (s *authService) Login(req LoginRequest) (string, error) {
+func (s *authService) Login(req LoginRequest) (*LoginResponse, error) {
 	if req.Email == "" || req.Password == "" {
-		return "", errors.New("email dan kata sandi wajib diisi")
+		return nil, errors.New("email dan kata sandi wajib diisi")
 	}
 
 	user, err := s.userRepo.FindUserByEmail(req.Email)
 	if err != nil {
-		return "", errors.New("email atau kata sandi tidak valid")
+		return nil, errors.New("email atau kata sandi tidak valid")
 	}
 
 	if err := bcrypt.CompareHashAndPassword([]byte(user.Password), []byte(req.Password)); err != nil {
-		return "", errors.New("email atau kata sandi tidak valid")
+		return nil, errors.New("email atau kata sandi tidak valid")
 	}
 
 	claims := AuthClaims{
@@ -147,8 +167,45 @@ func (s *authService) Login(req LoginRequest) (string, error) {
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
 	signed, err := token.SignedString([]byte(secret))
 	if err != nil {
-		return "", errors.New("gagal membuat token")
+		return nil, errors.New("gagal membuat token")
 	}
 
-	return signed, nil
+	authUser, err := s.buildAuthUser(user)
+	if err != nil {
+		return nil, err
+	}
+
+	return &LoginResponse{
+		Token: signed,
+		User:  authUser,
+	}, nil
+}
+
+func (s *authService) Me(userID uint) (*AuthUserPayload, error) {
+	user, err := s.userRepo.FindUserByID(userID)
+	if err != nil {
+		return nil, errors.New("pengguna tidak ditemukan")
+	}
+	return s.buildAuthUser(user)
+}
+
+func (s *authService) buildAuthUser(user *models.User) (*AuthUserPayload, error) {
+	pictureURL := ""
+	if s.profileRepo != nil {
+		if profile, err := s.profileRepo.FindProfileByUserID(user.ID); err == nil {
+			pictureURL = profile.ProfilePicture
+		}
+	}
+
+	return &AuthUserPayload{
+		ID:         user.ID,
+		Name:       user.Name,
+		Email:      user.Email,
+		Role:       user.Role,
+		IsActive:   user.IsActive,
+		PictureURL: pictureURL,
+		Faculty:    user.Faculty,
+		Major:      user.Major,
+		YearEnroll: user.YearEnroll,
+	}, nil
 }

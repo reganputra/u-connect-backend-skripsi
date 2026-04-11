@@ -12,5 +12,6 @@ func RegisterCompanyRoutes(app *fiber.App, ctrl *controllers.CompanyController) 
 	company.Post("/", ctrl.CreateOrJoinCompanyProfile)
 	company.Get("/", ctrl.GetCompanyProfile)
 	company.Put("/", ctrl.UpdateCompanyProfile)
+	company.Patch("/affiliation", ctrl.ChangeCompanyAffiliation)
 	company.Delete("/", ctrl.DeleteCompanyProfile)
 }

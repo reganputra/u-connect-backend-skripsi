@@ -2,6 +2,7 @@ package service
 
 import (
 	"errors"
+	"fmt"
 	"time"
 
 	"github.com/reganputra/skripsi-backend/models"
@@ -117,7 +118,7 @@ type GroupService interface {
 	LeaveGroup(userID uint, groupID uint) error
 	GetGroupMembers(groupID uint) ([]models.GroupMember, error)
 	GetJoinedGroups(userID uint) ([]models.Group, error)
-	KickMember(ownerID uint, groupID uint, targetUserID uint) error
+	KickMember(ownerID uint, groupID uint, targetUserID uint, reason string) error
 
 	CreateGroupArticle(userID uint, groupID uint, req GroupArticleRequest) (*models.GroupArticle, error)
 	GetGroupArticleDetail(userID uint, articleID uint) (*GroupArticleDetailResponse, error)
@@ -140,6 +141,7 @@ type groupService struct {
 	articleRepo       repository.GroupArticleRepository
 	commentRepo       repository.GroupCommentRepository
 	groupReactionRepo repository.GroupReactionRepository
+	notifSvc          NotificationService
 }
 
 func NewGroupService(
@@ -148,6 +150,7 @@ func NewGroupService(
 	articleRepo repository.GroupArticleRepository,
 	commentRepo repository.GroupCommentRepository,
 	groupReactionRepo repository.GroupReactionRepository,
+	notifSvc NotificationService,
 ) GroupService {
 	return &groupService{
 		groupRepo:         groupRepo,
@@ -155,6 +158,7 @@ func NewGroupService(
 		articleRepo:       articleRepo,
 		commentRepo:       commentRepo,
 		groupReactionRepo: groupReactionRepo,
+		notifSvc:          notifSvc,
 	}
 }
 
@@ -272,7 +276,7 @@ func (s *groupService) GetJoinedGroups(userID uint) ([]models.Group, error) {
 	return s.memberRepo.FindJoinedGroups(userID)
 }
 
-func (s *groupService) KickMember(ownerID uint, groupID uint, targetUserID uint) error {
+func (s *groupService) KickMember(ownerID uint, groupID uint, targetUserID uint, reason string) error {
 	if !s.isOwner(groupID, ownerID) {
 		return errors.New("akses ditolak: hanya pemilik grup")
 	}
@@ -282,7 +286,26 @@ func (s *groupService) KickMember(ownerID uint, groupID uint, targetUserID uint)
 	if !s.isMember(groupID, targetUserID) {
 		return errors.New("pengguna yang dituju bukan anggota grup")
 	}
-	return s.memberRepo.RemoveGroupMember(groupID, targetUserID)
+	if err := s.memberRepo.RemoveGroupMember(groupID, targetUserID); err != nil {
+		return err
+	}
+	// Notify kicked user
+	group, err := s.groupRepo.FindGroupByID(groupID)
+	if err == nil {
+		body := fmt.Sprintf("Kamu dikeluarkan dari grup %s", group.Title)
+		if reason != "" {
+			body = fmt.Sprintf("%s: %s", body, reason)
+		}
+		_ = s.notifSvc.Notify(
+			targetUserID,
+			"group_kicked",
+			"Kamu dikeluarkan dari grup",
+			body,
+			"group",
+			groupID,
+		)
+	}
+	return nil
 }
 
 // ─── Articles ─────────────────────────────────────────────────────────────────

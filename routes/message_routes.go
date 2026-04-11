@@ -5,11 +5,12 @@ import (
 	"github.com/gofiber/fiber/v2"
 	"github.com/reganputra/skripsi-backend/controllers"
 	"github.com/reganputra/skripsi-backend/middleware"
+	"github.com/reganputra/skripsi-backend/repository"
 	"github.com/reganputra/skripsi-backend/service"
 	"github.com/reganputra/skripsi-backend/ws"
 )
 
-func SetupMessageRoutes(app *fiber.App, ctrl *controllers.MessageController, hub *ws.Hub, msgSvc service.MessageService) {
+func SetupMessageRoutes(app *fiber.App, ctrl *controllers.MessageController, hub *ws.Hub, msgSvc service.MessageService, userRepo repository.UserRepository, notifSvc service.NotificationService) {
 	// ── REST endpoints ─────────────────────────────────────────────────────────
 	msgs := app.Group("/api/messages", middleware.Protected(), middleware.RequireRole("student", "alumni"))
 
@@ -24,6 +25,6 @@ func SetupMessageRoutes(app *fiber.App, ctrl *controllers.MessageController, hub
 			return c.Next()
 		}
 		return fiber.ErrUpgradeRequired
-	}, ws.WSHandler(hub, msgSvc))
+	}, ws.WSHandler(hub, msgSvc, userRepo, notifSvc))
 
 }
