@@ -176,10 +176,11 @@ Notes:
   "name": "Budi Santoso",
   "email": "budi@company.com",
   "password": "secret123",
-  "role": "partner",
-  "company_name": "PT Maju Bersama"
+  "role": "partner"
 }
 ```
+
+> For `partner`, `company_name` is optional at registration. If omitted, set it later during company onboarding via `POST /api/company`.
 
 **Response `201`:**
 
@@ -222,15 +223,21 @@ Notes:
   "data": {
     "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
     "user": {
-      "ID": 1,
-      "Name": "Regan Putra",
-      "Email": "regan@test.com",
-      "Role": "alumni",
-      "IsActive": true
+      "id": 1,
+      "name": "Regan Putra",
+      "email": "regan@test.com",
+      "role": "student",
+      "is_active": true,
+      "picture_url": "",
+      "faculty": "Engineering",
+      "major": "Informatics",
+      "year_enroll": 2020
     }
   }
 }
 ```
+
+> `token` is returned on login only.
 
 **JWT Payload (decoded):**
 
@@ -255,12 +262,25 @@ Notes:
 {
   "success": true,
   "data": {
+    "user": {
+      "id": 1,
+      "name": "Regan Putra",
+      "email": "regan@test.com",
+      "role": "student",
+      "is_active": true,
+      "picture_url": "",
+      "faculty": "Engineering",
+      "major": "Informatics",
+      "year_enroll": 2020
+    },
     "user_id": 1,
     "email": "regan@test.com",
-    "role": "alumni"
+    "role": "student"
   }
 }
 ```
+
+> For backward compatibility, `user_id`, `email`, and `role` are still included at the top level of `data`.
 
 ---
 
@@ -282,22 +302,56 @@ Notes:
 
 **Content-Type:** `multipart/form-data`
 
-| Field                    | Required                    | Notes                   |
-| ------------------------ | --------------------------- | ----------------------- |
-| `job_status`             | ✅                          | See values below        |
-| `bio`                    | ❌                          | —                       |
-| `phone`                  | ❌                          | —                       |
-| `linkedin_url`           | ❌                          | —                       |
-| `picture`                | ❌                          | Image file → Cloudinary |
-| `position`               | if `employed`               | Current job title       |
-| `company_name`           | if `employed`               | Current company name    |
-| `industry_name`          | if `entrepreneur`           | Industry                |
-| `educational_level`      | if `continuing_study`       | Degree level            |
-| `advanced_study_program` | if `continuing_study`       | Study program           |
-| `institution_name`       | if `continuing_study`       | University name         |
-| `status_description`     | if `unemployed`/`freelance` | Description             |
+| Field                      | Required                    | Notes                                                 |
+| -------------------------- | --------------------------- | ----------------------------------------------------- |
+| `job_status`               | ✅                          | See status matrix below                               |
+| `bio`                      | ❌                          | Short profile bio                                     |
+| `location`                 | ❌                          | Free-text location                                    |
+| `picture`                  | ❌                          | Image file → Cloudinary                               |
+| `skills`                   | ❌                          | Comma-separated text (used by mentor recommendation)  |
+| `interests`                | ❌                          | Comma-separated text (used by mentor recommendation)  |
+| `position`                 | if `employed`               | Current job title                                     |
+| `company_name`             | if `employed`               | Current company name                                  |
+| `company_location`         | ❌                          | Company/work location (relevant for `employed`)       |
+| `company_size`             | ❌                          | Integer (relevant for `entrepreneur` / self-employed) |
+| `industry_name`            | if `entrepreneur`           | Industry/business domain                              |
+| `industry_type`            | ❌                          | Example: B2B, B2C, SaaS                               |
+| `year_founding`            | ❌                          | Integer year                                          |
+| `salary`                   | ❌                          | Integer                                               |
+| `educational_level`        | if `continuing_study`       | Degree level                                          |
+| `advanced_study_program`   | if `continuing_study`       | Study program                                         |
+| `institution_name`         | if `continuing_study`       | University/institution name                           |
+| `expected_graduation_year` | ❌                          | Integer year (mainly for `continuing_study`)          |
+| `mentor_quota`             | ❌                          | Integer (alumni mentor profile only)                  |
+| `mentor_description`       | ❌                          | Mentor bio/description                                |
+| `status_description`       | if `unemployed`/`freelance` | Required explanation for current status               |
 
 **`job_status` values:** `employed` · `entrepreneur` · `continuing_study` · `unemployed` · `freelance` · `student`
+
+**Job status requirement matrix:**
+
+| `job_status`       | Required fields                                                   |
+| ------------------ | ----------------------------------------------------------------- |
+| `employed`         | `position`, `company_name`                                        |
+| `entrepreneur`     | `industry_name`                                                   |
+| `continuing_study` | `educational_level`, `advanced_study_program`, `institution_name` |
+| `unemployed`       | `status_description`                                              |
+| `freelance`        | `status_description`                                              |
+| `student`          | No additional required fields                                     |
+
+**Field clearing behavior when status changes:**
+
+- If status is not `employed`, backend clears `position` and `company_location`.
+- If status is not `employed` and not `entrepreneur`, backend clears `company_name`.
+- If status is not `entrepreneur`, backend clears `company_size`, `industry_name`, `industry_type`, and `year_founding`.
+- If status is not `continuing_study`, backend clears `educational_level`, `advanced_study_program`, `institution_name`, and `expected_graduation_year`.
+- If status is not `unemployed` or `freelance`, backend clears `status_description`.
+
+**Validation notes:**
+
+- Invalid `job_status` returns `400`.
+- Missing status-dependent required fields return `400` with a business-rule message.
+- Numeric fields (`salary`, `year_founding`, `expected_graduation_year`, `mentor_quota`) are parsed as integers from form-data.
 
 **Response `201` (create) / `200` (update):**
 
@@ -308,11 +362,28 @@ Notes:
     "ID": 1,
     "UserID": 1,
     "Bio": "Software engineer at tech startup",
+    "Location": "Bandung, Indonesia",
     "JobStatus": "employed",
     "Position": "Backend Developer",
     "CompanyName": "PT Startup Indonesia",
+    "CompanyLocation": "Jakarta, Indonesia",
+    "CompanySize": null,
+    "IndustryName": null,
+    "IndustryType": null,
+    "YearFounding": null,
+    "Salary": 12000000,
+    "EducationalLevel": null,
+    "AdvancedStudyProgram": null,
+    "InstitutionName": null,
+    "ExpectedGraduationYear": null,
+    "Skills": "Go, PostgreSQL, Docker",
+    "Interests": "Backend, Distributed Systems",
+    "MentorQuota": null,
+    "MentorDescription": null,
+    "StatusDescription": null,
     "PictureURL": "https://res.cloudinary.com/.../profile.jpg",
-    "LinkedinURL": "https://linkedin.com/in/regan"
+    "CreatedAt": "2026-04-06T10:00:00+07:00",
+    "UpdatedAt": "2026-04-06T10:00:00+07:00"
   }
 }
 ```
@@ -339,23 +410,87 @@ Notes:
 
 > `partner` role only.
 
-| Method | Endpoint       | Auth | Description                    |
-| ------ | -------------- | ---- | ------------------------------ |
-| POST   | `/api/company` | ✅   | Create or join company profile |
-| GET    | `/api/company` | ✅   | View own company profile       |
-| PUT    | `/api/company` | ✅   | Update company profile         |
-| DELETE | `/api/company` | ✅   | Delete company profile         |
+| Method | Endpoint                   | Auth | Description                    |
+| ------ | -------------------------- | ---- | ------------------------------ |
+| POST   | `/api/company`             | ✅   | Create or join company profile |
+| GET    | `/api/company`             | ✅   | View own company profile       |
+| PUT    | `/api/company`             | ✅   | Update company profile         |
+| PATCH  | `/api/company/affiliation` | ✅   | Change company affiliation     |
+| DELETE | `/api/company`             | ✅   | Delete company profile         |
 
-> Partners with the same `company_name` (from registration) **share one profile**. POST returns `201` if created, `200` if joined.
+> Partners with the same `company_name` **share one profile**. POST returns `201` if created, `200` if joined.
+>
+> If partner account has no `company_name` yet, include it in the first `POST /api/company` request.
+
+### POST `/api/company` — Create or Join Company Profile
+
+**Body (JSON):**
+
+| Field           | Required | Notes                                                                       |
+| --------------- | -------- | --------------------------------------------------------------------------- |
+| `company_name`  | Cond.    | Required only for first-time partner onboarding when account value is empty |
+| `description`   | ❌       | Company description                                                         |
+| `industry_type` | ❌       | Industry type                                                               |
+| `location`      | ❌       | Company location                                                            |
+| `employee_size` | ❌       | Integer >= 0                                                                |
+| `website_url`   | ❌       | Company website URL                                                         |
+
+```json
+{
+  "company_name": "PT Maju Bersama",
+  "description": "Leading campus-to-industry collaboration programs.",
+  "industry_type": "Technology",
+  "location": "Jakarta, Indonesia",
+  "employee_size": 150,
+  "website_url": "https://company.com"
+}
+```
+
+> `company_name` is required only for first-time partner onboarding when account-level `company_name` is still empty. After it is set, subsequent updates can omit it.
+
+**Response behavior:**
+
+- `201 Created`: new company profile created.
+- `200 OK`: existing company profile found and partner joined/shared that profile.
+
+### PUT `/api/company` — Update Company Profile
+
+Updates profile content (`description`, `industry_type`, `location`, `employee_size`, `website_url`) for the current company.
+
+> `PUT /api/company` does **not** change `company_name` affiliation.
+
+### PATCH `/api/company/affiliation` — Change Company Affiliation
+
+Use this endpoint when partner wants to switch to a different company.
 
 **Body (JSON):**
 
 ```json
 {
-  "industry_type": "Technology",
-  "location": "Jakarta, Indonesia",
-  "employee_size": 150,
-  "website_url": "https://company.com"
+  "company_name": "PT Baru Nusantara"
+}
+```
+
+Behavior:
+
+- If target company profile already exists, partner joins that company profile.
+- If target company profile does not exist, backend creates a new company profile with that name.
+- Partner account `company_name` is updated to the new value.
+
+> Use this endpoint whenever partner wants to switch company identity. Do not use `PUT /api/company` for renaming/switching company.
+
+**Response `200`:**
+
+```json
+{
+  "success": true,
+  "data": {
+    "joined_existing": true,
+    "company": {
+      "ID": 10,
+      "CompanyName": "PT Baru Nusantara"
+    }
+  }
 }
 ```
 
@@ -374,15 +509,16 @@ Notes:
 
 **Fields (form-data):**
 
-| Field         | Required | Notes                       |
-| ------------- | -------- | --------------------------- |
-| `title`       | ✅       | —                           |
-| `description` | ❌       | —                           |
-| `category`    | ❌       | e.g. `"Mobile Development"` |
-| `tags`        | ❌       | Comma-separated             |
-| `start_date`  | ❌       | Format: `YYYY-MM`           |
-| `end_date`    | ❌       | Format: `YYYY-MM`           |
-| `media`       | ❌       | Image file → Cloudinary     |
+| Field         | Required | Notes                         |
+| ------------- | -------- | ----------------------------- |
+| `title`       | ✅       | —                             |
+| `description` | ❌       | —                             |
+| `category`    | ❌       | e.g. `"Mobile Development"`   |
+| `tags`        | ❌       | Comma-separated               |
+| `start_date`  | ❌       | Format: `YYYY-MM`             |
+| `end_date`    | ❌       | Format: `YYYY-MM`             |
+| `media`       | ❌       | Image file → Cloudinary       |
+| `link`        | ❌       | External URL (non-Cloudinary) |
 
 ---
 
@@ -501,6 +637,16 @@ Notes:
 
 > Values: `1` (upvote) · `-1` (downvote)  
 > Same value → **removed**. Opposite → **flipped**.
+
+### Vote Count Semantics
+
+The `vote_count` field in post and comment list responses represents the **net vote score**, not the total number of votes cast:
+
+- `vote_count = 1`: net +1 (example: 5 upvotes, 4 downvotes = net +1)
+- `vote_count = -1`: net -1 (example: 1 upvote, 2 downvotes = net -1)
+- `vote_count = 0`: equal upvotes and downvotes, or no votes at all
+
+**Calculation:** `vote_count = Σ(vote values)` where each vote is `+1` (upvote) or `-1` (downvote).
 
 ### POST `/api/feed/:id/comments` — Add Comment or Reply
 
