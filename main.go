@@ -43,6 +43,7 @@ func main() {
 		&models.CompanyProfile{},
 		&models.PortfolioItem{},
 		&models.Post{},
+		&models.PostImage{},
 		&models.Comment{},
 		&models.Reaction{},
 		&models.Vote{},

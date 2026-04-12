@@ -754,12 +754,15 @@ Behavior:
 
 **Content-Type:** `multipart/form-data`
 
-| Field      | Required | Notes                   |
-| ---------- | -------- | ----------------------- |
-| `title`    | ✅       | —                       |
-| `content`  | ✅       | —                       |
-| `category` | ❌       | Free text               |
-| `image`    | ❌       | Image file → Cloudinary |
+| Field      | Required | Notes                                                |
+| ---------- | -------- | ---------------------------------------------------- |
+| `title`    | ✅       | —                                                    |
+| `content`  | ✅       | —                                                    |
+| `category` | ❌       | Free text                                            |
+| `images`   | ❌       | Multiple image files (form array) → Cloudinary       |
+| `image`    | ❌       | Single image file (legacy, kept for backward compat) |
+
+> **Note:** You can send multiple images using the `images` field (e.g., `images[0]`, `images[1]`). The `image` field is still supported for backward compatibility with older clients. If both are provided, `images` takes precedence.
 
 ### GET `/api/feed` — List Posts (paginated)
 
@@ -774,23 +777,30 @@ Behavior:
     "total": 25,
     "page": 1,
     "limit": 10,
-    "posts": [
+    "data": [
       {
-        "ID": 3,
-        "UserID": 2,
-        "Title": "Hello everyone",
-        "Content": "My first post!",
-        "Category": "General",
-        "ImageURL": null,
-        "CommentCount": 4,
-        "ReactionCount": 7,
-        "VoteCount": 3,
-        "CreatedAt": "2026-03-04T19:25:24+07:00"
+        "id": 3,
+        "user_id": 2,
+        "user": { "ID": 2, "Name": "Regan Putra", "Role": "alumni" },
+        "title": "Hello everyone",
+        "content": "My first post!",
+        "category": "General",
+        "image_url": "https://res.cloudinary.com/...",
+        "image_urls": [
+          "https://res.cloudinary.com/.../image1.jpg",
+          "https://res.cloudinary.com/.../image2.jpg"
+        ],
+        "comment_count": 4,
+        "reaction_count": 7,
+        "vote_count": 3,
+        "created_at": "2026-03-04T19:25:24+07:00"
       }
     ]
   }
 }
 ```
+
+> **Note:** `image_url` contains the first image (for backward compatibility). Use `image_urls` array for all images.
 
 ### GET `/api/feed/:id` — Post Detail
 
@@ -800,32 +810,76 @@ Behavior:
 {
   "success": true,
   "data": {
-    "ID": 3,
-    "Title": "Hello everyone",
-    "Content": "My first post!",
-    "User": { "ID": 2, "Name": "Regan Putra", "Role": "alumni" },
-    "Reactions": [{ "ID": 1, "UserID": 2, "Type": "like" }],
-    "Votes": [{ "ID": 1, "UserID": 3, "Value": 1 }],
-    "Comments": [
+    "id": 3,
+    "user_id": 2,
+    "title": "Hello everyone",
+    "content": "My first post!",
+    "category": "General",
+    "image_url": "https://res.cloudinary.com/.../image1.jpg",
+    "image_urls": [
+      "https://res.cloudinary.com/.../image1.jpg",
+      "https://res.cloudinary.com/.../image2.jpg"
+    ],
+    "user": { "ID": 2, "Name": "Regan Putra", "Role": "alumni" },
+    "reactions": [{ "ID": 1, "UserID": 2, "Type": "like" }],
+    "votes": [{ "ID": 1, "UserID": 3, "Value": 1 }],
+    "comments": [
       {
-        "ID": 1,
-        "Content": "Great post!",
-        "User": { "ID": 3, "Name": "Ani" },
-        "Reactions": [],
-        "Votes": [],
-        "Replies": [
+        "id": 1,
+        "content": "Great post!",
+        "user": { "ID": 3, "Name": "Ani" },
+        "reactions": [],
+        "votes": [],
+        "replies": [
           {
-            "ID": 2,
-            "Content": "Agreed!",
-            "ParentCommentID": 1,
-            "Replies": []
+            "id": 2,
+            "content": "Agreed!",
+            "parent_comment_id": 1,
+            "replies": []
           }
         ]
       }
-    ]
+    ],
+    "created_at": "2026-03-04T19:25:24+07:00"
   }
 }
 ```
+
+> **Note:** `image_url` contains the first image (for backward compatibility). Use `image_urls` array for all images.
+
+### PUT `/api/feed/:id` — Update Post
+
+**Content-Type:** `multipart/form-data`
+
+| Field      | Required | Notes                                                |
+| ---------- | -------- | ---------------------------------------------------- |
+| `title`    | ❌       | Updated title (if provided)                          |
+| `content`  | ❌       | Updated content (if provided)                        |
+| `category` | ❌       | Updated category (if provided)                       |
+| `images`   | ❌       | New multiple image files (replaces all old images)   |
+| `image`    | ❌       | Single image file (legacy, kept for backward compat) |
+
+> **Authentication:** Only the post owner can update.  
+> **Note:** If new images are provided, all previous images are deleted and replaced with the new ones.
+
+**Response `200`:**
+
+```json
+{
+  "success": true,
+  "data": {
+    "id": 3,
+    "user_id": 2,
+    "title": "Updated title",
+    "content": "Updated content!",
+    "category": "General",
+    "image_url": "https://res.cloudinary.com/.../new-image.jpg",
+    "image_urls": ["https://res.cloudinary.com/.../new-image.jpg"]
+  }
+}
+```
+
+---
 
 ### POST `/api/feed/:id/react` — React to Post
 

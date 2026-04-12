@@ -4,6 +4,7 @@ import (
 	"strconv"
 
 	"github.com/gofiber/fiber/v2"
+	"github.com/reganputra/skripsi-backend/config"
 	"github.com/reganputra/skripsi-backend/service"
 	"github.com/reganputra/skripsi-backend/utils"
 )
@@ -24,16 +25,27 @@ func (ctrl *FeedController) CreatePost(c *fiber.Ctx) error {
 		return utils.ErrorResponse(c, fiber.StatusUnauthorized, err.Error())
 	}
 
-	imageURL, err := uploadFileIfPresent(c, "image", "alumni-platform/feed")
+	imageURLs, err := uploadFilesIfPresent(c, "images", "alumni-platform/feed")
 	if err != nil {
 		return utils.ErrorResponse(c, fiber.StatusInternalServerError, err.Error())
 	}
 
+	// Also support legacy single "image" field for backward compatibility
+	if len(imageURLs) == 0 {
+		imageURL, err := uploadFileIfPresent(c, "image", "alumni-platform/feed")
+		if err != nil {
+			return utils.ErrorResponse(c, fiber.StatusInternalServerError, err.Error())
+		}
+		if imageURL != "" {
+			imageURLs = []string{imageURL}
+		}
+	}
+
 	req := service.PostRequest{
-		Category: parseOptionalString(c.FormValue("category")),
-		Title:    c.FormValue("title"),
-		Content:  c.FormValue("content"),
-		ImageURL: parseOptionalString(imageURL),
+		Category:  parseOptionalString(c.FormValue("category")),
+		Title:     c.FormValue("title"),
+		Content:   c.FormValue("content"),
+		ImageURLs: imageURLs,
 	}
 
 	post, err := ctrl.feedSvc.CreatePost(userID, req)
@@ -81,16 +93,27 @@ func (ctrl *FeedController) UpdatePost(c *fiber.Ctx) error {
 		return utils.ErrorResponse(c, fiber.StatusBadRequest, "ID postingan tidak valid")
 	}
 
-	imageURL, err := uploadFileIfPresent(c, "image", "alumni-platform/feed")
+	imageURLs, err := uploadFilesIfPresent(c, "images", "alumni-platform/feed")
 	if err != nil {
 		return utils.ErrorResponse(c, fiber.StatusInternalServerError, err.Error())
 	}
 
+	// Also support legacy single "image" field for backward compatibility
+	if len(imageURLs) == 0 {
+		imageURL, err := uploadFileIfPresent(c, "image", "alumni-platform/feed")
+		if err != nil {
+			return utils.ErrorResponse(c, fiber.StatusInternalServerError, err.Error())
+		}
+		if imageURL != "" {
+			imageURLs = []string{imageURL}
+		}
+	}
+
 	req := service.PostRequest{
-		Category: parseOptionalString(c.FormValue("category")),
-		Title:    c.FormValue("title"),
-		Content:  c.FormValue("content"),
-		ImageURL: parseOptionalString(imageURL),
+		Category:  parseOptionalString(c.FormValue("category")),
+		Title:     c.FormValue("title"),
+		Content:   c.FormValue("content"),
+		ImageURLs: imageURLs,
 	}
 
 	post, err := ctrl.feedSvc.UpdatePost(userID, uint(postID), req)
@@ -266,4 +289,29 @@ func (ctrl *FeedController) VoteComment(c *fiber.Ctx) error {
 		return utils.ErrorResponse(c, fiber.StatusBadRequest, err.Error())
 	}
 	return utils.SuccessResponse(c, fiber.StatusOK, fiber.Map{"action": result})
+}
+
+// uploadFilesIfPresent uploads multiple image files from a form field to Cloudinary.
+// Returns empty slice and nil error if no files were provided.
+func uploadFilesIfPresent(c *fiber.Ctx, fieldName, folder string) ([]string, error) {
+	form, err := c.MultipartForm()
+	if err != nil {
+		return []string{}, nil
+	}
+
+	files := form.File[fieldName]
+	if len(files) == 0 {
+		return []string{}, nil
+	}
+
+	var urls []string
+	for _, file := range files {
+		url, err := utils.UploadImage(config.Cloudinary, file, folder)
+		if err != nil {
+			return nil, err
+		}
+		urls = append(urls, url)
+	}
+
+	return urls, nil
 }
