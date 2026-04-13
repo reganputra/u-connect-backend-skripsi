@@ -1,6 +1,7 @@
 package ws
 
 import (
+	"log"
 	"sync"
 
 	fws "github.com/gofiber/contrib/websocket"
@@ -8,9 +9,9 @@ import (
 
 // OutgoingMsg is the JSON envelope sent to a WebSocket client.
 type OutgoingMsg struct {
-	Type    string `json:"type"`             // "message" | "error" | "read"
+	Type    string `json:"type"`              // "message" | "notification" | "error"
 	Message string `json:"message,omitempty"` // used for "error" type
-	Data    any    `json:"data,omitempty"`    // used for "message" / "read" type
+	Data    any    `json:"data,omitempty"`    // used for "message" / "notification" type
 }
 
 // Client represents a connected WebSocket session.
@@ -27,12 +28,6 @@ type Hub struct {
 	clients    map[uint]*Client // keyed by userID (one connection per user)
 	Register   chan *Client
 	Unregister chan *Client
-	Deliver    chan delivery // direct message delivery
-}
-
-type delivery struct {
-	ReceiverID uint
-	Payload    []byte
 }
 
 // NewHub creates a new Hub instance (not started yet).
@@ -41,40 +36,35 @@ func NewHub() *Hub {
 		clients:    make(map[uint]*Client),
 		Register:   make(chan *Client, 16),
 		Unregister: make(chan *Client, 16),
-		Deliver:    make(chan delivery, 256),
 	}
 }
 
 // Run starts the hub event loop. Call this in a goroutine.
 func (h *Hub) Run() {
+	log.Println("[WS/HUB] INFO  hub started")
 	for {
 		select {
 		case client := <-h.Register:
 			h.mu.Lock()
-			// If the user already has an open connection, close the old one gracefully.
 			if old, ok := h.clients[client.UserID]; ok {
+				// A second tab / device opened — drop the stale connection.
+				log.Printf("[WS/HUB] WARN  replacing existing connection — userID: %d", client.UserID)
 				close(old.Done)
 			}
 			h.clients[client.UserID] = client
+			total := len(h.clients)
 			h.mu.Unlock()
+			log.Printf("[WS/HUB] INFO  registered   — userID: %d, online: %d", client.UserID, total)
 
 		case client := <-h.Unregister:
 			h.mu.Lock()
 			if current, ok := h.clients[client.UserID]; ok && current == client {
 				delete(h.clients, client.UserID)
-			}
-			h.mu.Unlock()
-
-		case d := <-h.Deliver:
-			h.mu.RLock()
-			client, ok := h.clients[d.ReceiverID]
-			h.mu.RUnlock()
-			if ok {
-				select {
-				case client.Send <- d.Payload:
-				default:
-					// Client send channel full — drop to avoid blocking hub goroutine
-				}
+				total := len(h.clients)
+				h.mu.Unlock()
+				log.Printf("[WS/HUB] INFO  unregistered — userID: %d, online: %d", client.UserID, total)
+			} else {
+				h.mu.Unlock() // stale unregister (already replaced), nothing to do
 			}
 		}
 	}

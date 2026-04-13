@@ -20,3 +20,4 @@ health-store.db
 
 # Environment variables
 .env
+.kilo

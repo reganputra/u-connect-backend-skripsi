@@ -1929,7 +1929,7 @@ Marks all messages **from `:userID` to the caller** as read.
 
 #### `GET /api/ws` — Connect
 
-> Auth via query param (not header) because WebSocket upgrade is a GET request.
+> Auth via query param (not header) because WebSocket upgrade is a GET request and browsers cannot set custom headers for it.
 
 ```
 ws://localhost:8080/api/ws?token=<jwt>
@@ -1937,10 +1937,13 @@ ws://localhost:8080/api/ws?token=<jwt>
 
 **Connection flow:**
 
-1. Server validates JWT from `?token=`
-2. Verifies role is `student` or `alumni`
-3. Registers client in the Hub (one connection per user; old connection replaced)
-4. Starts write pump (Hub → client) and read pump (client → Hub → DB → recipient)
+1. Server validates JWT from `?token=` **before** the HTTP → WebSocket upgrade
+   - Missing or invalid token → `401 Unauthorized` HTTP response *(upgrade never attempted)*
+   - Role not `student` or `alumni` → `403 Forbidden` HTTP response *(upgrade never attempted)*
+2. Server upgrades the connection (`101 Switching Protocols`)
+3. Registers client in the Hub (one connection per user; existing connection is replaced)
+4. Keepalive starts: server sends a **Ping** frame every **30 s**; client must reply with a **Pong** within **60 s** or the connection is closed
+5. Starts write pump (Hub → client) and read pump (client → Hub → DB → recipient)
 
 #### Client → Server (send message)
 
@@ -1978,14 +1981,339 @@ ws://localhost:8080/api/ws?token=<jwt>
 }
 ```
 
-**Error cases over WebSocket:**
-| Cause | Error message |
+**Error cases:**
+
+| Cause | How it surfaces |
 |---|---|
-| Not following recipient | `anda harus mengikuti pengguna ini sebelum mengirim pesan` |
-| Missing `receiver_id` or `content` | `receiver_id dan content wajib diisi` |
-| Invalid JSON | `format pesan tidak valid` |
-| Token missing or invalid | Connection closed immediately |
-| Wrong role | Connection closed immediately |
+| Missing token | `401 Unauthorized` HTTP response — before upgrade |
+| Invalid or expired token | `401 Unauthorized` HTTP response — before upgrade |
+| Role not `student` or `alumni` | `403 Forbidden` HTTP response — before upgrade |
+| Not following recipient | `{"type":"error","message":"anda harus mengikuti pengguna ini sebelum mengirim pesan"}` WebSocket frame |
+| Missing `receiver_id` or `content` | `{"type":"error","message":"receiver_id dan content wajib diisi"}` WebSocket frame |
+| Invalid JSON payload | `{"type":"error","message":"format pesan tidak valid"}` WebSocket frame |
+
+---
+
+#### Frontend Integration Example (JavaScript / React)
+
+> The examples below assume a **Vite + React** project. All three files work together:
+> `lib/chatSocket.js` → `hooks/useChat.js` → `components/ChatWindow.jsx`.
+>
+> **Ping / Pong is fully transparent** — the browser WebSocket API handles Pong replies automatically. Your JavaScript code never needs to deal with it.
+
+---
+
+##### `lib/chatSocket.js` — Standalone WebSocket class
+
+```javascript
+// lib/chatSocket.js
+//
+// Wraps the native WebSocket API with:
+//   • JWT auth via ?token= query param (no custom headers needed)
+//   • JSON message framing matching the server envelope
+//   • Automatic reconnect with exponential back-off (up to MAX_RETRIES)
+
+const WS_BASE_URL = import.meta.env.VITE_WS_URL ?? 'ws://localhost:8080';
+
+const MAX_RETRIES   = 5;
+const BASE_DELAY_MS = 1_000; // first reconnect delay; doubles each attempt
+
+export class ChatSocket {
+  #ws                  = null;
+  #token;
+  #retries             = 0;
+  #reconnectTimer      = null;
+  #intentionallyClosed = false;
+
+  // ── Callbacks (assign before calling connect()) ───────────────────────────
+  /** Called with the persisted Message object when a new message arrives. */
+  onMessage      = null; // (msg)   => void
+  /** Called with the persisted Notification object when a notification arrives. */
+  onNotification = null; // (notif) => void
+  /** Called with the server error string when an error frame arrives. */
+  onError        = null; // (text)  => void
+  /** Called whenever the connection status changes. */
+  onStatusChange = null; // ('connecting'|'open'|'closed'|'error') => void
+
+  constructor(token) {
+    this.#token = token;
+  }
+
+  // ── Public API ────────────────────────────────────────────────────────────
+
+  connect() {
+    if (this.#ws?.readyState === WebSocket.OPEN) return;
+
+    this.#intentionallyClosed = false;
+    this.#notify('connecting');
+
+    const url = `${WS_BASE_URL}/api/ws?token=${encodeURIComponent(this.#token)}`;
+    this.#ws = new WebSocket(url);
+
+    this.#ws.onopen = () => {
+      this.#retries = 0;
+      this.#notify('open');
+    };
+
+    this.#ws.onmessage = ({ data }) => {
+      let envelope;
+      try {
+        envelope = JSON.parse(data);
+      } catch {
+        console.error('[ChatSocket] Unparseable frame:', data);
+        return;
+      }
+
+      switch (envelope.type) {
+        case 'message':
+          this.onMessage?.(envelope.data);
+          break;
+        case 'notification':
+          this.onNotification?.(envelope.data);
+          break;
+        case 'error':
+          this.onError?.(envelope.message);
+          break;
+        default:
+          console.warn('[ChatSocket] Unknown envelope type:', envelope.type);
+      }
+    };
+
+    // onerror always fires before onclose — notify status but let onclose drive reconnect.
+    this.#ws.onerror = () => this.#notify('error');
+
+    this.#ws.onclose = ({ code, reason, wasClean }) => {
+      console.log(`[ChatSocket] Closed — code: ${code}, clean: ${wasClean}, reason: "${reason}"`);
+      this.#notify('closed');
+      if (!this.#intentionallyClosed) this.#scheduleReconnect();
+    };
+  }
+
+  /**
+   * Send a chat message to a recipient.
+   * @param {number} receiverId  Target user's ID.
+   * @param {string} content     Message text (non-empty).
+   */
+  send(receiverId, content) {
+    if (this.#ws?.readyState !== WebSocket.OPEN) {
+      console.warn('[ChatSocket] Cannot send — socket is not open');
+      return;
+    }
+    this.#ws.send(JSON.stringify({ receiver_id: receiverId, content }));
+  }
+
+  /** Permanently close the connection (no automatic reconnect). */
+  disconnect() {
+    this.#intentionallyClosed = true;
+    clearTimeout(this.#reconnectTimer);
+    this.#ws?.close();
+    this.#ws = null;
+  }
+
+  get isConnected() {
+    return this.#ws?.readyState === WebSocket.OPEN;
+  }
+
+  // ── Private helpers ───────────────────────────────────────────────────────
+
+  #scheduleReconnect() {
+    if (this.#retries >= MAX_RETRIES) {
+      console.error('[ChatSocket] Max reconnect attempts reached — giving up');
+      return;
+    }
+    const delay = BASE_DELAY_MS * 2 ** this.#retries;
+    this.#retries++;
+    console.log(`[ChatSocket] Reconnecting in ${delay} ms (attempt ${this.#retries}/${MAX_RETRIES})`);
+    this.#reconnectTimer = setTimeout(() => this.connect(), delay);
+  }
+
+  #notify(status) {
+    this.onStatusChange?.(status);
+  }
+}
+```
+
+---
+
+##### `hooks/useChat.js` — React hook
+
+```javascript
+// hooks/useChat.js
+//
+// Manages a single shared WebSocket connection for the logged-in user.
+// Pass `token = null` (e.g. when the user is not authenticated) to skip connecting.
+
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { ChatSocket } from '../lib/chatSocket';
+
+/**
+ * @param {string|null} token  JWT obtained after login.
+ * @returns {{
+ *   messages:          Array,
+ *   send:              (receiverId: number, content: string) => void,
+ *   isConnected:       boolean,
+ *   connectionStatus:  string,
+ * }}
+ */
+export function useChat(token) {
+  const socketRef        = useRef(null);
+  const [messages,       setMessages]       = useState([]);
+  const [connectionStatus, setStatus]       = useState('closed');
+
+  useEffect(() => {
+    if (!token) return;
+
+    const socket = new ChatSocket(token);
+    socketRef.current = socket;
+
+    // Append every incoming message to local state.
+    // Filter by partner in the component that renders the conversation.
+    socket.onMessage = (msg) => {
+      setMessages((prev) => {
+        // Avoid duplicate echo frames (sender receives its own message back)
+        const exists = prev.some((m) => m.ID === msg.ID);
+        return exists ? prev : [...prev, msg];
+      });
+    };
+
+    // Route notifications to your global notification store / toast system.
+    socket.onNotification = (notif) => {
+      console.log('[useChat] notification:', notif);
+      // e.g. notificationStore.add(notif);
+    };
+
+    socket.onError = (errMsg) => {
+      console.error('[useChat] server error:', errMsg);
+    };
+
+    socket.onStatusChange = setStatus;
+
+    socket.connect();
+
+    return () => {
+      socket.disconnect();
+      socketRef.current = null;
+    };
+  }, [token]); // reconnects automatically if the token changes (e.g. after refresh)
+
+  const send = useCallback((receiverId, content) => {
+    socketRef.current?.send(receiverId, content);
+  }, []);
+
+  return {
+    messages,
+    send,
+    isConnected:      connectionStatus === 'open',
+    connectionStatus,
+  };
+}
+```
+
+---
+
+##### `components/ChatWindow.jsx` — Usage example
+
+```jsx
+// components/ChatWindow.jsx
+//
+// Renders a conversation with a single partner and lets the user send messages.
+// Assumes useAuthStore exposes the raw JWT string as `token`.
+
+import { useState } from 'react';
+import { useChat }      from '../hooks/useChat';
+import { useAuthStore } from '../stores/authStore'; // adjust to your auth solution
+
+/**
+ * @param {{ partnerId: number }} props
+ */
+export function ChatWindow({ partnerId }) {
+  const token = useAuthStore((s) => s.token);
+  const { messages, send, isConnected, connectionStatus } = useChat(token);
+  const [draft, setDraft] = useState('');
+
+  // Show only messages that belong to this conversation
+  const conversation = messages.filter(
+    (m) => m.SenderID === partnerId || m.ReceiverID === partnerId,
+  );
+
+  const handleSend = () => {
+    const text = draft.trim();
+    if (!text || !isConnected) return;
+    send(partnerId, text);
+    setDraft('');
+  };
+
+  return (
+    <div className="chat-window">
+      {/* ── Connection status badge ── */}
+      <div className={`status status--${connectionStatus}`}>
+        {connectionStatus === 'open'       && '🟢 Connected'}
+        {connectionStatus === 'connecting' && '🟡 Connecting…'}
+        {connectionStatus === 'closed'     && '🔴 Disconnected'}
+        {connectionStatus === 'error'      && '🔴 Connection error'}
+      </div>
+
+      {/* ── Message list ── */}
+      <ul className="message-list">
+        {conversation.map((m) => (
+          <li
+            key={m.ID}
+            className={m.SenderID === partnerId ? 'message--incoming' : 'message--outgoing'}
+          >
+            <span className="message__content">{m.Content}</span>
+            <span className="message__time">
+              {new Date(m.CreatedAt).toLocaleTimeString()}
+            </span>
+          </li>
+        ))}
+      </ul>
+
+      {/* ── Composer ── */}
+      <div className="composer">
+        <input
+          value={draft}
+          onChange={(e) => setDraft(e.target.value)}
+          onKeyDown={(e) => e.key === 'Enter' && !e.shiftKey && handleSend()}
+          placeholder={isConnected ? 'Ketik pesan…' : 'Menghubungkan…'}
+          disabled={!isConnected}
+        />
+        <button onClick={handleSend} disabled={!isConnected || !draft.trim()}>
+          Kirim
+        </button>
+      </div>
+    </div>
+  );
+}
+```
+
+---
+
+##### Environment variable
+
+Add to your `.env` (Vite project):
+
+```env
+# Development
+VITE_WS_URL=ws://localhost:8080
+
+# Production
+VITE_WS_URL=wss://api.yourapp.com
+```
+
+> Use `wss://` (WebSocket Secure) in production — equivalent to HTTPS for WebSocket connections.
+
+---
+
+##### Key behaviours to know
+
+| Behaviour | Detail |
+|---|---|
+| Auth failure (401 / 403) | `onclose` fires immediately with `wasClean: false`; the class schedules a reconnect — check `onError` in your auth store and call `socket.disconnect()` instead if it's an auth error |
+| Duplicate echo frame | The server echoes every sent message back to the sender as delivery confirmation; `useChat` deduplicates by `msg.ID` |
+| Ping / Pong | Handled silently by the browser — your JS code never sees raw Ping or Pong frames |
+| Reconnect back-off | 1 s → 2 s → 4 s → 8 s → 16 s, then gives up; reset on successful open |
+| Token refresh | If your auth library refreshes the JWT, pass the new token to `useChat` — the effect re-runs and opens a fresh connection |
+| Missed messages | If the user was offline, fetch history via `GET /api/messages/:userID` on reconnect |
 
 ---
 
@@ -2048,4 +2376,4 @@ CORS_ALLOWED_ORIGINS=https://yourapp.com,https://www.yourapp.com
 ```
 
 Allowed methods: `GET, POST, PUT, PATCH, DELETE, OPTIONS`  
-Allowed headers: `Origin, Content-Type, Accept, Authorization`
+Allowed headers: `Origin, Content-Type, Accept, Authorization, Sec-WebSocket-Key, Sec-WebSocket-Version, Sec-WebSocket-Extensions, Connection, Upgrade`
