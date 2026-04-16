@@ -202,14 +202,27 @@ func (ctrl *GroupController) CreateGroupArticle(c *fiber.Ctx) error {
 	if err != nil {
 		return utils.ErrorResponse(c, fiber.StatusBadRequest, "ID grup tidak valid")
 	}
-	mediaURL, err := uploadFileIfPresent(c, "media", "alumni-platform/groups/articles")
+
+	mediaURLs, err := uploadFilesIfPresent(c, "medias", "alumni-platform/groups/articles")
 	if err != nil {
 		return utils.ErrorResponse(c, fiber.StatusInternalServerError, err.Error())
 	}
+
+	// Also support legacy single "media" field for backward compatibility
+	if len(mediaURLs) == 0 {
+		mediaURL, err := uploadFileIfPresent(c, "media", "alumni-platform/groups/articles")
+		if err != nil {
+			return utils.ErrorResponse(c, fiber.StatusInternalServerError, err.Error())
+		}
+		if mediaURL != "" {
+			mediaURLs = []string{mediaURL}
+		}
+	}
+
 	req := service.GroupArticleRequest{
-		Title:    c.FormValue("title"),
-		Content:  c.FormValue("content"),
-		MediaURL: parseOptionalString(mediaURL),
+		Title:     c.FormValue("title"),
+		Content:   c.FormValue("content"),
+		MediaURLs: mediaURLs,
 	}
 	article, err := ctrl.groupSvc.CreateGroupArticle(userID, uint(groupID), req)
 	if err != nil {
@@ -243,14 +256,27 @@ func (ctrl *GroupController) UpdateGroupArticle(c *fiber.Ctx) error {
 	if err != nil {
 		return utils.ErrorResponse(c, fiber.StatusBadRequest, "ID artikel tidak valid")
 	}
-	mediaURL, err := uploadFileIfPresent(c, "media", "alumni-platform/groups/articles")
+
+	mediaURLs, err := uploadFilesIfPresent(c, "medias", "alumni-platform/groups/articles")
 	if err != nil {
 		return utils.ErrorResponse(c, fiber.StatusInternalServerError, err.Error())
 	}
+
+	// Also support legacy single "media" field for backward compatibility
+	if len(mediaURLs) == 0 {
+		mediaURL, err := uploadFileIfPresent(c, "media", "alumni-platform/groups/articles")
+		if err != nil {
+			return utils.ErrorResponse(c, fiber.StatusInternalServerError, err.Error())
+		}
+		if mediaURL != "" {
+			mediaURLs = []string{mediaURL}
+		}
+	}
+
 	req := service.GroupArticleRequest{
-		Title:    c.FormValue("title"),
-		Content:  c.FormValue("content"),
-		MediaURL: parseOptionalString(mediaURL),
+		Title:     c.FormValue("title"),
+		Content:   c.FormValue("content"),
+		MediaURLs: mediaURLs,
 	}
 	article, err := ctrl.groupSvc.UpdateGroupArticle(userID, uint(articleID), req)
 	if err != nil {

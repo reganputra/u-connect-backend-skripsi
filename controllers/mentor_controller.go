@@ -324,6 +324,40 @@ func (ctrl *MentorController) GetSentRequests(c *fiber.Ctx) error {
 	return utils.SuccessResponse(c, fiber.StatusOK, requests)
 }
 
+// CreateSessionAsStudent godoc — POST /api/student/sessions  (student only)
+func (ctrl *MentorController) CreateSessionAsStudent(c *fiber.Ctx) error {
+	userID, err := getUserIDFromToken(c)
+	if err != nil {
+		return utils.ErrorResponse(c, fiber.StatusUnauthorized, err.Error())
+	}
+	var body struct {
+		MentorID    uint    `json:"mentor_id"`
+		Topic       string  `json:"topic"`
+		Notes       *string `json:"notes"`
+		SessionDate *string `json:"session_date"`
+	}
+	if err := c.BodyParser(&body); err != nil {
+		return utils.ErrorResponse(c, fiber.StatusBadRequest, "isi permintaan tidak valid")
+	}
+	req := service.StudentSessionRequest{
+		MentorID: body.MentorID,
+		Topic:    body.Topic,
+		Notes:    body.Notes,
+	}
+	if body.SessionDate != nil && *body.SessionDate != "" {
+		t, err := time.Parse(time.RFC3339, *body.SessionDate)
+		if err != nil {
+			return utils.ErrorResponse(c, fiber.StatusBadRequest, "format session_date tidak valid (gunakan ISO 8601)")
+		}
+		req.SessionDate = &t
+	}
+	session, err := ctrl.mentorSvc.CreateSessionAsStudent(userID, req)
+	if err != nil {
+		return utils.ErrorResponse(c, fiber.StatusBadRequest, err.Error())
+	}
+	return utils.SuccessResponse(c, fiber.StatusCreated, session)
+}
+
 // GetStudentSessions godoc — GET /api/student/sessions  (student only)
 func (ctrl *MentorController) GetStudentSessions(c *fiber.Ctx) error {
 	userID, err := getUserIDFromToken(c)

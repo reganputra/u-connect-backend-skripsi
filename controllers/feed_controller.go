@@ -4,7 +4,6 @@ import (
 	"strconv"
 
 	"github.com/gofiber/fiber/v2"
-	"github.com/reganputra/skripsi-backend/config"
 	"github.com/reganputra/skripsi-backend/service"
 	"github.com/reganputra/skripsi-backend/utils"
 )
@@ -289,29 +288,4 @@ func (ctrl *FeedController) VoteComment(c *fiber.Ctx) error {
 		return utils.ErrorResponse(c, fiber.StatusBadRequest, err.Error())
 	}
 	return utils.SuccessResponse(c, fiber.StatusOK, fiber.Map{"action": result})
-}
-
-// uploadFilesIfPresent uploads multiple image files from a form field to Cloudinary.
-// Returns empty slice and nil error if no files were provided.
-func uploadFilesIfPresent(c *fiber.Ctx, fieldName, folder string) ([]string, error) {
-	form, err := c.MultipartForm()
-	if err != nil {
-		return []string{}, nil
-	}
-
-	files := form.File[fieldName]
-	if len(files) == 0 {
-		return []string{}, nil
-	}
-
-	var urls []string
-	for _, file := range files {
-		url, err := utils.UploadImage(config.Cloudinary, file, folder)
-		if err != nil {
-			return nil, err
-		}
-		urls = append(urls, url)
-	}
-
-	return urls, nil
 }

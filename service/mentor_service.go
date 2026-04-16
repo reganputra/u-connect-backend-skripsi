@@ -29,6 +29,13 @@ type SessionRequest struct {
 	SessionDate *time.Time `json:"session_date"`
 }
 
+type StudentSessionRequest struct {
+	MentorID    uint       `json:"mentor_id"`
+	Topic       string     `json:"topic"`
+	Notes       *string    `json:"notes"`
+	SessionDate *time.Time `json:"session_date"`
+}
+
 type UpdateSessionRequest struct {
 	Topic       string     `json:"topic"`
 	Notes       *string    `json:"notes"`
@@ -58,6 +65,7 @@ type MentorService interface {
 	RequestMentoring(studentUserID, mentorUserID uint, req MentoringRequestInput) (*models.MentorRequest, error)
 	GetMyMentors(studentUserID uint) ([]models.MentorRequest, error)
 	GetSentRequests(studentUserID uint) ([]models.MentorRequest, error)
+	CreateSessionAsStudent(studentUserID uint, req StudentSessionRequest) (*models.MentoringSession, error)
 	GetStudentSessions(studentUserID uint) ([]models.MentoringSession, error)
 
 	// ── Recommendation ────────────────────────────────────────────────────────
@@ -314,6 +322,48 @@ func (s *mentorService) CreateSession(mentorUserID uint, req SessionRequest) (*m
 			session.ID,
 		)
 	}
+	return session, nil
+}
+
+func (s *mentorService) CreateSessionAsStudent(studentUserID uint, req StudentSessionRequest) (*models.MentoringSession, error) {
+	if strings.TrimSpace(req.Topic) == "" {
+		return nil, errors.New("topik sesi wajib diisi")
+	}
+	if req.MentorID == 0 {
+		return nil, errors.New("mentor_id wajib diisi")
+	}
+
+	// Validate an approved relationship exists.
+	approvedReq, err := s.sessionRepo.FindApprovedRequest(req.MentorID, studentUserID)
+	if err != nil {
+		return nil, errors.New("tidak ada hubungan mentoring yang disetujui dengan mentor ini")
+	}
+
+	session := &models.MentoringSession{
+		RequestID:   approvedReq.ID,
+		MentorID:    req.MentorID,
+		StudentID:   studentUserID,
+		Topic:       req.Topic,
+		Notes:       req.Notes,
+		SessionDate: req.SessionDate,
+		Status:      "scheduled",
+	}
+	if err := s.sessionRepo.Create(session); err != nil {
+		return nil, errors.New("gagal membuat sesi mentoring")
+	}
+
+	// Notify mentor.
+	if student, err := s.userRepo.FindUserByID(studentUserID); err == nil {
+		_ = s.notifSvc.Notify(
+			req.MentorID,
+			"new_session",
+			"Sesi mentoring dijadwalkan",
+			fmt.Sprintf("%s menjadwalkan sesi: %s", student.Name, req.Topic),
+			"mentor_request",
+			session.ID,
+		)
+	}
+
 	return session, nil
 }
 

@@ -12,6 +12,10 @@ type GroupArticleRepository interface {
 	FindAllCommentsByArticleID(articleID uint) ([]models.GroupComment, error)
 	UpdateGroupArticle(article *models.GroupArticle) error
 	DeleteGroupArticle(id uint) error
+	// Image management
+	FindArticleImages(articleID uint) ([]models.GroupArticleImage, error)
+	DeleteArticleImages(articleID uint) error
+	CreateArticleImage(img *models.GroupArticleImage) error
 }
 
 type groupArticleRepository struct {
@@ -67,5 +71,25 @@ func (r *groupArticleRepository) DeleteGroupArticle(id uint) error {
 	r.db.Where("article_id = ?", id).Delete(&models.GroupReaction{})
 	r.db.Where("comment_id IN (SELECT id FROM group_comments WHERE article_id = ?)", id).Delete(&models.GroupReaction{})
 	r.db.Where("article_id = ?", id).Delete(&models.GroupComment{})
+	r.db.Where("article_id = ?", id).Delete(&models.GroupArticleImage{})
 	return r.db.Delete(&models.GroupArticle{}, id).Error
+}
+
+// ─── Image management ─────────────────────────────────────────────────────────
+
+func (r *groupArticleRepository) FindArticleImages(articleID uint) ([]models.GroupArticleImage, error) {
+	var images []models.GroupArticleImage
+	err := r.db.
+		Where("article_id = ?", articleID).
+		Order("created_at asc").
+		Find(&images).Error
+	return images, err
+}
+
+func (r *groupArticleRepository) DeleteArticleImages(articleID uint) error {
+	return r.db.Where("article_id = ?", articleID).Delete(&models.GroupArticleImage{}).Error
+}
+
+func (r *groupArticleRepository) CreateArticleImage(img *models.GroupArticleImage) error {
+	return r.db.Create(img).Error
 }

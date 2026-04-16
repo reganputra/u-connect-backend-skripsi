@@ -57,6 +57,7 @@ func main() {
 		&models.Group{},
 		&models.GroupMember{},
 		&models.GroupArticle{},
+		&models.GroupArticleImage{},
 		&models.GroupComment{},
 		&models.GroupReaction{},
 		&models.Event{},
