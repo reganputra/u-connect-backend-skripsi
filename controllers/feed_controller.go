@@ -24,16 +24,27 @@ func (ctrl *FeedController) CreatePost(c *fiber.Ctx) error {
 		return utils.ErrorResponse(c, fiber.StatusUnauthorized, err.Error())
 	}
 
-	imageURL, err := uploadFileIfPresent(c, "image", "alumni-platform/feed")
+	imageURLs, err := uploadFilesIfPresent(c, "images", "alumni-platform/feed")
 	if err != nil {
 		return utils.ErrorResponse(c, fiber.StatusInternalServerError, err.Error())
 	}
 
+	// Also support legacy single "image" field for backward compatibility
+	if len(imageURLs) == 0 {
+		imageURL, err := uploadFileIfPresent(c, "image", "alumni-platform/feed")
+		if err != nil {
+			return utils.ErrorResponse(c, fiber.StatusInternalServerError, err.Error())
+		}
+		if imageURL != "" {
+			imageURLs = []string{imageURL}
+		}
+	}
+
 	req := service.PostRequest{
-		Category: parseOptionalString(c.FormValue("category")),
-		Title:    c.FormValue("title"),
-		Content:  c.FormValue("content"),
-		ImageURL: parseOptionalString(imageURL),
+		Category:  parseOptionalString(c.FormValue("category")),
+		Title:     c.FormValue("title"),
+		Content:   c.FormValue("content"),
+		ImageURLs: imageURLs,
 	}
 
 	post, err := ctrl.feedSvc.CreatePost(userID, req)
@@ -81,16 +92,27 @@ func (ctrl *FeedController) UpdatePost(c *fiber.Ctx) error {
 		return utils.ErrorResponse(c, fiber.StatusBadRequest, "ID postingan tidak valid")
 	}
 
-	imageURL, err := uploadFileIfPresent(c, "image", "alumni-platform/feed")
+	imageURLs, err := uploadFilesIfPresent(c, "images", "alumni-platform/feed")
 	if err != nil {
 		return utils.ErrorResponse(c, fiber.StatusInternalServerError, err.Error())
 	}
 
+	// Also support legacy single "image" field for backward compatibility
+	if len(imageURLs) == 0 {
+		imageURL, err := uploadFileIfPresent(c, "image", "alumni-platform/feed")
+		if err != nil {
+			return utils.ErrorResponse(c, fiber.StatusInternalServerError, err.Error())
+		}
+		if imageURL != "" {
+			imageURLs = []string{imageURL}
+		}
+	}
+
 	req := service.PostRequest{
-		Category: parseOptionalString(c.FormValue("category")),
-		Title:    c.FormValue("title"),
-		Content:  c.FormValue("content"),
-		ImageURL: parseOptionalString(imageURL),
+		Category:  parseOptionalString(c.FormValue("category")),
+		Title:     c.FormValue("title"),
+		Content:   c.FormValue("content"),
+		ImageURLs: imageURLs,
 	}
 
 	post, err := ctrl.feedSvc.UpdatePost(userID, uint(postID), req)

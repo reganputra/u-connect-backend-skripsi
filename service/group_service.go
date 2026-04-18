@@ -7,6 +7,7 @@ import (
 
 	"github.com/reganputra/skripsi-backend/models"
 	"github.com/reganputra/skripsi-backend/repository"
+	"gorm.io/gorm"
 )
 
 var validGroupReactionTypes = map[string]bool{
@@ -25,9 +26,10 @@ type GroupRequest struct {
 }
 
 type GroupArticleRequest struct {
-	Title    string  `json:"title"`
-	Content  string  `json:"content"`
-	MediaURL *string `json:"media_url"`
+	Title     string   `json:"title"`
+	Content   string   `json:"content"`
+	MediaURL  *string  `json:"media_url"`  // Deprecated: keeping for backward compatibility
+	MediaURLs []string `json:"media_urls"` // New: multiple image URLs
 }
 
 type GroupCommentRequest struct {
@@ -55,17 +57,60 @@ type GroupCommentNode struct {
 }
 
 type GroupArticleDetailResponse struct {
-	ID        uint                   `json:"id"`
-	GroupID   uint                   `json:"group_id"`
-	UserID    uint                   `json:"user_id"`
-	User      models.User            `json:"user"`
-	Title     string                 `json:"title"`
-	Content   string                 `json:"content"`
-	MediaURL  *string                `json:"media_url"`
-	Reactions []models.GroupReaction `json:"reactions"`
-	Comments  []*GroupCommentNode    `json:"comments"`
-	CreatedAt time.Time              `json:"created_at"`
-	UpdatedAt time.Time              `json:"updated_at"`
+	ID           uint                   `json:"id"`
+	GroupID      uint                   `json:"group_id"`
+	UserID       uint                   `json:"user_id"`
+	User         models.User            `json:"user"`
+	Title        string                 `json:"title"`
+	Content      string                 `json:"content"`
+	MediaURL     *string                `json:"media_url"`  // Deprecated: first image only
+	MediaURLs    []string               `json:"media_urls"` // New: all images
+	CommentCount int                    `json:"comment_count"`
+	Reactions    []models.GroupReaction `json:"reactions"`
+	Comments     []*GroupCommentNode    `json:"comments"`
+	CreatedAt    time.Time              `json:"created_at"`
+	UpdatedAt    time.Time              `json:"updated_at"`
+}
+
+type GroupListItemResponse struct {
+	*models.Group
+	MemberCount  int `json:"member_count"`
+	ArticleCount int `json:"article_count"`
+}
+
+type GroupArticleWithCount struct {
+	ID           uint                   `json:"ID"`
+	CreatedAt    time.Time              `json:"CreatedAt"`
+	UpdatedAt    time.Time              `json:"UpdatedAt"`
+	DeletedAt    gorm.DeletedAt         `json:"DeletedAt"`
+	GroupID      uint                   `json:"GroupID"`
+	UserID       uint                   `json:"UserID"`
+	Title        string                 `json:"Title"`
+	Content      string                 `json:"Content"`
+	MediaURL     *string                `json:"MediaURL"`   // Deprecated: first image only
+	MediaURLs    []string               `json:"media_urls"` // New: all images
+	User         models.User            `json:"User"`
+	Comments     []models.GroupComment  `json:"Comments"`
+	Reactions    []models.GroupReaction `json:"Reactions"`
+	CommentCount int                    `json:"comment_count"`
+}
+
+type GroupDetailResponse struct {
+	ID           uint                    `json:"ID"`
+	CreatedAt    time.Time               `json:"CreatedAt"`
+	UpdatedAt    time.Time               `json:"UpdatedAt"`
+	DeletedAt    gorm.DeletedAt          `json:"DeletedAt"`
+	OwnerID      uint                    `json:"OwnerID"`
+	Category     string                  `json:"Category"`
+	Title        string                  `json:"Title"`
+	Description  *string                 `json:"Description"`
+	Rules        *string                 `json:"Rules"`
+	BannerURL    *string                 `json:"BannerURL"`
+	Owner        models.User             `json:"Owner"`
+	Members      []models.GroupMember    `json:"Members"`
+	Articles     []GroupArticleWithCount `json:"Articles"`
+	MemberCount  int                     `json:"member_count"`
+	ArticleCount int                     `json:"article_count"`
 }
 
 func buildGroupCommentTree(comments []models.GroupComment) []*GroupCommentNode {
@@ -109,8 +154,8 @@ func buildGroupCommentTree(comments []models.GroupComment) []*GroupCommentNode {
 
 type GroupService interface {
 	CreateGroup(userID uint, req GroupRequest) (*models.Group, error)
-	GetGroups() ([]models.Group, error)
-	GetGroupByID(id uint) (*models.Group, error)
+	GetGroups() ([]*GroupListItemResponse, error)
+	GetGroupByID(id uint) (*GroupDetailResponse, error)
 	UpdateGroup(userID uint, groupID uint, req GroupRequest) (*models.Group, error)
 	DeleteGroup(userID uint, groupID uint) error
 
@@ -198,16 +243,99 @@ func (s *groupService) CreateGroup(userID uint, req GroupRequest) (*models.Group
 	return group, nil
 }
 
-func (s *groupService) GetGroups() ([]models.Group, error) {
-	return s.groupRepo.FindGroups()
+func (s *groupService) GetGroups() ([]*GroupListItemResponse, error) {
+	groups, err := s.groupRepo.FindGroups()
+	if err != nil {
+		return nil, err
+	}
+
+	result := make([]*GroupListItemResponse, 0, len(groups))
+	for i := range groups {
+		group := groups[i]
+
+		memberCount64, err := s.memberRepo.CountGroupMembers(group.ID)
+		if err != nil {
+			memberCount64 = 0
+		}
+
+		articles, err := s.articleRepo.FindGroupArticles(group.ID)
+		if err != nil {
+			articles = []models.GroupArticle{}
+		}
+
+		result = append(result, &GroupListItemResponse{
+			Group:        &group,
+			MemberCount:  int(memberCount64),
+			ArticleCount: len(articles),
+		})
+	}
+
+	if result == nil {
+		result = []*GroupListItemResponse{}
+	}
+	return result, nil
 }
 
-func (s *groupService) GetGroupByID(id uint) (*models.Group, error) {
+func (s *groupService) GetGroupByID(id uint) (*GroupDetailResponse, error) {
 	group, err := s.groupRepo.FindGroupByID(id)
 	if err != nil {
 		return nil, errors.New("grup tidak ditemukan")
 	}
-	return group, nil
+
+	articles := make([]GroupArticleWithCount, 0, len(group.Articles))
+	for i := range group.Articles {
+		article := group.Articles[i]
+		comments, err := s.articleRepo.FindAllCommentsByArticleID(article.ID)
+		if err != nil {
+			comments = []models.GroupComment{}
+		}
+
+		// Fetch article images
+		images, _ := s.articleRepo.FindArticleImages(article.ID)
+		mediaURLs := make([]string, 0)
+		for _, img := range images {
+			mediaURLs = append(mediaURLs, img.ImageURL)
+		}
+		// If no images found but MediaURL exists (backward compat), use it
+		if len(mediaURLs) == 0 && article.MediaURL != nil {
+			mediaURLs = append(mediaURLs, *article.MediaURL)
+		}
+
+		articles = append(articles, GroupArticleWithCount{
+			ID:           article.ID,
+			CreatedAt:    article.CreatedAt,
+			UpdatedAt:    article.UpdatedAt,
+			DeletedAt:    article.DeletedAt,
+			GroupID:      article.GroupID,
+			UserID:       article.UserID,
+			Title:        article.Title,
+			Content:      article.Content,
+			MediaURL:     article.MediaURL,
+			MediaURLs:    mediaURLs,
+			User:         article.User,
+			Comments:     article.Comments,
+			Reactions:    article.Reactions,
+			CommentCount: len(comments),
+		})
+	}
+
+	return &GroupDetailResponse{
+		ID:           group.ID,
+		CreatedAt:    group.CreatedAt,
+		UpdatedAt:    group.UpdatedAt,
+		DeletedAt:    group.DeletedAt,
+		OwnerID:      group.OwnerID,
+		Category:     group.Category,
+		Title:        group.Title,
+		Description:  group.Description,
+		Rules:        group.Rules,
+		BannerURL:    group.BannerURL,
+		Owner:        group.Owner,
+		Members:      group.Members,
+		Articles:     articles,
+		MemberCount:  len(group.Members),
+		ArticleCount: len(group.Articles),
+	}, nil
 }
 
 func (s *groupService) UpdateGroup(userID uint, groupID uint, req GroupRequest) (*models.Group, error) {
@@ -317,17 +445,43 @@ func (s *groupService) CreateGroupArticle(userID uint, groupID uint, req GroupAr
 	if req.Title == "" || req.Content == "" {
 		return nil, errors.New("judul dan konten wajib diisi")
 	}
+	legacyMediaURL := req.MediaURL
+	if len(req.MediaURLs) > 0 {
+		first := req.MediaURLs[0]
+		legacyMediaURL = &first
+	}
+
 	article := &models.GroupArticle{
 		GroupID:  groupID,
 		UserID:   userID,
 		Title:    req.Title,
 		Content:  req.Content,
-		MediaURL: req.MediaURL,
+		MediaURL: legacyMediaURL,
 	}
 	if err := s.articleRepo.CreateGroupArticle(article); err != nil {
 		return nil, errors.New("gagal membuat artikel")
 	}
-	return article, nil
+
+	// Save multiple images
+	for _, mediaURL := range req.MediaURLs {
+		if mediaURL != "" {
+			img := &models.GroupArticleImage{
+				ArticleID: article.ID,
+				ImageURL:  mediaURL,
+			}
+			if err := s.articleRepo.CreateArticleImage(img); err != nil {
+				_ = s.articleRepo.DeleteGroupArticle(article.ID)
+				return nil, errors.New("gagal menyimpan media artikel")
+			}
+		}
+	}
+
+	// Reload to include preloaded relations expected by some clients (e.g. User).
+	created, err := s.articleRepo.FindGroupArticleByID(article.ID)
+	if err != nil {
+		return article, nil
+	}
+	return created, nil
 }
 
 func (s *groupService) GetGroupArticleDetail(userID uint, articleID uint) (*GroupArticleDetailResponse, error) {
@@ -339,18 +493,33 @@ func (s *groupService) GetGroupArticleDetail(userID uint, articleID uint) (*Grou
 	if !s.isMember(article.GroupID, userID) {
 		comments = []models.GroupComment{}
 	}
+	commentTree := buildGroupCommentTree(comments)
+
+	// Fetch article images
+	images, _ := s.articleRepo.FindArticleImages(articleID)
+	mediaURLs := make([]string, 0)
+	for _, img := range images {
+		mediaURLs = append(mediaURLs, img.ImageURL)
+	}
+	// If no images found but MediaURL exists (backward compat), use it
+	if len(mediaURLs) == 0 && article.MediaURL != nil {
+		mediaURLs = append(mediaURLs, *article.MediaURL)
+	}
+
 	return &GroupArticleDetailResponse{
-		ID:        article.ID,
-		GroupID:   article.GroupID,
-		UserID:    article.UserID,
-		User:      article.User,
-		Title:     article.Title,
-		Content:   article.Content,
-		MediaURL:  article.MediaURL,
-		Reactions: article.Reactions,
-		Comments:  buildGroupCommentTree(comments),
-		CreatedAt: article.CreatedAt,
-		UpdatedAt: article.UpdatedAt,
+		ID:           article.ID,
+		GroupID:      article.GroupID,
+		UserID:       article.UserID,
+		User:         article.User,
+		Title:        article.Title,
+		Content:      article.Content,
+		MediaURL:     article.MediaURL,
+		MediaURLs:    mediaURLs,
+		CommentCount: len(comments),
+		Reactions:    article.Reactions,
+		Comments:     commentTree,
+		CreatedAt:    article.CreatedAt,
+		UpdatedAt:    article.UpdatedAt,
 	}, nil
 }
 
@@ -368,12 +537,36 @@ func (s *groupService) UpdateGroupArticle(userID uint, articleID uint, req Group
 	if req.Content != "" {
 		article.Content = req.Content
 	}
-	if req.MediaURL != nil {
+	if len(req.MediaURLs) > 0 {
+		first := req.MediaURLs[0]
+		article.MediaURL = &first
+	} else if req.MediaURL != nil {
 		article.MediaURL = req.MediaURL
 	}
 	if err := s.articleRepo.UpdateGroupArticle(article); err != nil {
 		return nil, errors.New("gagal memperbarui artikel")
 	}
+
+	// If new media URLs supplied, replace all old ones
+	if len(req.MediaURLs) > 0 {
+		// Delete existing images
+		if err := s.articleRepo.DeleteArticleImages(articleID); err != nil {
+			return nil, errors.New("gagal memperbarui media artikel")
+		}
+		// Create new images
+		for _, mediaURL := range req.MediaURLs {
+			if mediaURL != "" {
+				img := &models.GroupArticleImage{
+					ArticleID: articleID,
+					ImageURL:  mediaURL,
+				}
+				if err := s.articleRepo.CreateArticleImage(img); err != nil {
+					return nil, errors.New("gagal memperbarui media artikel")
+				}
+			}
+		}
+	}
+
 	return article, nil
 }
 

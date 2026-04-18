@@ -38,7 +38,8 @@ type PostDetailResponse struct {
 	Category  *string           `json:"category"`
 	Title     string            `json:"title"`
 	Content   string            `json:"content"`
-	ImageURL  *string           `json:"image_url"`
+	ImageURL  *string           `json:"image_url"` // deprecated, kept for backward compatibility
+	ImageURLs []string          `json:"image_urls"`
 	Reactions []models.Reaction `json:"reactions"`
 	Votes     []models.Vote     `json:"votes"`
 	Comments  []*CommentNode    `json:"comments"`
@@ -54,7 +55,8 @@ type PostListItem struct {
 	Category      *string     `json:"category"`
 	Title         string      `json:"title"`
 	Content       string      `json:"content"`
-	ImageURL      *string     `json:"image_url"`
+	ImageURL      *string     `json:"image_url"` // deprecated, kept for backward compatibility
+	ImageURLs     []string    `json:"image_urls"`
 	CommentCount  int         `json:"comment_count"`
 	ReactionCount int         `json:"reaction_count"`
 	VoteCount     int         `json:"vote_count"`
@@ -110,10 +112,11 @@ func buildCommentTree(comments []models.Comment) []*CommentNode {
 // ─── DTOs ────────────────────────────────────────────────────────────────────
 
 type PostRequest struct {
-	Category *string `json:"category"`
-	Title    string  `json:"title"`
-	Content  string  `json:"content"`
-	ImageURL *string `json:"image_url"` // set by controller after upload
+	Category  *string  `json:"category"`
+	Title     string   `json:"title"`
+	Content   string   `json:"content"`
+	ImageURL  *string  `json:"image_url"`  // deprecated, kept for backward compatibility
+	ImageURLs []string `json:"image_urls"` // set by controller after uploads
 }
 
 type CommentRequest struct {
@@ -184,16 +187,37 @@ func (s *feedService) CreatePost(userID uint, req PostRequest) (*models.Post, er
 	if req.Title == "" || req.Content == "" {
 		return nil, errors.New("judul dan konten wajib diisi")
 	}
+
+	// Set legacy ImageURL to first image for backward compatibility
+	imageURL := req.ImageURL
+	if imageURL == nil && len(req.ImageURLs) > 0 {
+		imageURL = &req.ImageURLs[0]
+	}
+
 	post := &models.Post{
 		UserID:   userID,
 		Category: req.Category,
 		Title:    req.Title,
 		Content:  req.Content,
-		ImageURL: req.ImageURL,
+		ImageURL: imageURL,
 	}
+
 	if err := s.postRepo.CreatePost(post); err != nil {
 		return nil, errors.New("gagal membuat postingan")
 	}
+
+	// Save individual post images
+	for _, imgURL := range req.ImageURLs {
+		image := &models.PostImage{
+			PostID:   post.ID,
+			ImageURL: imgURL,
+		}
+		if err := s.postRepo.CreatePostImage(image); err != nil {
+			// Log error but don't fail the entire post creation
+			return nil, errors.New("gagal menyimpan gambar postingan")
+		}
+	}
+
 	return post, nil
 }
 
@@ -210,6 +234,13 @@ func (s *feedService) GetPosts(page, limit int) ([]*PostListItem, int64, error) 
 	}
 	var result []*PostListItem
 	for _, p := range posts {
+		imageURLs := []string{}
+		for _, img := range p.Images {
+			imageURLs = append(imageURLs, img.ImageURL)
+		}
+		if imageURLs == nil {
+			imageURLs = []string{}
+		}
 		result = append(result, &PostListItem{
 			ID:            p.ID,
 			UserID:        p.UserID,
@@ -218,6 +249,7 @@ func (s *feedService) GetPosts(page, limit int) ([]*PostListItem, int64, error) 
 			Title:         p.Title,
 			Content:       p.Content,
 			ImageURL:      p.ImageURL,
+			ImageURLs:     imageURLs,
 			CommentCount:  len(p.Comments),
 			ReactionCount: len(p.Reactions),
 			VoteCount:     s.sumVoteValues(p.Votes),
@@ -242,6 +274,14 @@ func (s *feedService) GetPostByID(id uint) (*PostDetailResponse, error) {
 		return nil, errors.New("gagal memuat komentar")
 	}
 
+	imageURLs := []string{}
+	for _, img := range post.Images {
+		imageURLs = append(imageURLs, img.ImageURL)
+	}
+	if imageURLs == nil {
+		imageURLs = []string{}
+	}
+
 	return &PostDetailResponse{
 		ID:        post.ID,
 		UserID:    post.UserID,
@@ -250,6 +290,7 @@ func (s *feedService) GetPostByID(id uint) (*PostDetailResponse, error) {
 		Title:     post.Title,
 		Content:   post.Content,
 		ImageURL:  post.ImageURL,
+		ImageURLs: imageURLs,
 		Reactions: post.Reactions,
 		Votes:     post.Votes,
 		Comments:  buildCommentTree(comments),
@@ -275,9 +316,32 @@ func (s *feedService) UpdatePost(userID uint, postID uint, req PostRequest) (*mo
 	if req.Category != nil {
 		post.Category = req.Category
 	}
+
+	// Handle image updates
 	if req.ImageURL != nil {
 		post.ImageURL = req.ImageURL
 	}
+	if len(req.ImageURLs) > 0 {
+		// Update ImageURL to first image for backward compatibility
+		first := req.ImageURLs[0]
+		post.ImageURL = &first
+
+		// Delete old images and add new ones
+		if err := s.postRepo.DeletePostImagesByPostID(postID); err != nil {
+			return nil, errors.New("gagal menghapus gambar lama")
+		}
+
+		for _, imgURL := range req.ImageURLs {
+			image := &models.PostImage{
+				PostID:   postID,
+				ImageURL: imgURL,
+			}
+			if err := s.postRepo.CreatePostImage(image); err != nil {
+				return nil, errors.New("gagal menyimpan gambar postingan")
+			}
+		}
+	}
+
 	if err := s.postRepo.UpdatePost(post); err != nil {
 		return nil, errors.New("gagal memperbarui postingan")
 	}

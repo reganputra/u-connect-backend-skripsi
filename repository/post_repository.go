@@ -12,6 +12,8 @@ type PostRepository interface {
 	FindAllCommentsByPostID(postID uint) ([]models.Comment, error)
 	UpdatePost(post *models.Post) error
 	DeletePost(id uint) error
+	CreatePostImage(image *models.PostImage) error
+	DeletePostImagesByPostID(postID uint) error
 }
 
 type postRepository struct {
@@ -36,6 +38,7 @@ func (r *postRepository) FindPosts(page, limit int) ([]models.Post, int64, error
 
 	err := r.db.
 		Preload("User").
+		Preload("Images").
 		Preload("Reactions").
 		Preload("Votes").
 		Preload("Comments").
@@ -51,6 +54,7 @@ func (r *postRepository) FindPostByID(id uint) (*models.Post, error) {
 	var post models.Post
 	err := r.db.
 		Preload("User").
+		Preload("Images").
 		Preload("Reactions").
 		Preload("Votes").
 		First(&post, id).Error
@@ -78,4 +82,12 @@ func (r *postRepository) UpdatePost(post *models.Post) error {
 
 func (r *postRepository) DeletePost(id uint) error {
 	return r.db.Delete(&models.Post{}, id).Error
+}
+
+func (r *postRepository) CreatePostImage(image *models.PostImage) error {
+	return r.db.Create(image).Error
+}
+
+func (r *postRepository) DeletePostImagesByPostID(postID uint) error {
+	return r.db.Where("post_id = ?", postID).Delete(&models.PostImage{}).Error
 }

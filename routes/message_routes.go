@@ -1,7 +1,9 @@
 package routes
 
 import (
-	fws "github.com/gofiber/contrib/websocket"
+	"log"
+
+	"github.com/gofiber/contrib/websocket"
 	"github.com/gofiber/fiber/v2"
 	"github.com/reganputra/skripsi-backend/controllers"
 	"github.com/reganputra/skripsi-backend/middleware"
@@ -10,7 +12,14 @@ import (
 	"github.com/reganputra/skripsi-backend/ws"
 )
 
-func SetupMessageRoutes(app *fiber.App, ctrl *controllers.MessageController, hub *ws.Hub, msgSvc service.MessageService, userRepo repository.UserRepository, notifSvc service.NotificationService) {
+func SetupMessageRoutes(
+	app *fiber.App,
+	ctrl *controllers.MessageController,
+	hub *ws.Hub,
+	msgSvc service.MessageService,
+	userRepo repository.UserRepository,
+	notifSvc service.NotificationService,
+) {
 	// ── REST endpoints ─────────────────────────────────────────────────────────
 	msgs := app.Group("/api/messages", middleware.Protected(), middleware.RequireRole("student", "alumni"))
 
@@ -19,12 +28,18 @@ func SetupMessageRoutes(app *fiber.App, ctrl *controllers.MessageController, hub
 	msgs.Get("/:userID", ctrl.GetConversation)
 	msgs.Patch("/:userID/read", ctrl.MarkAsRead)
 
-	// WebSocket endpoint — auth done inside handler via ?token=<jwt>
-	app.Get("/api/ws", func(c *fiber.Ctx) error {
-		if fws.IsWebSocketUpgrade(c) {
-			return c.Next()
-		}
-		return fiber.ErrUpgradeRequired
-	}, ws.WSHandler(hub, msgSvc, userRepo, notifSvc))
+	// ── WebSocket endpoint ─────────────────────────────────────────────────────
+	app.Use("/api/ws", ws.WSAuthMiddleware())
 
+	// Step 2 — Confirm the request is a WebSocket upgrade, then upgrade.
+	app.Get("/api/ws", func(c *fiber.Ctx) error {
+		if !websocket.IsWebSocketUpgrade(c) {
+			log.Printf("[WS/UPGRADE] WARN rejected — not a WebSocket request — method: %s, ip: %s", c.Method(), c.IP())
+			return c.Status(fiber.StatusUpgradeRequired).JSON(fiber.Map{
+				"error": "websocket upgrade required",
+			})
+		}
+		log.Printf("[WS/UPGRADE] INFO upgrade request accepted — ip: %s", c.IP())
+		return c.Next()
+	}, ws.WSHandler(hub, msgSvc, userRepo, notifSvc))
 }

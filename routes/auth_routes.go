@@ -11,6 +11,6 @@ func RegisterAuthRoutes(app *fiber.App, ctrl *controllers.AuthController) {
 	auth.Post("/register", ctrl.Register)
 	auth.Post("/login", ctrl.Login)
 
-	api := app.Group("/api", middleware.Protected())
-	api.Get("/me", ctrl.Me)
+	api := app.Group("/api")
+	api.Get("/me", middleware.Protected(), ctrl.Me)
 }

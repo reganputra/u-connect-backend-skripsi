@@ -1,6 +1,9 @@
 package repository
 
 import (
+	"errors"
+	"time"
+
 	"github.com/reganputra/skripsi-backend/models"
 	"gorm.io/gorm"
 )
@@ -23,6 +26,27 @@ func NewGroupMemberRepository(db *gorm.DB) GroupMemberRepository {
 }
 
 func (r *groupMemberRepository) AddGroupMember(member *models.GroupMember) error {
+	// Handle re-join gracefully when a previous membership exists as soft-deleted.
+	var existing models.GroupMember
+	err := r.db.Unscoped().
+		Where("group_id = ? AND user_id = ?", member.GroupID, member.UserID).
+		First(&existing).Error
+	if err == nil {
+		if existing.DeletedAt.Valid {
+			return r.db.Unscoped().Model(&models.GroupMember{}).
+				Where("id = ?", existing.ID).
+				Updates(map[string]interface{}{
+					"deleted_at": nil,
+					"role":       member.Role,
+					"updated_at": time.Now(),
+				}).Error
+		}
+		return errors.New("sudah menjadi anggota grup ini")
+	}
+	if !errors.Is(err, gorm.ErrRecordNotFound) {
+		return err
+	}
+
 	return r.db.Create(member).Error
 }
 

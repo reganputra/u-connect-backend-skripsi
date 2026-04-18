@@ -37,6 +37,8 @@ func (r *groupRepository) FindGroupByID(id uint) (*models.Group, error) {
 		Preload("Owner").
 		Preload("Members").
 		Preload("Members.User").
+		Preload("Articles").
+		Preload("Articles.User").
 		First(&group, id).Error
 	if err != nil {
 		return nil, err

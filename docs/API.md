@@ -754,12 +754,15 @@ Behavior:
 
 **Content-Type:** `multipart/form-data`
 
-| Field      | Required | Notes                   |
-| ---------- | -------- | ----------------------- |
-| `title`    | ✅       | —                       |
-| `content`  | ✅       | —                       |
-| `category` | ❌       | Free text               |
-| `image`    | ❌       | Image file → Cloudinary |
+| Field      | Required | Notes                                                |
+| ---------- | -------- | ---------------------------------------------------- |
+| `title`    | ✅       | —                                                    |
+| `content`  | ✅       | —                                                    |
+| `category` | ❌       | Free text                                            |
+| `images`   | ❌       | Multiple image files (form array) → Cloudinary       |
+| `image`    | ❌       | Single image file (legacy, kept for backward compat) |
+
+> **Note:** You can send multiple images using the `images` field (e.g., `images[0]`, `images[1]`). The `image` field is still supported for backward compatibility with older clients. If both are provided, `images` takes precedence.
 
 ### GET `/api/feed` — List Posts (paginated)
 
@@ -774,23 +777,30 @@ Behavior:
     "total": 25,
     "page": 1,
     "limit": 10,
-    "posts": [
+    "data": [
       {
-        "ID": 3,
-        "UserID": 2,
-        "Title": "Hello everyone",
-        "Content": "My first post!",
-        "Category": "General",
-        "ImageURL": null,
-        "CommentCount": 4,
-        "ReactionCount": 7,
-        "VoteCount": 3,
-        "CreatedAt": "2026-03-04T19:25:24+07:00"
+        "id": 3,
+        "user_id": 2,
+        "user": { "ID": 2, "Name": "Regan Putra", "Role": "alumni" },
+        "title": "Hello everyone",
+        "content": "My first post!",
+        "category": "General",
+        "image_url": "https://res.cloudinary.com/...",
+        "image_urls": [
+          "https://res.cloudinary.com/.../image1.jpg",
+          "https://res.cloudinary.com/.../image2.jpg"
+        ],
+        "comment_count": 4,
+        "reaction_count": 7,
+        "vote_count": 3,
+        "created_at": "2026-03-04T19:25:24+07:00"
       }
     ]
   }
 }
 ```
+
+> **Note:** `image_url` contains the first image (for backward compatibility). Use `image_urls` array for all images.
 
 ### GET `/api/feed/:id` — Post Detail
 
@@ -800,32 +810,76 @@ Behavior:
 {
   "success": true,
   "data": {
-    "ID": 3,
-    "Title": "Hello everyone",
-    "Content": "My first post!",
-    "User": { "ID": 2, "Name": "Regan Putra", "Role": "alumni" },
-    "Reactions": [{ "ID": 1, "UserID": 2, "Type": "like" }],
-    "Votes": [{ "ID": 1, "UserID": 3, "Value": 1 }],
-    "Comments": [
+    "id": 3,
+    "user_id": 2,
+    "title": "Hello everyone",
+    "content": "My first post!",
+    "category": "General",
+    "image_url": "https://res.cloudinary.com/.../image1.jpg",
+    "image_urls": [
+      "https://res.cloudinary.com/.../image1.jpg",
+      "https://res.cloudinary.com/.../image2.jpg"
+    ],
+    "user": { "ID": 2, "Name": "Regan Putra", "Role": "alumni" },
+    "reactions": [{ "ID": 1, "UserID": 2, "Type": "like" }],
+    "votes": [{ "ID": 1, "UserID": 3, "Value": 1 }],
+    "comments": [
       {
-        "ID": 1,
-        "Content": "Great post!",
-        "User": { "ID": 3, "Name": "Ani" },
-        "Reactions": [],
-        "Votes": [],
-        "Replies": [
+        "id": 1,
+        "content": "Great post!",
+        "user": { "ID": 3, "Name": "Ani" },
+        "reactions": [],
+        "votes": [],
+        "replies": [
           {
-            "ID": 2,
-            "Content": "Agreed!",
-            "ParentCommentID": 1,
-            "Replies": []
+            "id": 2,
+            "content": "Agreed!",
+            "parent_comment_id": 1,
+            "replies": []
           }
         ]
       }
-    ]
+    ],
+    "created_at": "2026-03-04T19:25:24+07:00"
   }
 }
 ```
+
+> **Note:** `image_url` contains the first image (for backward compatibility). Use `image_urls` array for all images.
+
+### PUT `/api/feed/:id` — Update Post
+
+**Content-Type:** `multipart/form-data`
+
+| Field      | Required | Notes                                                |
+| ---------- | -------- | ---------------------------------------------------- |
+| `title`    | ❌       | Updated title (if provided)                          |
+| `content`  | ❌       | Updated content (if provided)                        |
+| `category` | ❌       | Updated category (if provided)                       |
+| `images`   | ❌       | New multiple image files (replaces all old images)   |
+| `image`    | ❌       | Single image file (legacy, kept for backward compat) |
+
+> **Authentication:** Only the post owner can update.  
+> **Note:** If new images are provided, all previous images are deleted and replaced with the new ones.
+
+**Response `200`:**
+
+```json
+{
+  "success": true,
+  "data": {
+    "id": 3,
+    "user_id": 2,
+    "title": "Updated title",
+    "content": "Updated content!",
+    "category": "General",
+    "image_url": "https://res.cloudinary.com/.../new-image.jpg",
+    "image_urls": ["https://res.cloudinary.com/.../new-image.jpg"]
+  }
+}
+```
+
+---
 
 ### POST `/api/feed/:id/react` — React to Post
 
@@ -871,36 +925,88 @@ To reply to an existing comment:
 
 ## Group Forum
 
-> All roles can read. `alumni` and `student` can create/join/interact.
+> All authenticated users can read group previews and group details. `alumni` and `student` can create/join/interact; `partner` and `admin` are blocked from join/create/member actions.
 
 ### Group Endpoints
 
-| Method | Endpoint                          | Auth | Body        | Description                    |
-| ------ | --------------------------------- | ---- | ----------- | ------------------------------ |
-| GET    | `/api/groups`                     | ✅   | —           | List all groups                |
-| POST   | `/api/groups`                     | ✅   | `form-data` | Create group                   |
-| GET    | `/api/groups/joined`              | ✅   | —           | Groups current user belongs to |
-| GET    | `/api/groups/:id`                 | ✅   | —           | Group detail                   |
-| PUT    | `/api/groups/:id`                 | ✅   | `form-data` | Update group (owner only)      |
-| DELETE | `/api/groups/:id`                 | ✅   | —           | Delete group + all data        |
-| POST   | `/api/groups/:id/join`            | ✅   | —           | Join group                     |
-| DELETE | `/api/groups/:id/leave`           | ✅   | —           | Leave group                    |
-| GET    | `/api/groups/:id/members`         | ✅   | —           | List members                   |
-| DELETE | `/api/groups/:id/members/:userID` | ✅   | —           | Kick member (owner only)       |
+| Method | Endpoint                          | Auth | Body        | Description                                          |
+| ------ | --------------------------------- | ---- | ----------- | ---------------------------------------------------- |
+| GET    | `/api/groups`                     | ✅   | —           | List all groups                                      |
+| POST   | `/api/groups`                     | ✅   | `form-data` | Create group                                         |
+| GET    | `/api/groups/joined`              | ✅   | —           | Groups current user belongs to (student/alumni only) |
+| GET    | `/api/groups/:id`                 | ✅   | —           | Group detail                                         |
+| PUT    | `/api/groups/:id`                 | ✅   | `form-data` | Update group (owner only)                            |
+| DELETE | `/api/groups/:id`                 | ✅   | —           | Delete group + all data                              |
+| POST   | `/api/groups/:id/join`            | ✅   | —           | Join group (student/alumni only)                     |
+| DELETE | `/api/groups/:id/leave`           | ✅   | —           | Leave group (student/alumni only)                    |
+| GET    | `/api/groups/:id/members`         | ✅   | —           | List members                                         |
+| DELETE | `/api/groups/:id/members/:userID` | ✅   | —           | Kick member (owner only; student/alumni only)        |
 
 ### Group Article Endpoints
 
-| Method | Endpoint                            | Auth | Body        | Description                      |
-| ------ | ----------------------------------- | ---- | ----------- | -------------------------------- |
-| POST   | `/api/groups/:id/articles`          | ✅   | `form-data` | Create article (members only)    |
-| GET    | `/api/groups/articles/:id`          | ✅   | —           | Article detail + nested comments |
-| PUT    | `/api/groups/articles/:id`          | ✅   | `form-data` | Update own article               |
-| DELETE | `/api/groups/articles/:id`          | ✅   | —           | Delete own article               |
-| POST   | `/api/groups/articles/:id/comments` | ✅   | JSON        | Add comment or reply             |
-| POST   | `/api/groups/articles/:id/react`    | ✅   | JSON        | React to article (members only)  |
-| PUT    | `/api/groups/comments/:id`          | ✅   | JSON        | Update own comment               |
-| DELETE | `/api/groups/comments/:id`          | ✅   | —           | Delete own comment               |
-| POST   | `/api/groups/comments/:id/react`    | ✅   | JSON        | React to comment (members only)  |
+| Method | Endpoint                            | Auth | Body        | Description                                       |
+| ------ | ----------------------------------- | ---- | ----------- | ------------------------------------------------- |
+| POST   | `/api/groups/:id/articles`          | ✅   | `form-data` | Create article (student/alumni members only)      |
+| GET    | `/api/groups/articles/:id`          | ✅   | —           | Article detail (comments visible to members only) |
+| PUT    | `/api/groups/articles/:id`          | ✅   | `form-data` | Update own article (owner or group owner)         |
+| DELETE | `/api/groups/articles/:id`          | ✅   | —           | Delete own article (owner or group owner)         |
+| POST   | `/api/groups/articles/:id/comments` | ✅   | JSON        | Add comment or reply (members only)               |
+| POST   | `/api/groups/articles/:id/react`    | ✅   | JSON        | React to article (members only)                   |
+| PUT    | `/api/groups/comments/:id`          | ✅   | JSON        | Update own comment                                |
+| DELETE | `/api/groups/comments/:id`          | ✅   | —           | Delete own comment                                |
+| POST   | `/api/groups/comments/:id/react`    | ✅   | JSON        | React to comment (members only)                   |
+
+### Group/Article Count Fields
+
+- `GET /api/groups` includes per-group list item fields:
+  - `member_count` (total active members)
+  - `article_count` (total active articles)
+- `GET /api/groups/:id` includes:
+  - `member_count` (total active members)
+  - `article_count` (total active articles)
+  - `Articles[].comment_count` (total comments for each article in the `Articles` array)
+  - `Articles[].media_urls` (array of all image URLs for each article)
+- `GET /api/groups/articles/:id` includes:
+  - `comment_count` (total visible comments in the response)
+  - `media_urls` (array of all image URLs for the article)
+
+### POST `/api/groups/:id/articles` — Create Article (form-data)
+
+| Field     | Required | Notes                                                |
+| --------- | -------- | ---------------------------------------------------- |
+| `title`   | ✅       | —                                                    |
+| `content` | ✅       | —                                                    |
+| `medias`  | ❌       | Multiple image files (form array) → Cloudinary       |
+| `media`   | ❌       | Single image file (legacy, kept for backward compat) |
+
+> **Note:** You can send multiple images using the `medias` field (e.g., `medias[0]`, `medias[1]`). The `media` field is still supported for backward compatibility with older clients. If both are provided, `medias` takes precedence.
+
+Accepted multipart key variants for multi-image upload:
+
+- `medias`
+- `medias[]`
+- `medias[0]`, `medias[1]`, etc.
+
+If one or more media files fail to upload or fail to persist, the API returns an error and the article creation is not treated as successful.
+
+### PUT `/api/groups/articles/:id` — Update Article (form-data)
+
+| Field     | Required | Notes                                                |
+| --------- | -------- | ---------------------------------------------------- |
+| `title`   | ❌       | Updated title (if provided)                          |
+| `content` | ❌       | Updated content (if provided)                        |
+| `medias`  | ❌       | New multiple image files (replaces all old images)   |
+| `media`   | ❌       | Single image file (legacy, kept for backward compat) |
+
+> **Note:** If new images are provided via `medias` or `media`, all previous images are deleted and replaced with the new ones.
+
+Accepted multipart key variants for multi-image upload:
+
+- `medias`
+- `medias[]`
+- `medias[0]`, `medias[1]`, etc.
+
+If one or more media files fail to upload or fail to persist, the API returns an error and the update is not treated as successful.
 
 ### POST `/api/groups` — Create Group (form-data)
 
@@ -932,8 +1038,11 @@ To reply to an existing comment:
 ### Business Rules
 
 - Non-members can only view group preview — cannot post or react
+- Group detail is public to authenticated users, but article comments are hidden for non-members
 - Group owner cannot leave their own group
 - When a group is deleted: articles, comments, reactions, memberships all cascade-deleted
+
+**Join behavior:** leaving a group and joining again is supported; the previous membership is restored rather than creating a duplicate record.
 
 ---
 
@@ -1408,13 +1517,13 @@ To reply to an existing comment:
 
 ### Role Matrix
 
-| Action                      | alumni           | student | partner | admin |
-| --------------------------- | ---------------- | ------- | ------- | ----- |
-| Register / manage as mentor | ✅               | ❌      | ❌      | ❌    |
-| Browse & request mentors    | ❌               | ✅      | ❌      | ❌    |
-| Get recommendations         | ❌               | ✅      | ❌      | ❌    |
-| Create / manage sessions    | ✅ (mentor side) | ❌      | ❌      | ❌    |
-| View own sessions           | ✅               | ✅      | ❌      | ❌    |
+| Action                      | alumni           | student            | partner | admin |
+| --------------------------- | ---------------- | ------------------ | ------- | ----- |
+| Register / manage as mentor | ✅               | ❌                 | ❌      | ❌    |
+| Browse & request mentors    | ❌               | ✅                 | ❌      | ❌    |
+| Get recommendations         | ❌               | ✅                 | ❌      | ❌    |
+| Create / manage sessions    | ✅ (mentor side) | ✅ (create + view) | ❌      | ❌    |
+| View own sessions           | ✅               | ✅                 | ❌      | ❌    |
 
 ---
 
@@ -1701,6 +1810,23 @@ Returns all `MentorRequest` records sent by the current student (all statuses).
 
 ---
 
+#### POST `/api/student/sessions` — Create Session (Student)
+
+```json
+{
+  "mentor_id": 2,
+  "topic": "Need help with Python fundamentals",
+  "notes": "Can we focus on OOP and API basics?",
+  "session_date": "2026-07-03T10:00:00Z"
+}
+```
+
+> `mentor_id` must have an **approved** mentoring request with the current student.
+
+**Response `201`:** returns `MentoringSession` with `status = "scheduled"`.
+
+---
+
 #### GET `/api/student/sessions` — My Sessions (Student)
 
 Returns all `MentoringSession` records where the caller is the student. Preloads `Mentor`.
@@ -1875,7 +2001,7 @@ Marks all messages **from `:userID` to the caller** as read.
 
 #### `GET /api/ws` — Connect
 
-> Auth via query param (not header) because WebSocket upgrade is a GET request.
+> Auth via query param (not header) because WebSocket upgrade is a GET request and browsers cannot set custom headers for it.
 
 ```
 ws://localhost:8080/api/ws?token=<jwt>
@@ -1883,10 +2009,13 @@ ws://localhost:8080/api/ws?token=<jwt>
 
 **Connection flow:**
 
-1. Server validates JWT from `?token=`
-2. Verifies role is `student` or `alumni`
-3. Registers client in the Hub (one connection per user; old connection replaced)
-4. Starts write pump (Hub → client) and read pump (client → Hub → DB → recipient)
+1. Server validates JWT from `?token=` **before** the HTTP → WebSocket upgrade
+   - Missing or invalid token → `401 Unauthorized` HTTP response _(upgrade never attempted)_
+   - Role not `student` or `alumni` → `403 Forbidden` HTTP response _(upgrade never attempted)_
+2. Server upgrades the connection (`101 Switching Protocols`)
+3. Registers client in the Hub (one connection per user; existing connection is replaced)
+4. Keepalive starts: server sends a **Ping** frame every **30 s**; client must reply with a **Pong** within **60 s** or the connection is closed
+5. Starts write pump (Hub → client) and read pump (client → Hub → DB → recipient)
 
 #### Client → Server (send message)
 
@@ -1924,14 +2053,347 @@ ws://localhost:8080/api/ws?token=<jwt>
 }
 ```
 
-**Error cases over WebSocket:**
-| Cause | Error message |
-|---|---|
-| Not following recipient | `anda harus mengikuti pengguna ini sebelum mengirim pesan` |
-| Missing `receiver_id` or `content` | `receiver_id dan content wajib diisi` |
-| Invalid JSON | `format pesan tidak valid` |
-| Token missing or invalid | Connection closed immediately |
-| Wrong role | Connection closed immediately |
+**Error cases:**
+
+| Cause                              | How it surfaces                                                                                         |
+| ---------------------------------- | ------------------------------------------------------------------------------------------------------- |
+| Missing token                      | `401 Unauthorized` HTTP response — before upgrade                                                       |
+| Invalid or expired token           | `401 Unauthorized` HTTP response — before upgrade                                                       |
+| Role not `student` or `alumni`     | `403 Forbidden` HTTP response — before upgrade                                                          |
+| Not following recipient            | `{"type":"error","message":"anda harus mengikuti pengguna ini sebelum mengirim pesan"}` WebSocket frame |
+| Missing `receiver_id` or `content` | `{"type":"error","message":"receiver_id dan content wajib diisi"}` WebSocket frame                      |
+| Invalid JSON payload               | `{"type":"error","message":"format pesan tidak valid"}` WebSocket frame                                 |
+
+---
+
+#### Frontend Integration Example (JavaScript / React)
+
+> The examples below assume a **Vite + React** project. All three files work together:
+> `lib/chatSocket.js` → `hooks/useChat.js` → `components/ChatWindow.jsx`.
+>
+> **Ping / Pong is fully transparent** — the browser WebSocket API handles Pong replies automatically. Your JavaScript code never needs to deal with it.
+
+---
+
+##### `lib/chatSocket.js` — Standalone WebSocket class
+
+```javascript
+// lib/chatSocket.js
+//
+// Wraps the native WebSocket API with:
+//   • JWT auth via ?token= query param (no custom headers needed)
+//   • JSON message framing matching the server envelope
+//   • Automatic reconnect with exponential back-off (up to MAX_RETRIES)
+
+const WS_BASE_URL = import.meta.env.VITE_WS_URL ?? "ws://localhost:8080";
+
+const MAX_RETRIES = 5;
+const BASE_DELAY_MS = 1_000; // first reconnect delay; doubles each attempt
+
+export class ChatSocket {
+  #ws = null;
+  #token;
+  #retries = 0;
+  #reconnectTimer = null;
+  #intentionallyClosed = false;
+
+  // ── Callbacks (assign before calling connect()) ───────────────────────────
+  /** Called with the persisted Message object when a new message arrives. */
+  onMessage = null; // (msg)   => void
+  /** Called with the persisted Notification object when a notification arrives. */
+  onNotification = null; // (notif) => void
+  /** Called with the server error string when an error frame arrives. */
+  onError = null; // (text)  => void
+  /** Called whenever the connection status changes. */
+  onStatusChange = null; // ('connecting'|'open'|'closed'|'error') => void
+
+  constructor(token) {
+    this.#token = token;
+  }
+
+  // ── Public API ────────────────────────────────────────────────────────────
+
+  connect() {
+    if (this.#ws?.readyState === WebSocket.OPEN) return;
+
+    this.#intentionallyClosed = false;
+    this.#notify("connecting");
+
+    const url = `${WS_BASE_URL}/api/ws?token=${encodeURIComponent(this.#token)}`;
+    this.#ws = new WebSocket(url);
+
+    this.#ws.onopen = () => {
+      this.#retries = 0;
+      this.#notify("open");
+    };
+
+    this.#ws.onmessage = ({ data }) => {
+      let envelope;
+      try {
+        envelope = JSON.parse(data);
+      } catch {
+        console.error("[ChatSocket] Unparseable frame:", data);
+        return;
+      }
+
+      switch (envelope.type) {
+        case "message":
+          this.onMessage?.(envelope.data);
+          break;
+        case "notification":
+          this.onNotification?.(envelope.data);
+          break;
+        case "error":
+          this.onError?.(envelope.message);
+          break;
+        default:
+          console.warn("[ChatSocket] Unknown envelope type:", envelope.type);
+      }
+    };
+
+    // onerror always fires before onclose — notify status but let onclose drive reconnect.
+    this.#ws.onerror = () => this.#notify("error");
+
+    this.#ws.onclose = ({ code, reason, wasClean }) => {
+      console.log(
+        `[ChatSocket] Closed — code: ${code}, clean: ${wasClean}, reason: "${reason}"`,
+      );
+      this.#notify("closed");
+      if (!this.#intentionallyClosed) this.#scheduleReconnect();
+    };
+  }
+
+  /**
+   * Send a chat message to a recipient.
+   * @param {number} receiverId  Target user's ID.
+   * @param {string} content     Message text (non-empty).
+   */
+  send(receiverId, content) {
+    if (this.#ws?.readyState !== WebSocket.OPEN) {
+      console.warn("[ChatSocket] Cannot send — socket is not open");
+      return;
+    }
+    this.#ws.send(JSON.stringify({ receiver_id: receiverId, content }));
+  }
+
+  /** Permanently close the connection (no automatic reconnect). */
+  disconnect() {
+    this.#intentionallyClosed = true;
+    clearTimeout(this.#reconnectTimer);
+    this.#ws?.close();
+    this.#ws = null;
+  }
+
+  get isConnected() {
+    return this.#ws?.readyState === WebSocket.OPEN;
+  }
+
+  // ── Private helpers ───────────────────────────────────────────────────────
+
+  #scheduleReconnect() {
+    if (this.#retries >= MAX_RETRIES) {
+      console.error("[ChatSocket] Max reconnect attempts reached — giving up");
+      return;
+    }
+    const delay = BASE_DELAY_MS * 2 ** this.#retries;
+    this.#retries++;
+    console.log(
+      `[ChatSocket] Reconnecting in ${delay} ms (attempt ${this.#retries}/${MAX_RETRIES})`,
+    );
+    this.#reconnectTimer = setTimeout(() => this.connect(), delay);
+  }
+
+  #notify(status) {
+    this.onStatusChange?.(status);
+  }
+}
+```
+
+---
+
+##### `hooks/useChat.js` — React hook
+
+```javascript
+// hooks/useChat.js
+//
+// Manages a single shared WebSocket connection for the logged-in user.
+// Pass `token = null` (e.g. when the user is not authenticated) to skip connecting.
+
+import { useCallback, useEffect, useRef, useState } from "react";
+import { ChatSocket } from "../lib/chatSocket";
+
+/**
+ * @param {string|null} token  JWT obtained after login.
+ * @returns {{
+ *   messages:          Array,
+ *   send:              (receiverId: number, content: string) => void,
+ *   isConnected:       boolean,
+ *   connectionStatus:  string,
+ * }}
+ */
+export function useChat(token) {
+  const socketRef = useRef(null);
+  const [messages, setMessages] = useState([]);
+  const [connectionStatus, setStatus] = useState("closed");
+
+  useEffect(() => {
+    if (!token) return;
+
+    const socket = new ChatSocket(token);
+    socketRef.current = socket;
+
+    // Append every incoming message to local state.
+    // Filter by partner in the component that renders the conversation.
+    socket.onMessage = (msg) => {
+      setMessages((prev) => {
+        // Avoid duplicate echo frames (sender receives its own message back)
+        const exists = prev.some((m) => m.ID === msg.ID);
+        return exists ? prev : [...prev, msg];
+      });
+    };
+
+    // Route notifications to your global notification store / toast system.
+    socket.onNotification = (notif) => {
+      console.log("[useChat] notification:", notif);
+      // e.g. notificationStore.add(notif);
+    };
+
+    socket.onError = (errMsg) => {
+      console.error("[useChat] server error:", errMsg);
+    };
+
+    socket.onStatusChange = setStatus;
+
+    socket.connect();
+
+    return () => {
+      socket.disconnect();
+      socketRef.current = null;
+    };
+  }, [token]); // reconnects automatically if the token changes (e.g. after refresh)
+
+  const send = useCallback((receiverId, content) => {
+    socketRef.current?.send(receiverId, content);
+  }, []);
+
+  return {
+    messages,
+    send,
+    isConnected: connectionStatus === "open",
+    connectionStatus,
+  };
+}
+```
+
+---
+
+##### `components/ChatWindow.jsx` — Usage example
+
+```jsx
+// components/ChatWindow.jsx
+//
+// Renders a conversation with a single partner and lets the user send messages.
+// Assumes useAuthStore exposes the raw JWT string as `token`.
+
+import { useState } from "react";
+import { useChat } from "../hooks/useChat";
+import { useAuthStore } from "../stores/authStore"; // adjust to your auth solution
+
+/**
+ * @param {{ partnerId: number }} props
+ */
+export function ChatWindow({ partnerId }) {
+  const token = useAuthStore((s) => s.token);
+  const { messages, send, isConnected, connectionStatus } = useChat(token);
+  const [draft, setDraft] = useState("");
+
+  // Show only messages that belong to this conversation
+  const conversation = messages.filter(
+    (m) => m.SenderID === partnerId || m.ReceiverID === partnerId,
+  );
+
+  const handleSend = () => {
+    const text = draft.trim();
+    if (!text || !isConnected) return;
+    send(partnerId, text);
+    setDraft("");
+  };
+
+  return (
+    <div className="chat-window">
+      {/* ── Connection status badge ── */}
+      <div className={`status status--${connectionStatus}`}>
+        {connectionStatus === "open" && "🟢 Connected"}
+        {connectionStatus === "connecting" && "🟡 Connecting…"}
+        {connectionStatus === "closed" && "🔴 Disconnected"}
+        {connectionStatus === "error" && "🔴 Connection error"}
+      </div>
+
+      {/* ── Message list ── */}
+      <ul className="message-list">
+        {conversation.map((m) => (
+          <li
+            key={m.ID}
+            className={
+              m.SenderID === partnerId
+                ? "message--incoming"
+                : "message--outgoing"
+            }
+          >
+            <span className="message__content">{m.Content}</span>
+            <span className="message__time">
+              {new Date(m.CreatedAt).toLocaleTimeString()}
+            </span>
+          </li>
+        ))}
+      </ul>
+
+      {/* ── Composer ── */}
+      <div className="composer">
+        <input
+          value={draft}
+          onChange={(e) => setDraft(e.target.value)}
+          onKeyDown={(e) => e.key === "Enter" && !e.shiftKey && handleSend()}
+          placeholder={isConnected ? "Ketik pesan…" : "Menghubungkan…"}
+          disabled={!isConnected}
+        />
+        <button onClick={handleSend} disabled={!isConnected || !draft.trim()}>
+          Kirim
+        </button>
+      </div>
+    </div>
+  );
+}
+```
+
+---
+
+##### Environment variable
+
+Add to your `.env` (Vite project):
+
+```env
+# Development
+VITE_WS_URL=ws://localhost:8080
+
+# Production
+VITE_WS_URL=wss://api.yourapp.com
+```
+
+> Use `wss://` (WebSocket Secure) in production — equivalent to HTTPS for WebSocket connections.
+
+---
+
+##### Key behaviours to know
+
+| Behaviour                | Detail                                                                                                                                                                                |
+| ------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Auth failure (401 / 403) | `onclose` fires immediately with `wasClean: false`; the class schedules a reconnect — check `onError` in your auth store and call `socket.disconnect()` instead if it's an auth error |
+| Duplicate echo frame     | The server echoes every sent message back to the sender as delivery confirmation; `useChat` deduplicates by `msg.ID`                                                                  |
+| Ping / Pong              | Handled silently by the browser — your JS code never sees raw Ping or Pong frames                                                                                                     |
+| Reconnect back-off       | 1 s → 2 s → 4 s → 8 s → 16 s, then gives up; reset on successful open                                                                                                                 |
+| Token refresh            | If your auth library refreshes the JWT, pass the new token to `useChat` — the effect re-runs and opens a fresh connection                                                             |
+| Missed messages          | If the user was offline, fetch history via `GET /api/messages/:userID` on reconnect                                                                                                   |
 
 ---
 
@@ -1954,16 +2416,16 @@ ws://localhost:8080/api/ws?token=<jwt>
 
 Every file field is **optional** — omit to skip upload. Accepted formats: `jpg` · `jpeg` · `png` · `webp`
 
-| Module           | Form field | Cloudinary folder                 | Endpoint                            |
-| ---------------- | ---------- | --------------------------------- | ----------------------------------- |
-| Profile picture  | `picture`  | `alumni-platform/profiles`        | POST/PUT `/api/profile`             |
-| Feed post image  | `image`    | `alumni-platform/feed`            | POST/PUT `/api/feed`                |
-| Group banner     | `banner`   | `alumni-platform/groups/banners`  | POST/PUT `/api/groups`              |
-| Group article    | `media`    | `alumni-platform/groups/articles` | POST/PUT `/api/groups/articles/:id` |
-| Portfolio item   | `media`    | `alumni-platform/portfolio`       | POST/PUT `/api/portfolio`           |
-| Event photo      | `photo`    | `alumni-platform/events`          | POST/PUT `/api/events`              |
-| Job image        | `image`    | `alumni-platform/jobs`            | POST/PUT `/api/jobs`                |
-| Job resume (PDF) | `resume`   | `alumni-platform/resumes`         | POST `/api/jobs/:id/apply`          |
+| Module           | Form field                           | Cloudinary folder                 | Endpoint                            |
+| ---------------- | ------------------------------------ | --------------------------------- | ----------------------------------- |
+| Profile picture  | `picture`                            | `alumni-platform/profiles`        | POST/PUT `/api/profile`             |
+| Feed post image  | `image`                              | `alumni-platform/feed`            | POST/PUT `/api/feed`                |
+| Group banner     | `banner`                             | `alumni-platform/groups/banners`  | POST/PUT `/api/groups`              |
+| Group article    | `medias` (array) or `media` (single) | `alumni-platform/groups/articles` | POST/PUT `/api/groups/articles/:id` |
+| Portfolio item   | `media`                              | `alumni-platform/portfolio`       | POST/PUT `/api/portfolio`           |
+| Event photo      | `photo`                              | `alumni-platform/events`          | POST/PUT `/api/events`              |
+| Job image        | `image`                              | `alumni-platform/jobs`            | POST/PUT `/api/jobs`                |
+| Job resume (PDF) | `resume`                             | `alumni-platform/resumes`         | POST `/api/jobs/:id/apply`          |
 
 ---
 
@@ -1994,4 +2456,4 @@ CORS_ALLOWED_ORIGINS=https://yourapp.com,https://www.yourapp.com
 ```
 
 Allowed methods: `GET, POST, PUT, PATCH, DELETE, OPTIONS`  
-Allowed headers: `Origin, Content-Type, Accept, Authorization`
+Allowed headers: `Origin, Content-Type, Accept, Authorization, Sec-WebSocket-Key, Sec-WebSocket-Version, Sec-WebSocket-Extensions, Connection, Upgrade`

@@ -3,6 +3,7 @@ package main
 import (
 	"log"
 	"os"
+	"strings"
 
 	"github.com/gofiber/fiber/v2"
 	"github.com/gofiber/fiber/v2/middleware/cors"
@@ -21,6 +22,12 @@ import (
 )
 
 func main() {
+	// Redirect Go's standard logger to stdout so that [WS/*] structured logs
+	// appear on the same stream as Fiber's access log. Without this, log.Printf
+	// writes to stderr and the two streams appear separately in most terminals.
+	log.SetOutput(os.Stdout)
+	log.SetFlags(log.Ltime | log.Lmsgprefix) // match Fiber's time-only prefix style
+
 	// Load environment variables from .env file
 	utils.LoadEnvFile(".env")
 
@@ -43,12 +50,14 @@ func main() {
 		&models.CompanyProfile{},
 		&models.PortfolioItem{},
 		&models.Post{},
+		&models.PostImage{},
 		&models.Comment{},
 		&models.Reaction{},
 		&models.Vote{},
 		&models.Group{},
 		&models.GroupMember{},
 		&models.GroupArticle{},
+		&models.GroupArticleImage{},
 		&models.GroupComment{},
 		&models.GroupReaction{},
 		&models.Event{},
@@ -150,12 +159,18 @@ func main() {
 	// ── CORS ──────────────────────────────────────────────────────────────────
 	allowedOrigins := os.Getenv("CORS_ALLOWED_ORIGINS")
 	if allowedOrigins == "" {
-		allowedOrigins = "http://localhost:5173/" // dev default — restrict in production
+		allowedOrigins = "http://localhost:5173" // dev default — restrict in production
 	}
 	app.Use(cors.New(cors.Config{
+		Next: func(c *fiber.Ctx) bool {
+			// Skip CORS for WebSocket upgrade requests — the WS auth
+			// middleware handles these directly and CORS headers are
+			// irrelevant once the connection is upgraded.
+			return strings.HasPrefix(c.Path(), "/api/ws")
+		},
 		AllowOrigins:     allowedOrigins,
 		AllowMethods:     "GET,POST,PUT,PATCH,DELETE,OPTIONS",
-		AllowHeaders:     "Origin, Content-Type, Accept, Authorization",
+		AllowHeaders:     "Origin, Content-Type, Accept, Authorization, Sec-WebSocket-Key, Sec-WebSocket-Version, Sec-WebSocket-Extensions, Connection, Upgrade",
 		ExposeHeaders:    "Content-Length",
 		AllowCredentials: allowedOrigins != "*", // credentials not allowed with wildcard
 	}))
