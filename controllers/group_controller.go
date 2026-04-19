@@ -42,11 +42,19 @@ func (ctrl *GroupController) CreateGroup(c *fiber.Ctx) error {
 }
 
 func (ctrl *GroupController) GetGroups(c *fiber.Ctx) error {
-	groups, err := ctrl.groupSvc.GetGroups()
+	page, _ := strconv.Atoi(c.Query("page", "1"))
+	limit, _ := strconv.Atoi(c.Query("limit", "20"))
+
+	groups, total, err := ctrl.groupSvc.GetGroups(page, limit)
 	if err != nil {
 		return utils.ErrorResponse(c, fiber.StatusInternalServerError, "gagal mengambil data grup")
 	}
-	return utils.SuccessResponse(c, fiber.StatusOK, groups)
+	return utils.SuccessResponse(c, fiber.StatusOK, fiber.Map{
+		"total": total,
+		"page":  page,
+		"limit": limit,
+		"data":  groups,
+	})
 }
 
 func (ctrl *GroupController) GetGroupByID(c *fiber.Ctx) error {
@@ -146,11 +154,19 @@ func (ctrl *GroupController) GetGroupMembers(c *fiber.Ctx) error {
 	if err != nil {
 		return utils.ErrorResponse(c, fiber.StatusBadRequest, "ID grup tidak valid")
 	}
-	members, err := ctrl.groupSvc.GetGroupMembers(uint(groupID))
+	page, _ := strconv.Atoi(c.Query("page", "1"))
+	limit, _ := strconv.Atoi(c.Query("limit", "20"))
+
+	members, total, err := ctrl.groupSvc.GetGroupMembers(uint(groupID), page, limit)
 	if err != nil {
 		return utils.ErrorResponse(c, fiber.StatusInternalServerError, "gagal mengambil data anggota")
 	}
-	return utils.SuccessResponse(c, fiber.StatusOK, members)
+	return utils.SuccessResponse(c, fiber.StatusOK, fiber.Map{
+		"total":   total,
+		"page":    page,
+		"limit":   limit,
+		"members": members,
+	})
 }
 
 func (ctrl *GroupController) GetJoinedGroups(c *fiber.Ctx) error {
@@ -158,11 +174,19 @@ func (ctrl *GroupController) GetJoinedGroups(c *fiber.Ctx) error {
 	if err != nil {
 		return utils.ErrorResponse(c, fiber.StatusUnauthorized, err.Error())
 	}
-	groups, err := ctrl.groupSvc.GetJoinedGroups(userID)
+	page, _ := strconv.Atoi(c.Query("page", "1"))
+	limit, _ := strconv.Atoi(c.Query("limit", "20"))
+
+	groups, total, err := ctrl.groupSvc.GetJoinedGroups(userID, page, limit)
 	if err != nil {
 		return utils.ErrorResponse(c, fiber.StatusInternalServerError, "gagal mengambil data grup yang diikuti")
 	}
-	return utils.SuccessResponse(c, fiber.StatusOK, groups)
+	return utils.SuccessResponse(c, fiber.StatusOK, fiber.Map{
+		"total": total,
+		"page":  page,
+		"limit": limit,
+		"data":  groups,
+	})
 }
 
 func (ctrl *GroupController) KickMember(c *fiber.Ctx) error {

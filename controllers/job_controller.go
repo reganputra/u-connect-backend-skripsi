@@ -2,6 +2,7 @@ package controllers
 
 import (
 	"strconv"
+	"strings"
 
 	"github.com/gofiber/fiber/v2"
 	"github.com/reganputra/skripsi-backend/service"
@@ -159,8 +160,18 @@ func (ctrl *JobController) ApplyForJobHandler(c *fiber.Ctx) error {
 	if err != nil {
 		return utils.ErrorResponse(c, fiber.StatusInternalServerError, err.Error())
 	}
+	usedResumeURLFallback := false
 	if resumeURL == "" {
-		resumeURL = c.FormValue("resume_url")
+		resumeURL = strings.TrimSpace(c.FormValue("resume_url"))
+		usedResumeURLFallback = resumeURL != ""
+	}
+	if usedResumeURLFallback {
+		isCloudinaryURL := strings.Contains(resumeURL, "res.cloudinary.com")
+		isImageDelivery := strings.Contains(resumeURL, "/image/upload/")
+		isAuthenticatedRaw := strings.Contains(resumeURL, "/raw/authenticated/")
+		if isCloudinaryURL && (isImageDelivery || isAuthenticatedRaw) {
+			return utils.ErrorResponse(c, fiber.StatusBadRequest, "resume_url Cloudinary tidak valid: gunakan file upload `resume` atau URL `/raw/upload/`")
+		}
 	}
 	if resumeURL == "" {
 		return utils.ErrorResponse(c, fiber.StatusBadRequest, "resume wajib diunggah")

@@ -942,6 +942,18 @@ To reply to an existing comment:
 | GET    | `/api/groups/:id/members`         | ✅   | —           | List members                                         |
 | DELETE | `/api/groups/:id/members/:userID` | ✅   | —           | Kick member (owner only; student/alumni only)        |
 
+Pagination for group list endpoints:
+
+- `GET /api/groups?page=1&limit=20`
+- `GET /api/groups/joined?page=1&limit=20`
+- `GET /api/groups/:id/members?page=1&limit=20`
+
+Each paginated response includes `total`, `page`, and `limit`.
+
+- `GET /api/groups` response shape: `{ total, page, limit, data }`
+- `GET /api/groups/joined` response shape: `{ total, page, limit, data }`
+- `GET /api/groups/:id/members` response shape: `{ total, page, limit, members }`
+
 ### Group Article Endpoints
 
 | Method | Endpoint                            | Auth | Body        | Description                                       |
@@ -1268,6 +1280,30 @@ If one or more media files fail to upload or fail to persist, the API returns an
 | `cover_letter` | ❌       | Optional text               |
 
 > \*One of `resume` (file) or `resume_url` (link) is required.
+
+### GET `/api/jobs/:id/applicants` — Resume URL Contract
+
+- For Cloudinary-based resumes, `ResumeURL` is returned as a signed temporary download URL.
+- Signed URL validity is currently 1 hour from response time.
+- The URL may change on every request and should be opened immediately by frontend.
+- Frontend should not persist this signed URL for long-term reuse.
+
+**Example response snippet (`200`):**
+
+```json
+{
+  "success": true,
+  "data": [
+    {
+      "ID": 10,
+      "JobID": 7,
+      "UserID": 5,
+      "Status": "pending",
+      "ResumeURL": "https://api.cloudinary.com/v1_1/<cloud_name>/raw/download?public_id=alumni-platform/resumes/abc123&format=pdf&expires_at=1777000000&signature=..."
+    }
+  ]
+}
+```
 
 ### PUT `/api/jobs/applications/:id/status` — Update Status (JSON)
 

@@ -3,9 +3,13 @@ package service
 import (
 	"errors"
 	"fmt"
+	"strings"
+	"time"
 
+	"github.com/reganputra/skripsi-backend/config"
 	"github.com/reganputra/skripsi-backend/models"
 	"github.com/reganputra/skripsi-backend/repository"
+	"github.com/reganputra/skripsi-backend/utils"
 	"gorm.io/gorm"
 )
 
@@ -241,6 +245,19 @@ func (s *jobService) GetApplicants(userID, jobID uint) ([]models.JobApplication,
 	if err != nil {
 		return nil, errors.New("gagal mengambil data pelamar")
 	}
+
+	for i := range apps {
+		resumeURL := strings.TrimSpace(apps[i].ResumeURL)
+		if resumeURL == "" || !strings.Contains(strings.ToLower(resumeURL), "cloudinary.com") {
+			continue
+		}
+
+		signedURL, signErr := utils.BuildCloudinaryTemporaryDownloadURL(config.Cloudinary, resumeURL, time.Hour)
+		if signErr == nil && signedURL != "" {
+			apps[i].ResumeURL = signedURL
+		}
+	}
+
 	return apps, nil
 }
 
