@@ -154,15 +154,15 @@ func buildGroupCommentTree(comments []models.GroupComment) []*GroupCommentNode {
 
 type GroupService interface {
 	CreateGroup(userID uint, req GroupRequest) (*models.Group, error)
-	GetGroups() ([]*GroupListItemResponse, error)
+	GetGroups(page, limit int) ([]*GroupListItemResponse, int64, error)
 	GetGroupByID(id uint) (*GroupDetailResponse, error)
 	UpdateGroup(userID uint, groupID uint, req GroupRequest) (*models.Group, error)
 	DeleteGroup(userID uint, groupID uint) error
 
 	JoinGroup(userID uint, groupID uint) error
 	LeaveGroup(userID uint, groupID uint) error
-	GetGroupMembers(groupID uint) ([]models.GroupMember, error)
-	GetJoinedGroups(userID uint) ([]models.Group, error)
+	GetGroupMembers(groupID uint, page, limit int) ([]models.GroupMember, int64, error)
+	GetJoinedGroups(userID uint, page, limit int) ([]models.Group, int64, error)
 	KickMember(ownerID uint, groupID uint, targetUserID uint, reason string) error
 
 	CreateGroupArticle(userID uint, groupID uint, req GroupArticleRequest) (*models.GroupArticle, error)
@@ -243,10 +243,17 @@ func (s *groupService) CreateGroup(userID uint, req GroupRequest) (*models.Group
 	return group, nil
 }
 
-func (s *groupService) GetGroups() ([]*GroupListItemResponse, error) {
-	groups, err := s.groupRepo.FindGroups()
+func (s *groupService) GetGroups(page, limit int) ([]*GroupListItemResponse, int64, error) {
+	if page < 1 {
+		page = 1
+	}
+	if limit < 1 || limit > 100 {
+		limit = 20
+	}
+
+	groups, total, err := s.groupRepo.FindGroups(page, limit)
 	if err != nil {
-		return nil, err
+		return nil, 0, err
 	}
 
 	result := make([]*GroupListItemResponse, 0, len(groups))
@@ -273,7 +280,7 @@ func (s *groupService) GetGroups() ([]*GroupListItemResponse, error) {
 	if result == nil {
 		result = []*GroupListItemResponse{}
 	}
-	return result, nil
+	return result, total, nil
 }
 
 func (s *groupService) GetGroupByID(id uint) (*GroupDetailResponse, error) {
@@ -396,12 +403,24 @@ func (s *groupService) LeaveGroup(userID uint, groupID uint) error {
 	return s.memberRepo.RemoveGroupMember(groupID, userID)
 }
 
-func (s *groupService) GetGroupMembers(groupID uint) ([]models.GroupMember, error) {
-	return s.memberRepo.FindGroupMembers(groupID)
+func (s *groupService) GetGroupMembers(groupID uint, page, limit int) ([]models.GroupMember, int64, error) {
+	if page < 1 {
+		page = 1
+	}
+	if limit < 1 || limit > 100 {
+		limit = 20
+	}
+	return s.memberRepo.FindGroupMembers(groupID, page, limit)
 }
 
-func (s *groupService) GetJoinedGroups(userID uint) ([]models.Group, error) {
-	return s.memberRepo.FindJoinedGroups(userID)
+func (s *groupService) GetJoinedGroups(userID uint, page, limit int) ([]models.Group, int64, error) {
+	if page < 1 {
+		page = 1
+	}
+	if limit < 1 || limit > 100 {
+		limit = 20
+	}
+	return s.memberRepo.FindJoinedGroups(userID, page, limit)
 }
 
 func (s *groupService) KickMember(ownerID uint, groupID uint, targetUserID uint, reason string) error {
