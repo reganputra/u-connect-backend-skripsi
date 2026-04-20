@@ -1,6 +1,8 @@
 package repository
 
 import (
+	"errors"
+
 	"github.com/reganputra/skripsi-backend/models"
 	"gorm.io/gorm"
 )
@@ -21,6 +23,30 @@ func NewEventRegistrationRepository(db *gorm.DB) EventRegistrationRepository {
 }
 
 func (r *eventRegistrationRepository) CreateEventRegistration(reg *models.EventRegistration) error {
+	var existing models.EventRegistration
+	err := r.db.Unscoped().
+		Where("event_id = ? AND user_id = ?", reg.EventID, reg.UserID).
+		First(&existing).Error
+
+	if err == nil {
+		if existing.DeletedAt.Valid {
+			return r.db.Unscoped().
+				Model(&models.EventRegistration{}).
+				Where("id = ?", existing.ID).
+				Updates(map[string]interface{}{
+					"deleted_at":    nil,
+					"reminder_sent": false,
+				}).Error
+		}
+
+		// Let DB enforce uniqueness for concurrent duplicate registrations.
+		return r.db.Create(reg).Error
+	}
+
+	if !errors.Is(err, gorm.ErrRecordNotFound) {
+		return err
+	}
+
 	return r.db.Create(reg).Error
 }
 
@@ -34,7 +60,7 @@ func (r *eventRegistrationRepository) FindEventRegistration(eventID, userID uint
 }
 
 func (r *eventRegistrationRepository) DeleteEventRegistration(eventID, userID uint) error {
-	return r.db.
+	return r.db.Unscoped().
 		Where("event_id = ? AND user_id = ?", eventID, userID).
 		Delete(&models.EventRegistration{}).Error
 }

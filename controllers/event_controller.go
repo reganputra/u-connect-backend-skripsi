@@ -34,6 +34,7 @@ func (ctrl *EventController) CreateEvent(c *fiber.Ctx) error {
 
 	req := service.EventRequest{
 		Title:       c.FormValue("title"),
+		Organizer:   parseOptionalString(c.FormValue("organizer")),
 		Description: parseOptionalString(c.FormValue("description")),
 		PhotoURL:    parseOptionalString(photoURL),
 		Location:    parseOptionalString(c.FormValue("location")),
@@ -94,6 +95,7 @@ func (ctrl *EventController) UpdateEvent(c *fiber.Ctx) error {
 
 	req := service.EventRequest{
 		Title:       c.FormValue("title"),
+		Organizer:   parseOptionalString(c.FormValue("organizer")),
 		Description: parseOptionalString(c.FormValue("description")),
 		PhotoURL:    parseOptionalString(photoURL),
 		Location:    parseOptionalString(c.FormValue("location")),

@@ -287,7 +287,7 @@ Notes:
 
 ## User Profile
 
-> `alumni` and `student` only. All create/update use `multipart/form-data`.
+> `alumni`, `student`, and `partner`. All create/update use `multipart/form-data`.
 
 | Method | Endpoint                      | Auth | Description             |
 | ------ | ----------------------------- | ---- | ----------------------- |
@@ -409,15 +409,15 @@ Notes:
 
 ## Directory
 
-> Browse profiles of students, alumni, and search by skills, company, or interests. Available to `student`, `alumni`, and `partner` roles.
+> Browse profiles of students, alumni, and partners; search by skills, company, or interests. Available to `student`, `alumni`, and `partner` roles.
 
-| Method | Endpoint                           | Auth | Description                              |
-| ------ | ---------------------------------- | ---- | ---------------------------------------- |
-| GET    | `/api/directory/:userID`           | ✅   | View a user's full public profile        |
-| GET    | `/api/directory/:userID/portfolio` | ✅   | View a user's public portfolio           |
-| GET    | `/api/directory`                   | ✅   | List all profiles (paginated)            |
-| GET    | `/api/directory/search?q=<query>`  | ✅   | Search profiles by name/skills/company   |
-| GET    | `/api/directory/role/:role`        | ✅   | Filter profiles by role (student/alumni) |
+| Method | Endpoint                           | Auth | Description                                      |
+| ------ | ---------------------------------- | ---- | ------------------------------------------------ |
+| GET    | `/api/directory/:userID`           | ✅   | View a user's full public profile                |
+| GET    | `/api/directory/:userID/portfolio` | ✅   | View a user's public portfolio                   |
+| GET    | `/api/directory`                   | ✅   | List all profiles (paginated)                    |
+| GET    | `/api/directory/search?q=<query>`  | ✅   | Search profiles by name/skills/company           |
+| GET    | `/api/directory/role/:role`        | ✅   | Filter profiles by role (student/alumni/partner) |
 
 #### GET `/api/directory/:userID` — View Public Profile
 
@@ -512,7 +512,7 @@ Returns portfolio items for a selected user.
 
 **Query params:** `?page=1&limit=20`
 
-Returns paginated list of all student and alumni profiles (newest first).
+Returns paginated list of all student, alumni, and partner profiles (newest first).
 
 **Response `200`:**
 
@@ -599,7 +599,7 @@ Searches profiles by name, skills, company name, or interests (case-insensitive)
 
 #### GET `/api/directory/role/:role` — Filter by Role
 
-Returns all profiles for a specific role (`student` or `alumni`).
+Returns all profiles for a specific role (`student`, `alumni`, or `partner`).
 
 **Query params:** `?page=1&limit=20`
 
@@ -608,7 +608,7 @@ Returns all profiles for a specific role (`student` or `alumni`).
 **Error cases:**
 | Status | Reason |
 |---|---|
-| `400` | Role is not `student` or `alumni` |
+| `400` | Role is not `student`, `alumni`, or `partner` |
 | `401` | Not authenticated |
 
 ---
@@ -1083,14 +1083,23 @@ If one or more media files fail to upload or fail to persist, the API returns an
 | Field         | Required | Notes                                                        |
 | ------------- | -------- | ------------------------------------------------------------ |
 | `title`       | ✅       | —                                                            |
+| `organizer`   | ❌       | Event organizer name                                         |
 | `description` | ❌       | —                                                            |
 | `location`    | ❌       | —                                                            |
 | `capacity`    | ❌       | Integer ≥ 0 (0 = unlimited)                                  |
-| `start_time`  | ❌       | ISO 8601 date-time used by the reminder scheduler            |
+| `start_time`  | ❌       | ISO 8601 date-time; triggers auto-status transitions         |
+| `end_time`    | ❌       | ISO 8601 date-time; if omitted, defaults to start_time + 24h |
 | `status`      | ❌       | `upcoming` (default) · `ongoing` · `completed` · `cancelled` |
 | `photo`       | ❌       | Image file → Cloudinary                                      |
 
 > `PUT /api/events/:id` accepts the same form-data fields, including optional `start_time`.
+
+### Event Response Fields
+
+| Field            | Type          | Notes                                                                                                                  |
+| ---------------- | ------------- | ---------------------------------------------------------------------------------------------------------------------- |
+| `AttendantCount` | Integer       | Total registered attendants for the event                                                                              |
+| `SeatLeft`       | Integer\|null | Remaining seats (`capacity - AttendantCount`) when `capacity > 0`; `null` when unlimited (`capacity` is `null` or `0`) |
 
 **Response `201`:**
 
@@ -1100,13 +1109,69 @@ If one or more media files fail to upload or fail to persist, the API returns an
   "data": {
     "ID": 5,
     "Title": "Alumni Seminar 2026",
+    "Organizer": "Himpunan Alumni Teknik Informatika",
     "Location": "Aula Besar, Kampus A",
     "StartTime": "2026-06-01T09:00:00Z",
     "Capacity": 50,
+    "AttendantCount": 0,
+    "SeatLeft": 50,
     "Status": "upcoming",
     "PhotoURL": null,
-    "OwnerID": 2,
+    "UserID": 2,
     "CreatedAt": "2026-04-01T08:00:00+07:00"
+  }
+}
+```
+
+### GET `/api/events` — List Events
+
+**Response `200`:**
+
+```json
+{
+  "success": true,
+  "data": {
+    "total": 2,
+    "page": 1,
+    "limit": 10,
+    "events": [
+      {
+        "ID": 5,
+        "Title": "Alumni Seminar 2026",
+        "Capacity": 50,
+        "AttendantCount": 37,
+        "SeatLeft": 13,
+        "Status": "upcoming"
+      },
+      {
+        "ID": 9,
+        "Title": "Open Networking Night",
+        "Capacity": 0,
+        "AttendantCount": 120,
+        "SeatLeft": null,
+        "Status": "ongoing"
+      }
+    ]
+  }
+}
+```
+
+### GET `/api/events/:id` — Event Detail
+
+**Response `200`:**
+
+```json
+{
+  "success": true,
+  "data": {
+    "ID": 5,
+    "Title": "Alumni Seminar 2026",
+    "Capacity": 50,
+    "AttendantCount": 37,
+    "SeatLeft": 13,
+    "Status": "upcoming",
+    "Agendas": [],
+    "Registrations": []
   }
 }
 ```
@@ -1122,11 +1187,15 @@ If one or more media files fail to upload or fail to persist, the API returns an
 
 ### Business Rules
 
+- Event status lifecycle: `upcoming` → `ongoing` (auto at start_time) → `completed` (auto at end_time or start_time + 24h)
 - Event reminders are scheduled from `start_time` approximately 24 hours before the event
-- `start_time` should be provided when you want reminder notifications to be generated
+- `start_time` triggers auto-transition to `ongoing`; provide both `start_time` and `end_time` for full auto-lifecycle
+- If `end_time` is omitted, events auto-complete 24 hours after `start_time`
+- Manual status override is allowed (e.g., organizer can set `status: ongoing` before start_time)
 - Registration blocked when `status` is `completed` or `cancelled`
 - Maximum registrations enforced when `capacity > 0`
-- Duplicate registration rejected
+- Duplicate registration rejected while user is still actively registered
+- Re-registration is allowed after user cancels registration
 - Only the creator can update, delete, and manage agendas
 - Delete cascades: all agendas + registrations removed
 

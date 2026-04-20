@@ -11,13 +11,17 @@ type Event struct {
 	UserID      uint   `gorm:"not null"`
 	User        User   `gorm:"foreignKey:UserID"`
 	Title       string `gorm:"not null"`
+	Organizer   *string
 	Description *string
 	PhotoURL    *string
 	Location    *string
 	Capacity    *int
 	StartTime   *time.Time `gorm:"index"`
+	EndTime     *time.Time `gorm:"index"`
 	Status      string     `gorm:"default:'upcoming'"`
 
-	Agendas       []EventAgenda       `gorm:"foreignKey:EventID"`
-	Registrations []EventRegistration `gorm:"foreignKey:EventID"`
+	Agendas        []EventAgenda       `gorm:"foreignKey:EventID"`
+	Registrations  []EventRegistration `gorm:"foreignKey:EventID"`
+	AttendantCount int64               `gorm:"-"`
+	SeatLeft       *int                `gorm:"-"`
 }

@@ -202,6 +202,7 @@ func main() {
 
 	// ── Background Schedulers ───────────────────────────────────────────────────
 	go scheduler.StartEventReminderScheduler(db, notifSvc)
+	go scheduler.StartEventStatusScheduler(db)
 
 	// ── Start server ──────────────────────────────────────────────────────────
 	port := os.Getenv("APP_PORT")

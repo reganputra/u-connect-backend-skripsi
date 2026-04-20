@@ -107,7 +107,7 @@ func (r *profileRepository) GetAllProfiles(page, limit int) ([]DirectorySummary,
 				"up.job_status, up.position, up.company_name, up.skills, up.interests, up.mentor_description",
 		).
 		Joins("JOIN users u ON u.id = up.user_id").
-		Where("u.role IN (?, ?) AND u.is_active = true", "student", "alumni").
+		Where("u.role IN (?, ?, ?) AND u.is_active = true", "student", "alumni", "partner").
 		Order("up.created_at DESC")
 
 	base.Count(&total)
@@ -139,7 +139,7 @@ func (r *profileRepository) SearchProfiles(query string, page, limit int) ([]Dir
 				"up.job_status, up.position, up.company_name, up.skills, up.interests, up.mentor_description",
 		).
 		Joins("JOIN users u ON u.id = up.user_id").
-		Where("u.role IN (?, ?) AND u.is_active = true", "student", "alumni").
+		Where("u.role IN (?, ?, ?) AND u.is_active = true", "student", "alumni", "partner").
 		Where(
 			"u.name ILIKE ? OR up.skills ILIKE ? OR up.company_name ILIKE ? OR up.interests ILIKE ?",
 			searchPattern, searchPattern, searchPattern, searchPattern,
@@ -163,8 +163,8 @@ func (r *profileRepository) GetProfilesByRole(role string, page, limit int) ([]D
 		limit = 20
 	}
 
-	// Only allow filtering by student or alumni
-	if role != "student" && role != "alumni" {
+	// Only allow filtering by student, alumni, or partner
+	if role != "student" && role != "alumni" && role != "partner" {
 		return []DirectorySummary{}, 0, nil
 	}
 

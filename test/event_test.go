@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"net/http"
 	"testing"
+	"time"
 )
 
 // TestEvent covers event lifecycle, registration, capacity, and agendas.
@@ -82,6 +83,49 @@ func TestEvent(t *testing.T) {
 			t.Fatal("Title missing from event detail")
 		}
 		t.Log("✅ Event detail fetched")
+	})
+
+	t.Run("event_status_lifecycle", func(t *testing.T) {
+		sfxLive := newSuffix()
+		// Event starts in 1 second, ends in 2 seconds
+		startTime := time.Now().Add(1 * time.Second).UTC().Format(time.RFC3339)
+		endTime := time.Now().Add(2 * time.Second).UTC().Format(time.RFC3339)
+
+		code, res := formReq(t, http.MethodPost, "/api/events", ownerToken, map[string]string{
+			"title":      "Live Event " + sfxLive,
+			"status":     "upcoming",
+			"start_time": startTime,
+			"end_time":   endTime,
+		})
+		assertStatus(t, 201, code, res)
+		liveEventID := dataMap(res)["ID"].(float64)
+
+		// Verify initial status is upcoming
+		code, res = jsonReq(t, http.MethodGet, fmt.Sprintf("/api/events/%.0f", liveEventID), ownerToken, nil)
+		assertStatus(t, 200, code, res)
+		d := dataMap(res)
+		if d["Status"] != "upcoming" {
+			t.Fatalf("expected initial status 'upcoming', got %v", d["Status"])
+		}
+
+		// Wait for start_time to pass (event should transition to ongoing)
+		time.Sleep(1500 * time.Millisecond)
+		code, res = jsonReq(t, http.MethodGet, fmt.Sprintf("/api/events/%.0f", liveEventID), ownerToken, nil)
+		assertStatus(t, 200, code, res)
+		d = dataMap(res)
+		if d["Status"] != "ongoing" {
+			t.Fatalf("expected auto-transitioned status 'ongoing', got %v", d["Status"])
+		}
+
+		// Wait for end_time to pass (event should transition to completed)
+		time.Sleep(1000 * time.Millisecond)
+		code, res = jsonReq(t, http.MethodGet, fmt.Sprintf("/api/events/%.0f", liveEventID), ownerToken, nil)
+		assertStatus(t, 200, code, res)
+		d = dataMap(res)
+		if d["Status"] != "completed" {
+			t.Fatalf("expected auto-completed status 'completed', got %v", d["Status"])
+		}
+		t.Log("✅ Event lifecycle: upcoming → ongoing → completed")
 	})
 
 	t.Run("update_event", func(t *testing.T) {
