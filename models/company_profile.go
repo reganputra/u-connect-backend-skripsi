@@ -10,4 +10,5 @@ type CompanyProfile struct {
 	Location     *string `gorm:"default:null"`
 	EmployeeSize *int    `gorm:"default:null"` // must be >= 0
 	WebsiteURL   *string `gorm:"default:null"`
+	Jobs         []Job   `gorm:"foreignKey:CompanyID"`
 }

@@ -29,7 +29,7 @@ func (r *jobRepository) FindJobs(search, jobType, status string, offset, limit i
 	var jobs []models.Job
 	var total int64
 
-	query := r.db.Model(&models.Job{}).Preload("User")
+	query := r.db.Model(&models.Job{}).Preload("User").Preload("Company")
 
 	if search != "" {
 		like := "%" + search + "%"
@@ -49,7 +49,7 @@ func (r *jobRepository) FindJobs(search, jobType, status string, offset, limit i
 
 func (r *jobRepository) FindJobByID(id uint) (*models.Job, error) {
 	var job models.Job
-	err := r.db.Preload("User").First(&job, id).Error
+	err := r.db.Preload("User").Preload("Company").First(&job, id).Error
 	if err != nil {
 		return nil, err
 	}
