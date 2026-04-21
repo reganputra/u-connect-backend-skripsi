@@ -39,15 +39,16 @@ type LoginRequest struct {
 }
 
 type AuthUserPayload struct {
-	ID         uint    `json:"id"`
-	Name       string  `json:"name"`
-	Email      string  `json:"email"`
-	Role       string  `json:"role"`
-	IsActive   bool    `json:"is_active"`
-	PictureURL string  `json:"picture_url"`
-	Faculty    *string `json:"faculty"`
-	Major      *string `json:"major"`
-	YearEnroll *int    `json:"year_enroll"`
+	ID          uint    `json:"id"`
+	Name        string  `json:"name"`
+	Email       string  `json:"email"`
+	Role        string  `json:"role"`
+	IsActive    bool    `json:"is_active"`
+	PictureURL  string  `json:"picture_url"`
+	Faculty     *string `json:"faculty"`
+	Major       *string `json:"major"`
+	YearEnroll  *int    `json:"year_enroll"`
+	CompanyName *string `json:"company_name"`
 }
 
 type LoginResponse struct {
@@ -198,14 +199,15 @@ func (s *authService) buildAuthUser(user *models.User) (*AuthUserPayload, error)
 	}
 
 	return &AuthUserPayload{
-		ID:         user.ID,
-		Name:       user.Name,
-		Email:      user.Email,
-		Role:       user.Role,
-		IsActive:   user.IsActive,
-		PictureURL: pictureURL,
-		Faculty:    user.Faculty,
-		Major:      user.Major,
-		YearEnroll: user.YearEnroll,
+		ID:          user.ID,
+		Name:        user.Name,
+		Email:       user.Email,
+		Role:        user.Role,
+		IsActive:    user.IsActive,
+		PictureURL:  pictureURL,
+		Faculty:     user.Faculty,
+		Major:       user.Major,
+		YearEnroll:  user.YearEnroll,
+		CompanyName: user.CompanyName,
 	}, nil
 }

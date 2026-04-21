@@ -23,6 +23,8 @@ type DirectorySummary struct {
 type ProfileRepository interface {
 	CreateProfile(profile *models.UserProfile) error
 	FindProfileByUserID(userID uint) (*models.UserProfile, error)
+	EnsureProfileExists(userID uint) error
+	BackfillMissingPartnerProfiles() error
 	UpdateProfile(profile *models.UserProfile) error
 	DeleteProfileByUserID(userID uint) error
 	AddExperience(exp *models.UserExperience) error
@@ -58,6 +60,31 @@ func (r *profileRepository) FindProfileByUserID(userID uint) (*models.UserProfil
 		return nil, result.Error
 	}
 	return &profile, nil
+}
+
+func (r *profileRepository) EnsureProfileExists(userID uint) error {
+	profile := &models.UserProfile{UserID: userID}
+	return r.db.Where(models.UserProfile{UserID: userID}).FirstOrCreate(profile).Error
+}
+
+func (r *profileRepository) BackfillMissingPartnerProfiles() error {
+	var missingUserIDs []uint
+	if err := r.db.
+		Table("users as u").
+		Select("u.id").
+		Joins("LEFT JOIN user_profiles up ON up.user_id = u.id").
+		Where("u.role = ? AND up.user_id IS NULL", "partner").
+		Scan(&missingUserIDs).Error; err != nil {
+		return err
+	}
+
+	for _, userID := range missingUserIDs {
+		if err := r.EnsureProfileExists(userID); err != nil {
+			return err
+		}
+	}
+
+	return nil
 }
 
 func (r *profileRepository) UpdateProfile(profile *models.UserProfile) error {
