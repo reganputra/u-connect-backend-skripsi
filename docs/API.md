@@ -232,7 +232,8 @@ Notes:
       "picture_url": "",
       "faculty": "Engineering",
       "major": "Informatics",
-      "year_enroll": 2020
+      "year_enroll": 2020,
+      "company_name": null
     }
   }
 }
@@ -272,7 +273,8 @@ Notes:
       "picture_url": "",
       "faculty": "Engineering",
       "major": "Informatics",
-      "year_enroll": 2020
+      "year_enroll": 2020,
+      "company_name": null
     },
     "user_id": 1,
     "email": "regan@test.com",
@@ -282,6 +284,7 @@ Notes:
 ```
 
 > For backward compatibility, `user_id`, `email`, and `role` are still included at the top level of `data`.
+> For `partner` accounts, the nested `user` object also includes `company_name` so the frontend can detect company onboarding without an extra `/api/company` call.
 
 ---
 
@@ -628,6 +631,7 @@ Returns all profiles for a specific role (`student`, `alumni`, or `partner`).
 > Partners with the same `company_name` **share one profile**. POST returns `201` if created, `200` if joined.
 >
 > If partner account has no `company_name` yet, include it in the first `POST /api/company` request.
+> Company onboarding also ensures a minimal `user_profiles` record exists, so partner accounts can appear in directory listings.
 
 ### POST `/api/company` — Create or Join Company Profile
 
@@ -1302,6 +1306,7 @@ If one or more media files fail to upload or fail to persist, the API returns an
 ## Jobs
 
 > `alumni` and `partner` can post jobs. `alumni` and `student` can apply.
+> Partners must already have an existing company profile before creating a job.
 
 ### Endpoints
 
@@ -1313,32 +1318,34 @@ If one or more media files fail to upload or fail to persist, the API returns an
 | PUT    | `/api/jobs/:id`                     | ✅   | `form-data` | Update own posting                     |
 | DELETE | `/api/jobs/:id`                     | ✅   | —           | Delete own posting                     |
 | POST   | `/api/jobs/:id/apply`               | ✅   | `form-data` | Apply for job                          |
+| DELETE | `/api/jobs/:id/apply`               | ✅   | —           | Withdraw own application               |
 | GET    | `/api/jobs/:id/applicants`          | ✅   | —           | View applicants (owner only)           |
 | GET    | `/api/jobs/applications/mine`       | ✅   | —           | View my applications                   |
 | PUT    | `/api/jobs/applications/:id/status` | ✅   | JSON        | Update application status (owner only) |
 
 ### GET `/api/jobs` — Query Parameters
 
-| Param      | Description                                                       |
-| ---------- | ----------------------------------------------------------------- |
-| `search`   | Search by title or company name                                   |
-| `job_type` | `full-time` · `part-time` · `internship` · `freelance` · `remote` |
-| `status`   | `open` · `closed`                                                 |
-| `page`     | Default: `1`                                                      |
-| `limit`    | Default: `10`                                                     |
+| Param      | Description                                                         |
+| ---------- | ------------------------------------------------------------------- |
+| `search`   | Search by title or company name                                     |
+| `job_type` | `full-time` · `part-time` · `internship` · `contract` · `freelance` |
+| `status`   | `open` · `closed` · `filled`                                        |
+| `page`     | Default: `1`                                                        |
+| `limit`    | Default: `10`                                                       |
 
 ### POST `/api/jobs` — Create Job (form-data)
 
-| Field          | Required | Notes                                                             |
-| -------------- | -------- | ----------------------------------------------------------------- |
-| `title`        | ✅       | —                                                                 |
-| `company_name` | ✅       | —                                                                 |
-| `job_type`     | ✅       | `full-time` · `part-time` · `internship` · `freelance` · `remote` |
-| `description`  | ❌       | —                                                                 |
-| `location`     | ❌       | —                                                                 |
-| `salary_range` | ❌       | e.g. `"5.000.000 - 8.000.000"`                                    |
-| `status`       | ❌       | `open` (default) · `closed`                                       |
-| `image`        | ❌       | Image file → Cloudinary                                           |
+| Field          | Required | Notes                                                                |
+| -------------- | -------- | -------------------------------------------------------------------- |
+| `title`        | ✅       | —                                                                    |
+| `company_name` | ✅       | Must match the poster's company profile when the poster is a partner |
+| `openings`     | ❌       | Integer > 0; defaults to `1`                                         |
+| `job_type`     | ✅       | `full-time` · `part-time` · `internship` · `contract` · `freelance`  |
+| `description`  | ❌       | —                                                                    |
+| `location`     | ❌       | —                                                                    |
+| `salary_range` | ❌       | e.g. `"5.000.000 - 8.000.000"`                                       |
+| `status`       | ❌       | `open` (default) · `closed`                                          |
+| `image`        | ❌       | Image file → Cloudinary                                              |
 
 ### POST `/api/jobs/:id/apply` — Apply for Job (form-data)
 
@@ -1349,6 +1356,20 @@ If one or more media files fail to upload or fail to persist, the API returns an
 | `cover_letter` | ❌       | Optional text               |
 
 > \*One of `resume` (file) or `resume_url` (link) is required.
+> Applications are only accepted while the job status is `open`.
+
+### DELETE `/api/jobs/:id/apply` — Withdraw Application
+
+> Applicants can withdraw only while their application is still `pending`.
+
+**Response `200`:**
+
+```json
+{
+  "success": true,
+  "data": { "message": "lamaran berhasil ditarik" }
+}
+```
 
 ### GET `/api/jobs/:id/applicants` — Resume URL Contract
 
@@ -1381,6 +1402,8 @@ If one or more media files fail to upload or fail to persist, the API returns an
 ```
 
 > Status values: `pending` · `reviewed` · `accepted` · `rejected`
+> `withdrawn` is set by the applicant withdrawal endpoint and appears in application history.
+> Accepting an application decreases the job's remaining openings; when openings reach `0`, the job status becomes `filled`.
 
 **Response `200`:**
 
@@ -1397,6 +1420,14 @@ If one or more media files fail to upload or fail to persist, the API returns an
   }
 }
 ```
+
+### Job Response Notes
+
+- `CompanyID` is stored on the job when the company profile exists.
+- `Openings` tracks remaining vacancies; default is `1`.
+- `CompanyName` remains the public display label.
+- `filled` jobs do not accept new applications.
+- Withdrawn applications are kept as `withdrawn` and are not shown in the owner applicant list.
 
 ---
 
