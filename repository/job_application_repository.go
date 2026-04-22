@@ -37,7 +37,7 @@ func (r *jobApplicationRepository) FindJobApplication(jobID, userID uint) (*mode
 
 func (r *jobApplicationRepository) FindApplicantsByJobID(jobID uint) ([]models.JobApplication, error) {
 	var apps []models.JobApplication
-	err := r.db.Preload("User").Where("job_id = ?", jobID).Order("created_at DESC").Find(&apps).Error
+	err := r.db.Preload("User").Where("job_id = ? AND status <> ?", jobID, "withdrawn").Order("created_at DESC").Find(&apps).Error
 	return apps, err
 }
 
@@ -49,7 +49,7 @@ func (r *jobApplicationRepository) FindApplicationsByUserID(userID uint) ([]mode
 
 func (r *jobApplicationRepository) FindJobApplicationByID(id uint) (*models.JobApplication, error) {
 	var app models.JobApplication
-	err := r.db.Preload("Job").First(&app, id).Error
+	err := r.db.Preload("Job").Preload("Job.Company").First(&app, id).Error
 	if err != nil {
 		return nil, err
 	}

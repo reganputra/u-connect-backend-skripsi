@@ -19,11 +19,13 @@ var validEventStatuses = map[string]bool{
 
 type EventRequest struct {
 	Title       string     `json:"title"`
+	Organizer   *string    `json:"organizer"`
 	Description *string    `json:"description"`
 	PhotoURL    *string    `json:"photo_url"`
 	Location    *string    `json:"location"`
 	Capacity    *int       `json:"capacity"`
 	StartTime   *time.Time `json:"start_time"`
+	EndTime     *time.Time `json:"end_time"`
 	Status      string     `json:"status"`
 }
 
@@ -54,6 +56,45 @@ type eventService struct {
 	eventRepo  repository.EventRepository
 	agendaRepo repository.EventAgendaRepository
 	regRepo    repository.EventRegistrationRepository
+}
+
+func calculateEventSeatLeft(capacity *int, registeredCount int64) *int {
+	if capacity == nil || *capacity <= 0 {
+		return nil
+	}
+
+	left := *capacity - int(registeredCount)
+	if left < 0 {
+		left = 0
+	}
+
+	return &left
+}
+
+func (s *eventService) attachEventRegistrationStats(event *models.Event) error {
+	count, err := s.eventRepo.CountEventRegistrations(event.ID)
+	if err != nil {
+		return err
+	}
+
+	event.AttendantCount = count
+	event.SeatLeft = calculateEventSeatLeft(event.Capacity, count)
+	return nil
+}
+
+func (s *eventService) attachEventsRegistrationStats(events []models.Event) error {
+	for i := range events {
+		if err := s.attachEventRegistrationStats(&events[i]); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+func (s *eventService) syncPastEventStatuses() error {
+	_, err := s.eventRepo.AutoCompletePastEvents(time.Now())
+	return err
 }
 
 func NewEventService(
@@ -88,29 +129,54 @@ func (s *eventService) CreateEvent(userID uint, req EventRequest) (*models.Event
 	event := &models.Event{
 		UserID:      userID,
 		Title:       req.Title,
+		Organizer:   req.Organizer,
 		Description: req.Description,
 		PhotoURL:    req.PhotoURL,
 		Location:    req.Location,
 		Capacity:    req.Capacity,
 		StartTime:   req.StartTime,
+		EndTime:     req.EndTime,
 		Status:      status,
 	}
 	if err := s.eventRepo.CreateEvent(event); err != nil {
 		return nil, errors.New("gagal membuat acara")
 	}
+
+	event.AttendantCount = 0
+	event.SeatLeft = calculateEventSeatLeft(event.Capacity, 0)
 	return event, nil
 }
 
 func (s *eventService) GetEvents(page, limit int) ([]models.Event, int64, error) {
+	if err := s.syncPastEventStatuses(); err != nil {
+		return nil, 0, errors.New("gagal memperbarui status acara")
+	}
 	offset := (page - 1) * limit
-	return s.eventRepo.FindEvents(offset, limit)
+	events, total, err := s.eventRepo.FindEvents(offset, limit)
+	if err != nil {
+		return nil, 0, err
+	}
+
+	if err := s.attachEventsRegistrationStats(events); err != nil {
+		return nil, 0, errors.New("gagal menghitung peserta acara")
+	}
+
+	return events, total, nil
 }
 
 func (s *eventService) GetEventByID(id uint) (*models.Event, error) {
+	if err := s.syncPastEventStatuses(); err != nil {
+		return nil, errors.New("gagal memperbarui status acara")
+	}
 	event, err := s.eventRepo.FindEventByID(id)
 	if err != nil {
 		return nil, errors.New("acara tidak ditemukan")
 	}
+
+	if err := s.attachEventRegistrationStats(event); err != nil {
+		return nil, errors.New("gagal menghitung peserta acara")
+	}
+
 	return event, nil
 }
 
@@ -129,6 +195,9 @@ func (s *eventService) UpdateEvent(userID, eventID uint, req EventRequest) (*mod
 	if req.Description != nil {
 		event.Description = req.Description
 	}
+	if req.Organizer != nil {
+		event.Organizer = req.Organizer
+	}
 	if req.PhotoURL != nil {
 		event.PhotoURL = req.PhotoURL
 	}
@@ -144,6 +213,9 @@ func (s *eventService) UpdateEvent(userID, eventID uint, req EventRequest) (*mod
 	if req.StartTime != nil {
 		event.StartTime = req.StartTime
 	}
+	if req.EndTime != nil {
+		event.EndTime = req.EndTime
+	}
 	if req.Status != "" {
 		if !validEventStatuses[req.Status] {
 			return nil, errors.New("status tidak valid: harus upcoming, ongoing, completed, atau cancelled")
@@ -154,6 +226,11 @@ func (s *eventService) UpdateEvent(userID, eventID uint, req EventRequest) (*mod
 	if err := s.eventRepo.UpdateEvent(event); err != nil {
 		return nil, errors.New("gagal memperbarui acara")
 	}
+
+	if err := s.attachEventRegistrationStats(event); err != nil {
+		return nil, errors.New("gagal menghitung peserta acara")
+	}
+
 	return event, nil
 }
 
@@ -171,6 +248,9 @@ func (s *eventService) DeleteEvent(userID, eventID uint) error {
 // ─── Registration ─────────────────────────────────────────────────────────────
 
 func (s *eventService) RegisterForEvent(userID, eventID uint) error {
+	if err := s.syncPastEventStatuses(); err != nil {
+		return errors.New("gagal memperbarui status acara")
+	}
 	event, err := s.eventRepo.FindEventByID(eventID)
 	if err != nil {
 		return errors.New("acara tidak ditemukan")
@@ -185,7 +265,7 @@ func (s *eventService) RegisterForEvent(userID, eventID uint) error {
 		return errors.New("sudah terdaftar untuk acara ini")
 	}
 
-	if event.Capacity != nil {
+	if event.Capacity != nil && *event.Capacity > 0 {
 		count, err := s.eventRepo.CountEventRegistrations(eventID)
 		if err != nil {
 			return errors.New("gagal memeriksa kapasitas")

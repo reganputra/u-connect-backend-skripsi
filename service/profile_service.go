@@ -397,7 +397,7 @@ func (s *profileService) UpdateProfilePicture(userID uint, pictureURL string) er
 	return s.profileRepo.UpdateProfile(profile)
 }
 
-// GetProfileDirectory returns paginated list of all profiles (students + alumni).
+// GetProfileDirectory returns paginated list of all profiles (students + alumni + partner).
 func (s *profileService) GetProfileDirectory(page, limit int) ([]DirectorySummary, int64, error) {
 	return s.profileRepo.GetAllProfiles(page, limit)
 }
@@ -410,10 +410,10 @@ func (s *profileService) SearchProfiles(query string, page, limit int) ([]Direct
 	return s.profileRepo.SearchProfiles(query, page, limit)
 }
 
-// GetProfilesByRole returns paginated profiles filtered by role (student or alumni).
+// GetProfilesByRole returns paginated profiles filtered by role (student, alumni, or partner).
 func (s *profileService) GetProfilesByRole(role string, page, limit int) ([]DirectorySummary, int64, error) {
-	if role != "student" && role != "alumni" {
-		return []DirectorySummary{}, 0, errors.New("peran harus student atau alumni")
+	if role != "student" && role != "alumni" && role != "partner" {
+		return []DirectorySummary{}, 0, errors.New("peran harus student, alumni, atau partner")
 	}
 	return s.profileRepo.GetProfilesByRole(role, page, limit)
 }

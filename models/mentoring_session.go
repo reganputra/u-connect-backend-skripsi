@@ -1,8 +1,9 @@
 package models
 
 import (
-	"gorm.io/gorm"
 	"time"
+
+	"gorm.io/gorm"
 )
 
 // MentoringSession is a scheduled session between an approved mentor-mentee pair.
@@ -18,4 +19,6 @@ type MentoringSession struct {
 	Notes       *string       `gorm:"default:null"`
 	SessionDate *time.Time    `gorm:"default:null"`
 	Status      string        `gorm:"not null;default:'scheduled'"` // scheduled | completed | cancelled
+	CompletedAt *time.Time    `gorm:"default:null"`
+	CancelledAt *time.Time    `gorm:"default:null"`
 }

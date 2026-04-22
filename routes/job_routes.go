@@ -23,6 +23,7 @@ func RegisterJobRoutes(app *fiber.App, ctrl *controllers.JobController) {
 
 	// Apply for job — student and alumni
 	jobs.Post("/:id/apply", middleware.RequireRole("student", "alumni"), ctrl.ApplyForJobHandler)
+	jobs.Delete("/:id/apply", middleware.RequireRole("student", "alumni"), ctrl.WithdrawApplicationHandler)
 	// View applicants — job owner only (enforced in service)
 	jobs.Get("/:id/applicants", middleware.RequireRole("alumni", "partner"), ctrl.GetApplicantsHandler)
 }

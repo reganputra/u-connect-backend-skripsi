@@ -7,16 +7,18 @@ import (
 
 // MentorDoc is a lightweight struct used by the recommendation service for TF-IDF computation.
 type MentorDoc struct {
-	UserID         uint
-	Name           string
-	ProfilePicture string
-	MentorBio      string
-	Skills         string
-	Interests      string
-	Position       string
-	CompanyName    string
-	IndustryName   string
-	MentorQuota    int
+	UserID          uint
+	Name            string
+	ProfilePicture  string
+	MentorBio       string
+	Skills          string
+	Interests       string
+	Position        string
+	CompanyName     string
+	IndustryName    string
+	ExperienceText  string
+	YearsExperience int
+	MentorQuota     int
 }
 
 type MentorRepository interface {
@@ -62,7 +64,7 @@ func (r *mentorRepository) FindMentors(page, limit int, search string) ([]models
 		Joins("JOIN users u ON u.id = user_profiles.user_id AND u.deleted_at IS NULL").
 		Where("u.role = ?", "alumni").
 		Where("user_profiles.mentor_quota IS NOT NULL").
-		Where(activeMenteesSubquery+" < user_profiles.mentor_quota")
+		Where(activeMenteesSubquery + " < user_profiles.mentor_quota")
 
 	if search != "" {
 		like := "%" + search + "%"
@@ -100,6 +102,28 @@ func (r *mentorRepository) FindMentorProfileByUserID(userID uint) (*models.UserP
 func (r *mentorRepository) FindAllMentorDocs() ([]MentorDoc, error) {
 	var docs []MentorDoc
 	err := r.db.Raw(`
+		WITH exp AS (
+			SELECT
+				ue.user_profile_id,
+				COALESCE(
+					STRING_AGG(
+						TRIM(
+							COALESCE(ue.company_name, '') || ' ' ||
+							COALESCE(ue.position, '') || ' ' ||
+							COALESCE(ue.description, '')
+						),
+						' '
+					),
+					''
+				) AS experience_text,
+				COALESCE(
+					MAX(COALESCE(ue.end_year, EXTRACT(YEAR FROM NOW())::int)) - MIN(ue.start_year) + 1,
+					0
+				) AS years_experience
+			FROM user_experiences ue
+			WHERE ue.deleted_at IS NULL
+			GROUP BY ue.user_profile_id
+		)
 		SELECT
 			u.id         AS user_id,
 			u.name,
@@ -110,13 +134,16 @@ func (r *mentorRepository) FindAllMentorDocs() ([]MentorDoc, error) {
 			COALESCE(up.position, '')            AS position,
 			COALESCE(up.company_name, '')        AS company_name,
 			COALESCE(up.industry_name, '')       AS industry_name,
+			COALESCE(exp.experience_text, '')    AS experience_text,
+			COALESCE(exp.years_experience, 0)    AS years_experience,
 			up.mentor_quota
 		FROM user_profiles up
 		JOIN users u ON u.id = up.user_id AND u.deleted_at IS NULL
+		LEFT JOIN exp ON exp.user_profile_id = up.id
 		WHERE u.role = 'alumni'
 		  AND up.mentor_quota IS NOT NULL
 		  AND up.deleted_at IS NULL
-		  AND `+activeMenteesSubqueryAliased+` < up.mentor_quota
+		  AND ` + activeMenteesSubqueryAliased + ` < up.mentor_quota
 	`).Scan(&docs).Error
 	return docs, err
 }

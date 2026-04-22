@@ -1,6 +1,8 @@
 package repository
 
 import (
+	"time"
+
 	"github.com/reganputra/skripsi-backend/models"
 	"gorm.io/gorm"
 )
@@ -12,6 +14,7 @@ type EventRepository interface {
 	UpdateEvent(event *models.Event) error
 	DeleteEvent(id uint) error
 	CountEventRegistrations(eventID uint) (int64, error)
+	AutoCompletePastEvents(now time.Time) (int64, error)
 }
 
 type eventRepository struct {
@@ -71,4 +74,33 @@ func (r *eventRepository) CountEventRegistrations(eventID uint) (int64, error) {
 	var count int64
 	err := r.db.Model(&models.EventRegistration{}).Where("event_id = ?", eventID).Count(&count).Error
 	return count, err
+}
+
+func (r *eventRepository) AutoCompletePastEvents(now time.Time) (int64, error) {
+	fallbackCompletionTime := now.Add(-24 * time.Hour)
+
+	// Transition: upcoming → ongoing when now >= start_time
+	ongoingResult := r.db.Model(&models.Event{}).
+		Where("start_time IS NOT NULL").
+		Where("start_time <= ?", now).
+		Where("status = ?", "upcoming").
+		Update("status", "ongoing")
+
+	if ongoingResult.Error != nil {
+		return 0, ongoingResult.Error
+	}
+
+	// Transition: ongoing → completed when now >= end_time (or start_time + 24h if no end_time)
+	completedResult := r.db.Model(&models.Event{}).
+		Where("start_time IS NOT NULL").
+		Where("status = ?", "ongoing").
+		Where(r.db.Where("end_time IS NOT NULL AND end_time <= ?", now).
+			Or("end_time IS NULL AND start_time <= ?", fallbackCompletionTime)).
+		Update("status", "completed")
+
+	if completedResult.Error != nil {
+		return ongoingResult.RowsAffected, completedResult.Error
+	}
+
+	return ongoingResult.RowsAffected + completedResult.RowsAffected, nil
 }

@@ -96,11 +96,11 @@ func (ctrl *DirectoryController) SearchProfiles(c *fiber.Ctx) error {
 }
 
 // GET /api/directory/role/:role
-// Returns paginated profiles filtered by role (student or alumni).
+// Returns paginated profiles filtered by role (student, alumni, or partner).
 func (ctrl *DirectoryController) GetProfilesByRole(c *fiber.Ctx) error {
 	role := c.Params("role")
-	if role != "student" && role != "alumni" {
-		return utils.ErrorResponse(c, fiber.StatusBadRequest, "peran harus student atau alumni")
+	if role != "student" && role != "alumni" && role != "partner" {
+		return utils.ErrorResponse(c, fiber.StatusBadRequest, "peran harus student, alumni, atau partner")
 	}
 
 	page, _ := strconv.Atoi(c.Query("page", "1"))

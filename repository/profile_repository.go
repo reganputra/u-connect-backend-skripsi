@@ -23,6 +23,8 @@ type DirectorySummary struct {
 type ProfileRepository interface {
 	CreateProfile(profile *models.UserProfile) error
 	FindProfileByUserID(userID uint) (*models.UserProfile, error)
+	EnsureProfileExists(userID uint) error
+	BackfillMissingPartnerProfiles() error
 	UpdateProfile(profile *models.UserProfile) error
 	DeleteProfileByUserID(userID uint) error
 	AddExperience(exp *models.UserExperience) error
@@ -58,6 +60,31 @@ func (r *profileRepository) FindProfileByUserID(userID uint) (*models.UserProfil
 		return nil, result.Error
 	}
 	return &profile, nil
+}
+
+func (r *profileRepository) EnsureProfileExists(userID uint) error {
+	profile := &models.UserProfile{UserID: userID}
+	return r.db.Where(models.UserProfile{UserID: userID}).FirstOrCreate(profile).Error
+}
+
+func (r *profileRepository) BackfillMissingPartnerProfiles() error {
+	var missingUserIDs []uint
+	if err := r.db.
+		Table("users as u").
+		Select("u.id").
+		Joins("LEFT JOIN user_profiles up ON up.user_id = u.id").
+		Where("u.role = ? AND up.user_id IS NULL", "partner").
+		Scan(&missingUserIDs).Error; err != nil {
+		return err
+	}
+
+	for _, userID := range missingUserIDs {
+		if err := r.EnsureProfileExists(userID); err != nil {
+			return err
+		}
+	}
+
+	return nil
 }
 
 func (r *profileRepository) UpdateProfile(profile *models.UserProfile) error {
@@ -107,7 +134,7 @@ func (r *profileRepository) GetAllProfiles(page, limit int) ([]DirectorySummary,
 				"up.job_status, up.position, up.company_name, up.skills, up.interests, up.mentor_description",
 		).
 		Joins("JOIN users u ON u.id = up.user_id").
-		Where("u.role IN (?, ?) AND u.is_active = true", "student", "alumni").
+		Where("u.role IN (?, ?, ?) AND u.is_active = true", "student", "alumni", "partner").
 		Order("up.created_at DESC")
 
 	base.Count(&total)
@@ -139,7 +166,7 @@ func (r *profileRepository) SearchProfiles(query string, page, limit int) ([]Dir
 				"up.job_status, up.position, up.company_name, up.skills, up.interests, up.mentor_description",
 		).
 		Joins("JOIN users u ON u.id = up.user_id").
-		Where("u.role IN (?, ?) AND u.is_active = true", "student", "alumni").
+		Where("u.role IN (?, ?, ?) AND u.is_active = true", "student", "alumni", "partner").
 		Where(
 			"u.name ILIKE ? OR up.skills ILIKE ? OR up.company_name ILIKE ? OR up.interests ILIKE ?",
 			searchPattern, searchPattern, searchPattern, searchPattern,
@@ -163,8 +190,8 @@ func (r *profileRepository) GetProfilesByRole(role string, page, limit int) ([]D
 		limit = 20
 	}
 
-	// Only allow filtering by student or alumni
-	if role != "student" && role != "alumni" {
+	// Only allow filtering by student, alumni, or partner
+	if role != "student" && role != "alumni" && role != "partner" {
 		return []DirectorySummary{}, 0, nil
 	}
 

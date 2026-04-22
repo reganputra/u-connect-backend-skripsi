@@ -38,6 +38,7 @@ func (ctrl *JobController) CreateJobHandler(c *fiber.Ctx) error {
 		Title:       c.FormValue("title"),
 		Description: parseOptionalString(c.FormValue("description")),
 		CompanyName: c.FormValue("company_name"),
+		Openings:    parseOptionalInt(c.FormValue("openings")),
 		Location:    parseOptionalString(c.FormValue("location")),
 		JobType:     c.FormValue("job_type"),
 		Status:      c.FormValue("status"),
@@ -105,6 +106,7 @@ func (ctrl *JobController) UpdateJobHandler(c *fiber.Ctx) error {
 		Title:       c.FormValue("title"),
 		Description: parseOptionalString(c.FormValue("description")),
 		CompanyName: c.FormValue("company_name"),
+		Openings:    parseOptionalInt(c.FormValue("openings")),
 		Location:    parseOptionalString(c.FormValue("location")),
 		JobType:     c.FormValue("job_type"),
 		Status:      c.FormValue("status"),
@@ -190,6 +192,29 @@ func (ctrl *JobController) ApplyForJobHandler(c *fiber.Ctx) error {
 		return utils.ErrorResponse(c, fiber.StatusBadRequest, err.Error())
 	}
 	return utils.SuccessResponse(c, fiber.StatusCreated, app)
+}
+
+func (ctrl *JobController) WithdrawApplicationHandler(c *fiber.Ctx) error {
+	userID, err := getUserIDFromToken(c)
+	if err != nil {
+		return utils.ErrorResponse(c, fiber.StatusUnauthorized, err.Error())
+	}
+	role, err := getUserRoleFromToken(c)
+	if err != nil {
+		return utils.ErrorResponse(c, fiber.StatusUnauthorized, err.Error())
+	}
+	jobID, err := strconv.ParseUint(c.Params("id"), 10, 64)
+	if err != nil {
+		return utils.ErrorResponse(c, fiber.StatusBadRequest, "ID lowongan tidak valid")
+	}
+
+	if err := ctrl.jobSvc.WithdrawApplication(userID, role, uint(jobID)); err != nil {
+		if err.Error() == "akses ditolak: hanya student atau alumni yang dapat menarik lamaran" {
+			return utils.ErrorResponse(c, fiber.StatusForbidden, err.Error())
+		}
+		return utils.ErrorResponse(c, fiber.StatusBadRequest, err.Error())
+	}
+	return utils.SuccessResponse(c, fiber.StatusOK, fiber.Map{"message": "lamaran berhasil ditarik"})
 }
 
 func (ctrl *JobController) GetApplicantsHandler(c *fiber.Ctx) error {

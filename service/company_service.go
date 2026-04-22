@@ -34,13 +34,25 @@ type CompanyProfileRequest struct {
 type companyService struct {
 	companyRepo repository.CompanyRepository
 	userRepo    repository.UserRepository
+	profileRepo repository.ProfileRepository
 }
 
-func NewCompanyService(companyRepo repository.CompanyRepository, userRepo repository.UserRepository) CompanyService {
+func NewCompanyService(companyRepo repository.CompanyRepository, userRepo repository.UserRepository, profileRepo repository.ProfileRepository) CompanyService {
 	return &companyService{
 		companyRepo: companyRepo,
 		userRepo:    userRepo,
+		profileRepo: profileRepo,
 	}
+}
+
+func (s *companyService) ensureDirectoryProfile(userID uint) error {
+	if s.profileRepo == nil {
+		return nil
+	}
+	if err := s.profileRepo.EnsureProfileExists(userID); err != nil {
+		return errors.New("gagal menyiapkan profil pengguna")
+	}
+	return nil
 }
 
 func (s *companyService) CreateOrJoinCompanyProfile(userID uint, req CompanyProfileRequest) (*models.CompanyProfile, bool, error) {
@@ -71,6 +83,9 @@ func (s *companyService) CreateOrJoinCompanyProfile(userID uint, req CompanyProf
 				return nil, false, errors.New("gagal menyimpan nama perusahaan pada akun")
 			}
 		}
+		if err := s.ensureDirectoryProfile(userID); err != nil {
+			return nil, false, err
+		}
 		return existing, false, nil
 	}
 
@@ -90,6 +105,9 @@ func (s *companyService) CreateOrJoinCompanyProfile(userID uint, req CompanyProf
 		if err := s.userRepo.UpdateUserCompanyName(userID, companyName); err != nil {
 			return nil, false, errors.New("gagal menyimpan nama perusahaan pada akun")
 		}
+	}
+	if err := s.ensureDirectoryProfile(userID); err != nil {
+		return nil, false, err
 	}
 	return profile, true, nil
 }
@@ -170,12 +188,18 @@ func (s *companyService) ChangeCompanyAffiliation(userID uint, companyName strin
 		if err != nil {
 			return nil, false, errors.New("profil perusahaan tidak ditemukan")
 		}
+		if err := s.ensureDirectoryProfile(userID); err != nil {
+			return nil, false, err
+		}
 		return profile, false, nil
 	}
 
 	if existing, err := s.companyRepo.FindCompanyProfileByName(newName); err == nil && existing != nil {
 		if err := s.userRepo.UpdateUserCompanyName(userID, newName); err != nil {
 			return nil, false, errors.New("gagal memperbarui afiliasi perusahaan")
+		}
+		if err := s.ensureDirectoryProfile(userID); err != nil {
+			return nil, false, err
 		}
 		return existing, true, nil
 	}
@@ -186,6 +210,9 @@ func (s *companyService) ChangeCompanyAffiliation(userID uint, companyName strin
 	}
 	if err := s.userRepo.UpdateUserCompanyName(userID, newName); err != nil {
 		return nil, false, errors.New("gagal memperbarui afiliasi perusahaan")
+	}
+	if err := s.ensureDirectoryProfile(userID); err != nil {
+		return nil, false, err
 	}
 
 	return profile, false, nil

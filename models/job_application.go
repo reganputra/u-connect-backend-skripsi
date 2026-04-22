@@ -10,5 +10,5 @@ type JobApplication struct {
 	User        User `gorm:"foreignKey:UserID"`
 	CoverLetter *string
 	ResumeURL   string `gorm:"not null"`
-	Status      string `gorm:"default:'pending'"` // pending, reviewed, accepted, rejected
+	Status      string `gorm:"default:'pending'"` // pending, reviewed, accepted, rejected, withdrawn
 }

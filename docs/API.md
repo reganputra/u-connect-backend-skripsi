@@ -232,7 +232,8 @@ Notes:
       "picture_url": "",
       "faculty": "Engineering",
       "major": "Informatics",
-      "year_enroll": 2020
+      "year_enroll": 2020,
+      "company_name": null
     }
   }
 }
@@ -272,7 +273,8 @@ Notes:
       "picture_url": "",
       "faculty": "Engineering",
       "major": "Informatics",
-      "year_enroll": 2020
+      "year_enroll": 2020,
+      "company_name": null
     },
     "user_id": 1,
     "email": "regan@test.com",
@@ -282,12 +284,13 @@ Notes:
 ```
 
 > For backward compatibility, `user_id`, `email`, and `role` are still included at the top level of `data`.
+> For `partner` accounts, the nested `user` object also includes `company_name` so the frontend can detect company onboarding without an extra `/api/company` call.
 
 ---
 
 ## User Profile
 
-> `alumni` and `student` only. All create/update use `multipart/form-data`.
+> `alumni`, `student`, and `partner`. All create/update use `multipart/form-data`.
 
 | Method | Endpoint                      | Auth | Description             |
 | ------ | ----------------------------- | ---- | ----------------------- |
@@ -409,15 +412,15 @@ Notes:
 
 ## Directory
 
-> Browse profiles of students, alumni, and search by skills, company, or interests. Available to `student`, `alumni`, and `partner` roles.
+> Browse profiles of students, alumni, and partners; search by skills, company, or interests. Available to `student`, `alumni`, and `partner` roles.
 
-| Method | Endpoint                           | Auth | Description                              |
-| ------ | ---------------------------------- | ---- | ---------------------------------------- |
-| GET    | `/api/directory/:userID`           | ✅   | View a user's full public profile        |
-| GET    | `/api/directory/:userID/portfolio` | ✅   | View a user's public portfolio           |
-| GET    | `/api/directory`                   | ✅   | List all profiles (paginated)            |
-| GET    | `/api/directory/search?q=<query>`  | ✅   | Search profiles by name/skills/company   |
-| GET    | `/api/directory/role/:role`        | ✅   | Filter profiles by role (student/alumni) |
+| Method | Endpoint                           | Auth | Description                                      |
+| ------ | ---------------------------------- | ---- | ------------------------------------------------ |
+| GET    | `/api/directory/:userID`           | ✅   | View a user's full public profile                |
+| GET    | `/api/directory/:userID/portfolio` | ✅   | View a user's public portfolio                   |
+| GET    | `/api/directory`                   | ✅   | List all profiles (paginated)                    |
+| GET    | `/api/directory/search?q=<query>`  | ✅   | Search profiles by name/skills/company           |
+| GET    | `/api/directory/role/:role`        | ✅   | Filter profiles by role (student/alumni/partner) |
 
 #### GET `/api/directory/:userID` — View Public Profile
 
@@ -512,7 +515,7 @@ Returns portfolio items for a selected user.
 
 **Query params:** `?page=1&limit=20`
 
-Returns paginated list of all student and alumni profiles (newest first).
+Returns paginated list of all student, alumni, and partner profiles (newest first).
 
 **Response `200`:**
 
@@ -599,7 +602,7 @@ Searches profiles by name, skills, company name, or interests (case-insensitive)
 
 #### GET `/api/directory/role/:role` — Filter by Role
 
-Returns all profiles for a specific role (`student` or `alumni`).
+Returns all profiles for a specific role (`student`, `alumni`, or `partner`).
 
 **Query params:** `?page=1&limit=20`
 
@@ -608,7 +611,7 @@ Returns all profiles for a specific role (`student` or `alumni`).
 **Error cases:**
 | Status | Reason |
 |---|---|
-| `400` | Role is not `student` or `alumni` |
+| `400` | Role is not `student`, `alumni`, or `partner` |
 | `401` | Not authenticated |
 
 ---
@@ -628,6 +631,7 @@ Returns all profiles for a specific role (`student` or `alumni`).
 > Partners with the same `company_name` **share one profile**. POST returns `201` if created, `200` if joined.
 >
 > If partner account has no `company_name` yet, include it in the first `POST /api/company` request.
+> Company onboarding also ensures a minimal `user_profiles` record exists, so partner accounts can appear in directory listings.
 
 ### POST `/api/company` — Create or Join Company Profile
 
@@ -1083,14 +1087,23 @@ If one or more media files fail to upload or fail to persist, the API returns an
 | Field         | Required | Notes                                                        |
 | ------------- | -------- | ------------------------------------------------------------ |
 | `title`       | ✅       | —                                                            |
+| `organizer`   | ❌       | Event organizer name                                         |
 | `description` | ❌       | —                                                            |
 | `location`    | ❌       | —                                                            |
 | `capacity`    | ❌       | Integer ≥ 0 (0 = unlimited)                                  |
-| `start_time`  | ❌       | ISO 8601 date-time used by the reminder scheduler            |
+| `start_time`  | ❌       | ISO 8601 date-time; triggers auto-status transitions         |
+| `end_time`    | ❌       | ISO 8601 date-time; if omitted, defaults to start_time + 24h |
 | `status`      | ❌       | `upcoming` (default) · `ongoing` · `completed` · `cancelled` |
 | `photo`       | ❌       | Image file → Cloudinary                                      |
 
 > `PUT /api/events/:id` accepts the same form-data fields, including optional `start_time`.
+
+### Event Response Fields
+
+| Field            | Type          | Notes                                                                                                                  |
+| ---------------- | ------------- | ---------------------------------------------------------------------------------------------------------------------- |
+| `AttendantCount` | Integer       | Total registered attendants for the event                                                                              |
+| `SeatLeft`       | Integer\|null | Remaining seats (`capacity - AttendantCount`) when `capacity > 0`; `null` when unlimited (`capacity` is `null` or `0`) |
 
 **Response `201`:**
 
@@ -1100,13 +1113,69 @@ If one or more media files fail to upload or fail to persist, the API returns an
   "data": {
     "ID": 5,
     "Title": "Alumni Seminar 2026",
+    "Organizer": "Himpunan Alumni Teknik Informatika",
     "Location": "Aula Besar, Kampus A",
     "StartTime": "2026-06-01T09:00:00Z",
     "Capacity": 50,
+    "AttendantCount": 0,
+    "SeatLeft": 50,
     "Status": "upcoming",
     "PhotoURL": null,
-    "OwnerID": 2,
+    "UserID": 2,
     "CreatedAt": "2026-04-01T08:00:00+07:00"
+  }
+}
+```
+
+### GET `/api/events` — List Events
+
+**Response `200`:**
+
+```json
+{
+  "success": true,
+  "data": {
+    "total": 2,
+    "page": 1,
+    "limit": 10,
+    "events": [
+      {
+        "ID": 5,
+        "Title": "Alumni Seminar 2026",
+        "Capacity": 50,
+        "AttendantCount": 37,
+        "SeatLeft": 13,
+        "Status": "upcoming"
+      },
+      {
+        "ID": 9,
+        "Title": "Open Networking Night",
+        "Capacity": 0,
+        "AttendantCount": 120,
+        "SeatLeft": null,
+        "Status": "ongoing"
+      }
+    ]
+  }
+}
+```
+
+### GET `/api/events/:id` — Event Detail
+
+**Response `200`:**
+
+```json
+{
+  "success": true,
+  "data": {
+    "ID": 5,
+    "Title": "Alumni Seminar 2026",
+    "Capacity": 50,
+    "AttendantCount": 37,
+    "SeatLeft": 13,
+    "Status": "upcoming",
+    "Agendas": [],
+    "Registrations": []
   }
 }
 ```
@@ -1122,11 +1191,15 @@ If one or more media files fail to upload or fail to persist, the API returns an
 
 ### Business Rules
 
+- Event status lifecycle: `upcoming` → `ongoing` (auto at start_time) → `completed` (auto at end_time or start_time + 24h)
 - Event reminders are scheduled from `start_time` approximately 24 hours before the event
-- `start_time` should be provided when you want reminder notifications to be generated
+- `start_time` triggers auto-transition to `ongoing`; provide both `start_time` and `end_time` for full auto-lifecycle
+- If `end_time` is omitted, events auto-complete 24 hours after `start_time`
+- Manual status override is allowed (e.g., organizer can set `status: ongoing` before start_time)
 - Registration blocked when `status` is `completed` or `cancelled`
 - Maximum registrations enforced when `capacity > 0`
-- Duplicate registration rejected
+- Duplicate registration rejected while user is still actively registered
+- Re-registration is allowed after user cancels registration
 - Only the creator can update, delete, and manage agendas
 - Delete cascades: all agendas + registrations removed
 
@@ -1207,20 +1280,21 @@ If one or more media files fail to upload or fail to persist, the API returns an
 
 ### Notification Types
 
-| Type                      | Source                        |
-| ------------------------- | ----------------------------- |
-| `new_follower`            | Follow system                 |
-| `post_commented`          | Feed comment                  |
-| `post_reacted`            | Feed reaction                 |
-| `group_kicked`            | Group kick                    |
-| `job_application_updated` | Job application status update |
-| `mentor_request_received` | New mentor request            |
-| `mentor_request_approved` | Mentor approved request       |
-| `mentor_request_rejected` | Mentor rejected request       |
-| `new_session`             | Mentor scheduled session      |
-| `report_rejected`         | Admin rejected report         |
-| `new_message`             | WebSocket message delivery    |
-| `event_reminder`          | Event reminder scheduler      |
+| Type                        | Source                         |
+| --------------------------- | ------------------------------ |
+| `new_follower`              | Follow system                  |
+| `post_commented`            | Feed comment                   |
+| `post_reacted`              | Feed reaction                  |
+| `group_kicked`              | Group kick                     |
+| `job_application_updated`   | Job application status update  |
+| `mentor_request_received`   | New mentor request             |
+| `mentor_request_approved`   | Mentor approved request        |
+| `mentor_request_rejected`   | Mentor rejected request        |
+| `mentor_relationship_ended` | Mentor ended active mentorship |
+| `new_session`               | Mentor scheduled session       |
+| `report_rejected`           | Admin rejected report          |
+| `new_message`               | WebSocket message delivery     |
+| `event_reminder`            | Event reminder scheduler       |
 
 ### Business Rules
 
@@ -1233,6 +1307,7 @@ If one or more media files fail to upload or fail to persist, the API returns an
 ## Jobs
 
 > `alumni` and `partner` can post jobs. `alumni` and `student` can apply.
+> Partners must already have an existing company profile before creating a job.
 
 ### Endpoints
 
@@ -1244,32 +1319,34 @@ If one or more media files fail to upload or fail to persist, the API returns an
 | PUT    | `/api/jobs/:id`                     | ✅   | `form-data` | Update own posting                     |
 | DELETE | `/api/jobs/:id`                     | ✅   | —           | Delete own posting                     |
 | POST   | `/api/jobs/:id/apply`               | ✅   | `form-data` | Apply for job                          |
+| DELETE | `/api/jobs/:id/apply`               | ✅   | —           | Withdraw own application               |
 | GET    | `/api/jobs/:id/applicants`          | ✅   | —           | View applicants (owner only)           |
 | GET    | `/api/jobs/applications/mine`       | ✅   | —           | View my applications                   |
 | PUT    | `/api/jobs/applications/:id/status` | ✅   | JSON        | Update application status (owner only) |
 
 ### GET `/api/jobs` — Query Parameters
 
-| Param      | Description                                                       |
-| ---------- | ----------------------------------------------------------------- |
-| `search`   | Search by title or company name                                   |
-| `job_type` | `full-time` · `part-time` · `internship` · `freelance` · `remote` |
-| `status`   | `open` · `closed`                                                 |
-| `page`     | Default: `1`                                                      |
-| `limit`    | Default: `10`                                                     |
+| Param      | Description                                                         |
+| ---------- | ------------------------------------------------------------------- |
+| `search`   | Search by title or company name                                     |
+| `job_type` | `full-time` · `part-time` · `internship` · `contract` · `freelance` |
+| `status`   | `open` · `closed` · `filled`                                        |
+| `page`     | Default: `1`                                                        |
+| `limit`    | Default: `10`                                                       |
 
 ### POST `/api/jobs` — Create Job (form-data)
 
-| Field          | Required | Notes                                                             |
-| -------------- | -------- | ----------------------------------------------------------------- |
-| `title`        | ✅       | —                                                                 |
-| `company_name` | ✅       | —                                                                 |
-| `job_type`     | ✅       | `full-time` · `part-time` · `internship` · `freelance` · `remote` |
-| `description`  | ❌       | —                                                                 |
-| `location`     | ❌       | —                                                                 |
-| `salary_range` | ❌       | e.g. `"5.000.000 - 8.000.000"`                                    |
-| `status`       | ❌       | `open` (default) · `closed`                                       |
-| `image`        | ❌       | Image file → Cloudinary                                           |
+| Field          | Required | Notes                                                                |
+| -------------- | -------- | -------------------------------------------------------------------- |
+| `title`        | ✅       | —                                                                    |
+| `company_name` | ✅       | Must match the poster's company profile when the poster is a partner |
+| `openings`     | ❌       | Integer > 0; defaults to `1`                                         |
+| `job_type`     | ✅       | `full-time` · `part-time` · `internship` · `contract` · `freelance`  |
+| `description`  | ❌       | —                                                                    |
+| `location`     | ❌       | —                                                                    |
+| `salary_range` | ❌       | e.g. `"5.000.000 - 8.000.000"`                                       |
+| `status`       | ❌       | `open` (default) · `closed`                                          |
+| `image`        | ❌       | Image file → Cloudinary                                              |
 
 ### POST `/api/jobs/:id/apply` — Apply for Job (form-data)
 
@@ -1280,6 +1357,20 @@ If one or more media files fail to upload or fail to persist, the API returns an
 | `cover_letter` | ❌       | Optional text               |
 
 > \*One of `resume` (file) or `resume_url` (link) is required.
+> Applications are only accepted while the job status is `open`.
+
+### DELETE `/api/jobs/:id/apply` — Withdraw Application
+
+> Applicants can withdraw only while their application is still `pending`.
+
+**Response `200`:**
+
+```json
+{
+  "success": true,
+  "data": { "message": "lamaran berhasil ditarik" }
+}
+```
 
 ### GET `/api/jobs/:id/applicants` — Resume URL Contract
 
@@ -1312,6 +1403,8 @@ If one or more media files fail to upload or fail to persist, the API returns an
 ```
 
 > Status values: `pending` · `reviewed` · `accepted` · `rejected`
+> `withdrawn` is set by the applicant withdrawal endpoint and appears in application history.
+> Accepting an application decreases the job's remaining openings; when openings reach `0`, the job status becomes `filled`.
 
 **Response `200`:**
 
@@ -1328,6 +1421,14 @@ If one or more media files fail to upload or fail to persist, the API returns an
   }
 }
 ```
+
+### Job Response Notes
+
+- `CompanyID` is stored on the job when the company profile exists.
+- `Openings` tracks remaining vacancies; default is `1`.
+- `CompanyName` remains the public display label.
+- `filled` jobs do not accept new applications.
+- Withdrawn applications are kept as `withdrawn` and are not shown in the owner applicant list.
 
 ---
 
@@ -1624,7 +1725,7 @@ If one or more media files fail to upload or fail to persist, the API returns an
 
 #### GET `/api/mentor/requests` — View Incoming Requests
 
-Returns all mentoring requests (pending + approved + rejected) sent to this mentor.
+Returns all mentoring requests (pending + approved + rejected + withdrawn) sent to this mentor.
 
 ---
 
@@ -1635,6 +1736,7 @@ Returns all mentoring requests (pending + approved + rejected) sent to this ment
 - Request must be `pending`
 - Student must not already have 2 approved mentors
 - Mentor must have remaining quota capacity
+- Approval is executed transactionally to avoid race conditions under concurrent approvals
 
 **Response `200`:**
 
@@ -1720,6 +1822,8 @@ Returns all sessions where the caller is the mentor. Preloads `Student`.
 
 > Valid `status` values: `scheduled` · `completed` · `cancelled`  
 > Only the owning mentor can update (403 for others).
+> Session in terminal state (`completed` or `cancelled`) cannot be edited again.
+> Completing a session before `session_date` is rejected when `session_date` is in the future.
 
 ---
 
@@ -1778,10 +1882,15 @@ Returns the mentor's full profile including `User` and `Experiences`. Returns `4
 
 **How it works:**
 
-1. Tokenizes each mentor's `skills + interests + mentor_bio + position + company + industry`
-2. Tokenizes the student's query (or falls back to profile skills/interests)
-3. Builds a TF-IDF corpus (mentors + student query)
-4. Ranks mentors by cosine similarity to the student query vector
+1. Reads each mentor's `skills + interests + mentor_bio + position + company + industry + experiences`
+2. Parses lightweight constraints from free-text query, including:
+
+- `N years/tahun` minimum experience intent
+- `<keyword> industry` intent
+
+3. Applies matching filters (when detected) before scoring
+4. Builds TF-IDF corpus (mentors + student query)
+5. Computes hybrid score from text similarity + keyword overlap + experience/industry fit
 
 **NLP Pipeline:** case folding → special character removal → tokenization → Indonesian + English stopword removal → Indonesian suffix/prefix stemming
 
@@ -1801,6 +1910,14 @@ Returns the mentor's full profile including `User` and `Experiences`. Returns `4
       "position": "Senior Software Engineer",
       "company_name": "PT Tech Indonesia",
       "industry_name": "",
+      "years_experience": 5,
+      "matched_keywords": ["python", "cloud", "machine"],
+      "score_breakdown": {
+        "text_similarity": 0.61,
+        "keyword_overlap": 0.5,
+        "experience_fit": 1,
+        "industry_fit": 0
+      },
       "mentor_quota": 3,
       "similarity_score": 0.5263
     }
@@ -1830,6 +1947,10 @@ Returns the mentor's full profile including `User` and `Experiences`. Returns `4
 - Student may have **at most 2 approved mentors simultaneously**
 - Mentor's quota must not be exceeded
 
+**Error cases:**
+
+- `409 Conflict`: duplicate active request (`pending` or `approved`) for the same mentor
+
 **Response `201`:** returns `MentorRequest` with `Status: "pending"`.
 
 ---
@@ -1843,6 +1964,53 @@ Returns `MentorRequest` records where `Status = "approved"` for the current stud
 #### GET `/api/student/requests` — My Sent Requests
 
 Returns all `MentorRequest` records sent by the current student (all statuses).
+
+---
+
+#### DELETE `/api/student/requests/:id` — Withdraw Pending Request
+
+Withdraws a mentoring request sent by current student.
+
+**Business Rules:**
+
+- Only request owner can withdraw
+- Only `pending` requests can be withdrawn
+- Withdrawn requests remain in history with `Status = "withdrawn"`
+
+**Response `200`:**
+
+```json
+{
+  "success": true,
+  "data": { "message": "permintaan mentoring berhasil ditarik" }
+}
+```
+
+---
+
+#### PATCH `/api/mentor/mentees/:id/end` — End Mentorship
+
+Ends an active mentoring relationship for the current mentor.
+
+**Body:**
+
+```json
+{
+  "reason": "Program selesai"
+}
+```
+
+> `reason` is optional.
+
+**Business Rules:**
+
+- Only the mentor who owns the relationship can end it
+- Only `approved` relationships can be ended
+- The relationship becomes inactive with `Status = "ended"`
+- Any scheduled sessions for the same mentor-student pair are automatically cancelled
+- The end action is recorded with audit fields such as `EndedAt`
+
+**Response `200`:** returns the updated `MentorRequest` with `Status: "ended"`.
 
 ---
 
@@ -1871,17 +2039,18 @@ Returns all `MentoringSession` records where the caller is the student. Preloads
 
 ### Business Rules Summary
 
-| Rule                     | Detail                                                           |
-| ------------------------ | ---------------------------------------------------------------- |
-| Mentor role              | `alumni` only                                                    |
-| Mentor quota             | Must be `1`, `2`, `3`, or `5`                                    |
-| Mentee limit per student | Max **2 approved mentors** at a time                             |
-| Capacity enforcement     | Request blocked when mentor's active mentees ≥ quota             |
-| Duplicate request        | Only one `pending` or `approved` request per student-mentor pair |
-| Session guard            | Session can only be created if an **approved** request exists    |
-| Unregister guard         | Cannot unregister while active mentees exist                     |
-| Status flow (Request)    | `pending` → `approved` \| `rejected`                             |
-| Status flow (Session)    | `scheduled` → `completed` \| `cancelled`                         |
+| Rule                     | Detail                                                                     |
+| ------------------------ | -------------------------------------------------------------------------- |
+| Mentor role              | `alumni` only                                                              |
+| Mentor quota             | Must be `1`, `2`, `3`, or `5`                                              |
+| Mentee limit per student | Max **2 approved mentors** at a time                                       |
+| Capacity enforcement     | Request blocked when mentor's active mentees ≥ quota                       |
+| Duplicate request        | Only one active (`pending` or `approved`) request per student-mentor pair  |
+| Session guard            | Session can only be created if an **approved** request exists              |
+| Unregister guard         | Cannot unregister while active mentees exist                               |
+| Status flow (Request)    | `pending` → `approved` \| `rejected` \| `withdrawn` \| `ended`             |
+| Status flow (Session)    | `scheduled` → `completed` \| `cancelled` (terminal)                        |
+| End mentorship guard     | Only approved relationships can be ended; ended relationships are inactive |
 
 ---
 

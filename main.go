@@ -111,6 +111,10 @@ func main() {
 	messageRepo := repository.NewMessageRepository(db)
 	notifRepo := repository.NewNotificationRepository(db)
 
+	if err := profileRepo.BackfillMissingPartnerProfiles(); err != nil {
+		log.Fatalf("❌ Failed to backfill partner profiles: %v", err)
+	}
+
 	// ── WebSocket Hub + Notification Service (must come first) ──────────────
 	hub := ws.NewHub()
 	go hub.Run()
@@ -119,12 +123,12 @@ func main() {
 	// ── Services ──────────────────────────────────────────────────────────────
 	authSvc := service.NewAuthService(userRepo, profileRepo)
 	profileSvc := service.NewProfileService(profileRepo)
-	companySvc := service.NewCompanyService(companyRepo, userRepo)
+	companySvc := service.NewCompanyService(companyRepo, userRepo, profileRepo)
 	portfolioSvc := service.NewPortfolioService(portfolioRepo)
 	feedSvc := service.NewFeedService(postRepo, commentRepo, reactionRepo, voteRepo, userRepo, notifSvc)
 	groupSvc := service.NewGroupService(groupRepo, memberRepo, articleRepo, gCommentRepo, gReactionRepo, notifSvc)
 	eventSvc := service.NewEventService(eventRepo, agendaRepo, regRepo)
-	jobSvc := service.NewJobService(jobRepo, jobAppRepo, notifSvc)
+	jobSvc := service.NewJobService(jobRepo, jobAppRepo, companyRepo, userRepo, notifSvc)
 	reportSvc := service.NewReportService(reportRepo)
 	adminSvc := service.NewAdminService(adminRepo, reportRepo, categoryRepo, notifSvc)
 	recommendSvc := service.NewRecommendationService(mentorRepo)
@@ -202,6 +206,7 @@ func main() {
 
 	// ── Background Schedulers ───────────────────────────────────────────────────
 	go scheduler.StartEventReminderScheduler(db, notifSvc)
+	go scheduler.StartEventStatusScheduler(db)
 
 	// ── Start server ──────────────────────────────────────────────────────────
 	port := os.Getenv("APP_PORT")
