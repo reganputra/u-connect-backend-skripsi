@@ -155,6 +155,35 @@ func (ctrl *MentorController) GetMyMentees(c *fiber.Ctx) error {
 	return utils.SuccessResponse(c, fiber.StatusOK, mentees)
 }
 
+// EndMentorship godoc — PATCH /api/mentor/mentees/:id/end  (alumni only)
+func (ctrl *MentorController) EndMentorship(c *fiber.Ctx) error {
+	userID, err := getUserIDFromToken(c)
+	if err != nil {
+		return utils.ErrorResponse(c, fiber.StatusUnauthorized, err.Error())
+	}
+	requestID, err := strconv.ParseUint(c.Params("id"), 10, 64)
+	if err != nil {
+		return utils.ErrorResponse(c, fiber.StatusBadRequest, "ID mentee tidak valid")
+	}
+	var body struct {
+		Reason *string `json:"reason"`
+	}
+	_ = c.BodyParser(&body)
+
+	req, err := ctrl.mentorSvc.EndMentorship(userID, uint(requestID), body.Reason)
+	if err != nil {
+		switch err.Error() {
+		case "permintaan tidak ditemukan":
+			return utils.ErrorResponse(c, fiber.StatusNotFound, err.Error())
+		case "akses ditolak":
+			return utils.ErrorResponse(c, fiber.StatusForbidden, err.Error())
+		default:
+			return utils.ErrorResponse(c, fiber.StatusBadRequest, err.Error())
+		}
+	}
+	return utils.SuccessResponse(c, fiber.StatusOK, req)
+}
+
 // ── Session Management ────────────────────────────────────────────────────────
 
 // CreateSession godoc — POST /api/mentor/sessions  (alumni only)

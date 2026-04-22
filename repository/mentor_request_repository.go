@@ -28,6 +28,7 @@ type MentorRequestRepository interface {
 	// CountApprovedForStudent counts how many mentors a student currently has (approved).
 	CountApprovedForStudent(studentID uint) (int64, error)
 	ApprovePendingTransactional(mentorID, requestID uint) (*models.MentorRequest, error)
+	EndMentorshipTransactional(mentorID, requestID uint, reason *string) (*models.MentorRequest, int64, error)
 	Update(req *models.MentorRequest) error
 }
 
@@ -175,6 +176,68 @@ func (r *mentorRequestRepository) ApprovePendingTransactional(mentorID, requestI
 	}
 
 	return &result, nil
+}
+
+func (r *mentorRequestRepository) EndMentorshipTransactional(mentorID, requestID uint, reason *string) (*models.MentorRequest, int64, error) {
+	var result models.MentorRequest
+	var cancelledSessions int64
+	err := r.db.Transaction(func(tx *gorm.DB) error {
+		var req models.MentorRequest
+		if err := tx.
+			Clauses(clause.Locking{Strength: "UPDATE"}).
+			Preload("Mentor").
+			Preload("Student").
+			First(&req, requestID).Error; err != nil {
+			if errors.Is(err, gorm.ErrRecordNotFound) {
+				return ErrRequestNotFound
+			}
+			return err
+		}
+
+		if req.MentorID != mentorID {
+			return ErrRequestForbidden
+		}
+		if req.Status != "approved" {
+			return ErrRequestAlreadyHandled
+		}
+
+		now := time.Now()
+		req.Status = "ended"
+		req.EndedAt = &now
+		req.EndReason = reason
+		req.ApprovedAt = req.ApprovedAt
+		req.RejectedAt = nil
+		req.WithdrawnAt = nil
+		if err := tx.Save(&req).Error; err != nil {
+			return err
+		}
+
+		cancelResult := tx.Model(&models.MentoringSession{}).
+			Where("mentor_id = ? AND student_id = ? AND status = 'scheduled'", mentorID, req.StudentID).
+			Updates(map[string]any{
+				"status":       "cancelled",
+				"cancelled_at": now,
+			})
+		if cancelResult.Error != nil {
+			return cancelResult.Error
+		}
+		cancelledSessions = cancelResult.RowsAffected
+
+		if err := tx.
+			Preload("Mentor").
+			Preload("Student").
+			First(&result, req.ID).Error; err != nil {
+			return err
+		}
+
+		return nil
+	})
+
+	if err != nil {
+		return nil, 0, err
+	}
+
+	return &result, cancelledSessions, nil
 }
 
 func (r *mentorRequestRepository) Update(req *models.MentorRequest) error {

@@ -34,6 +34,7 @@ func RegisterMentorRoutes(app *fiber.App, ctrl *controllers.MentorController) {
 	mentor.Patch("/requests/:id/approve", ctrl.ApproveRequest)
 	mentor.Patch("/requests/:id/reject", ctrl.RejectRequest)
 	mentor.Get("/mentees", ctrl.GetMyMentees)
+	mentor.Patch("/mentees/:id/end", ctrl.EndMentorship)
 	mentor.Post("/sessions", ctrl.CreateSession)
 	mentor.Get("/sessions", ctrl.GetMentorSessions)
 	mentor.Patch("/sessions/:id", ctrl.UpdateSession)

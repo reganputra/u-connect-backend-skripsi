@@ -1280,20 +1280,21 @@ If one or more media files fail to upload or fail to persist, the API returns an
 
 ### Notification Types
 
-| Type                      | Source                        |
-| ------------------------- | ----------------------------- |
-| `new_follower`            | Follow system                 |
-| `post_commented`          | Feed comment                  |
-| `post_reacted`            | Feed reaction                 |
-| `group_kicked`            | Group kick                    |
-| `job_application_updated` | Job application status update |
-| `mentor_request_received` | New mentor request            |
-| `mentor_request_approved` | Mentor approved request       |
-| `mentor_request_rejected` | Mentor rejected request       |
-| `new_session`             | Mentor scheduled session      |
-| `report_rejected`         | Admin rejected report         |
-| `new_message`             | WebSocket message delivery    |
-| `event_reminder`          | Event reminder scheduler      |
+| Type                        | Source                         |
+| --------------------------- | ------------------------------ |
+| `new_follower`              | Follow system                  |
+| `post_commented`            | Feed comment                   |
+| `post_reacted`              | Feed reaction                  |
+| `group_kicked`              | Group kick                     |
+| `job_application_updated`   | Job application status update  |
+| `mentor_request_received`   | New mentor request             |
+| `mentor_request_approved`   | Mentor approved request        |
+| `mentor_request_rejected`   | Mentor rejected request        |
+| `mentor_relationship_ended` | Mentor ended active mentorship |
+| `new_session`               | Mentor scheduled session       |
+| `report_rejected`           | Admin rejected report          |
+| `new_message`               | WebSocket message delivery     |
+| `event_reminder`            | Event reminder scheduler       |
 
 ### Business Rules
 
@@ -1987,6 +1988,32 @@ Withdraws a mentoring request sent by current student.
 
 ---
 
+#### PATCH `/api/mentor/mentees/:id/end` — End Mentorship
+
+Ends an active mentoring relationship for the current mentor.
+
+**Body:**
+
+```json
+{
+  "reason": "Program selesai"
+}
+```
+
+> `reason` is optional.
+
+**Business Rules:**
+
+- Only the mentor who owns the relationship can end it
+- Only `approved` relationships can be ended
+- The relationship becomes inactive with `Status = "ended"`
+- Any scheduled sessions for the same mentor-student pair are automatically cancelled
+- The end action is recorded with audit fields such as `EndedAt`
+
+**Response `200`:** returns the updated `MentorRequest` with `Status: "ended"`.
+
+---
+
 #### POST `/api/student/sessions` — Create Session (Student)
 
 ```json
@@ -2012,17 +2039,18 @@ Returns all `MentoringSession` records where the caller is the student. Preloads
 
 ### Business Rules Summary
 
-| Rule                     | Detail                                                                    |
-| ------------------------ | ------------------------------------------------------------------------- |
-| Mentor role              | `alumni` only                                                             |
-| Mentor quota             | Must be `1`, `2`, `3`, or `5`                                             |
-| Mentee limit per student | Max **2 approved mentors** at a time                                      |
-| Capacity enforcement     | Request blocked when mentor's active mentees ≥ quota                      |
-| Duplicate request        | Only one active (`pending` or `approved`) request per student-mentor pair |
-| Session guard            | Session can only be created if an **approved** request exists             |
-| Unregister guard         | Cannot unregister while active mentees exist                              |
-| Status flow (Request)    | `pending` → `approved` \| `rejected` \| `withdrawn`                       |
-| Status flow (Session)    | `scheduled` → `completed` \| `cancelled` (terminal)                       |
+| Rule                     | Detail                                                                     |
+| ------------------------ | -------------------------------------------------------------------------- |
+| Mentor role              | `alumni` only                                                              |
+| Mentor quota             | Must be `1`, `2`, `3`, or `5`                                              |
+| Mentee limit per student | Max **2 approved mentors** at a time                                       |
+| Capacity enforcement     | Request blocked when mentor's active mentees ≥ quota                       |
+| Duplicate request        | Only one active (`pending` or `approved`) request per student-mentor pair  |
+| Session guard            | Session can only be created if an **approved** request exists              |
+| Unregister guard         | Cannot unregister while active mentees exist                               |
+| Status flow (Request)    | `pending` → `approved` \| `rejected` \| `withdrawn` \| `ended`             |
+| Status flow (Session)    | `scheduled` → `completed` \| `cancelled` (terminal)                        |
+| End mentorship guard     | Only approved relationships can be ended; ended relationships are inactive |
 
 ---
 

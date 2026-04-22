@@ -22,18 +22,20 @@ func (MentorRequest) AfterMigrate(tx *gorm.DB) error {
 }
 
 // MentorRequest represents a student's request to be mentored by an alumni.
-// Status flow: pending → approved | rejected | withdrawn
+// Status flow: pending → approved | rejected | withdrawn | ended
 type MentorRequest struct {
 	gorm.Model
 	MentorID        uint       `gorm:"not null;index"`
 	Mentor          User       `gorm:"foreignKey:MentorID"`
 	StudentID       uint       `gorm:"not null;index"`
 	Student         User       `gorm:"foreignKey:StudentID"`
-	Message         *string    `gorm:"default:null"`                                                                                                                  // optional message from student
-	Status          string     `gorm:"not null;default:'pending'"` // pending | approved | rejected | withdrawn
+	Message         *string    `gorm:"default:null"`               // optional message from student
+	Status          string     `gorm:"not null;default:'pending'"` // pending | approved | rejected | withdrawn | ended
 	RejectReason    *string    `gorm:"default:null"`
 	SimilarityScore *float64   `gorm:"default:null"` // cosine similarity score recorded at request time
 	ApprovedAt      *time.Time `gorm:"default:null"`
 	RejectedAt      *time.Time `gorm:"default:null"`
 	WithdrawnAt     *time.Time `gorm:"default:null"`
+	EndedAt         *time.Time `gorm:"default:null"`
+	EndReason       *string    `gorm:"default:null"`
 }

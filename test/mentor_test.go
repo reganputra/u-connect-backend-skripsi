@@ -589,6 +589,92 @@ func TestMentor(t *testing.T) {
 		t.Log("✅ Non-owner cannot update session (403)")
 	})
 
+	t.Run("end_mentorship_flow", func(t *testing.T) {
+		sfxEnd := newSuffix()
+		endMentorToken, endMentorUserID := registerAndLogin(t, sfxEnd,
+			"End Mentor "+sfxEnd, "endmentor+"+sfxEnd+"@test.com", "alumni", "Technology", "Computer Science")
+		formReq(t, http.MethodPost, "/api/profile", endMentorToken, map[string]string{
+			"job_status":   "employed",
+			"position":     "Tech Lead",
+			"company_name": "PT End Mentor",
+			"skills":       "Go, System Design, Backend",
+			"interests":    "Mentoring, Architecture",
+		})
+		jsonReq(t, http.MethodPost, "/api/mentor/register", endMentorToken, map[string]any{
+			"mentor_bio":   "I mentor backend engineers",
+			"mentor_quota": 2,
+		})
+
+		endStudentToken, _ := registerAndLogin(t, sfxEnd,
+			"End Student "+sfxEnd, "endstudent+"+sfxEnd+"@test.com", "student", "Engineering", "Informatics")
+		formReq(t, http.MethodPost, "/api/profile", endStudentToken, map[string]string{
+			"job_status": "student",
+			"skills":     "backend, golang",
+			"interests":  "system design",
+		})
+
+		code, res := jsonReq(t, http.MethodPost, fmt.Sprintf("/api/mentors/%.0f/request", endMentorUserID), endStudentToken, map[string]any{
+			"message": "please mentor me",
+		})
+		assertStatus(t, 201, code, res)
+		endRequestID := safeID(t, res, "end mentorship request")
+
+		code, res = jsonReq(t, http.MethodPatch, fmt.Sprintf("/api/mentor/requests/%.0f/approve", endRequestID), endMentorToken, nil)
+		assertStatus(t, 200, code, res)
+
+		_, meRes := jsonReq(t, http.MethodGet, "/api/me", endStudentToken, nil)
+		endStudentUserID, ok := dataMap(meRes)["user_id"].(float64)
+		if !ok || endStudentUserID == 0 {
+			t.Fatal("could not get end student user_id from /api/me")
+		}
+
+		code, res = jsonReq(t, http.MethodPost, "/api/mentor/sessions", endMentorToken, map[string]any{
+			"student_id":   endStudentUserID,
+			"topic":        "Closing session",
+			"session_date": "2026-07-10T10:00:00Z",
+		})
+		assertStatus(t, 201, code, res)
+		endSessionID := safeID(t, res, "end session")
+
+		code, res = jsonReq(t, http.MethodPatch, fmt.Sprintf("/api/mentor/mentees/%.0f/end", endRequestID), endMentorToken, map[string]any{
+			"reason": "Program selesai",
+		})
+		assertStatus(t, 200, code, res)
+		ended := dataMap(res)
+		if ended["Status"] != "ended" {
+			t.Fatalf("expected Status=ended, got %v", ended["Status"])
+		}
+
+		code, res = jsonReq(t, http.MethodGet, "/api/mentor/sessions", endMentorToken, nil)
+		assertStatus(t, 200, code, res)
+		sessions, ok := res["data"].([]any)
+		if !ok || len(sessions) == 0 {
+			t.Fatal("expected at least one session after ending mentorship")
+		}
+		cancelledFound := false
+		for _, item := range sessions {
+			session := item.(map[string]any)
+			if session["ID"] == endSessionID && session["Status"] == "cancelled" {
+				cancelledFound = true
+				break
+			}
+		}
+		if !cancelledFound {
+			t.Fatal("expected scheduled session to be cancelled when mentorship ended")
+		}
+
+		code, res = jsonReq(t, http.MethodGet, "/api/mentor/mentees", endMentorToken, nil)
+		assertStatus(t, 200, code, res)
+		mentees, ok := res["data"].([]any)
+		if !ok {
+			t.Fatal("expected mentees array")
+		}
+		if len(mentees) != 0 {
+			t.Fatalf("expected no active mentees after ending mentorship, got %d", len(mentees))
+		}
+		t.Log("✅ Mentorship can be ended and scheduled sessions are cancelled")
+	})
+
 	// ── Unregister as Mentor ──────────────────────────────────────────────────
 
 	t.Run("cannot_unregister_with_active_mentees", func(t *testing.T) {

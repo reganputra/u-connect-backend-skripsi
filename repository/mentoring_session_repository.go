@@ -1,6 +1,8 @@
 package repository
 
 import (
+	"time"
+
 	"github.com/reganputra/skripsi-backend/models"
 	"gorm.io/gorm"
 )
@@ -11,6 +13,7 @@ type MentoringSessionRepository interface {
 	FindByMentorID(mentorID uint) ([]models.MentoringSession, error)
 	FindByStudentID(studentID uint) ([]models.MentoringSession, error)
 	Update(session *models.MentoringSession) error
+	CancelScheduledByPair(mentorID, studentID uint) (int64, error)
 	// FindApprovedRequest checks that an approved mentor-student relationship exists.
 	FindApprovedRequest(mentorID, studentID uint) (*models.MentorRequest, error)
 }
@@ -61,6 +64,17 @@ func (r *mentoringSessionRepository) FindByStudentID(studentID uint) ([]models.M
 
 func (r *mentoringSessionRepository) Update(session *models.MentoringSession) error {
 	return r.db.Save(session).Error
+}
+
+func (r *mentoringSessionRepository) CancelScheduledByPair(mentorID, studentID uint) (int64, error) {
+	now := time.Now()
+	result := r.db.Model(&models.MentoringSession{}).
+		Where("mentor_id = ? AND student_id = ? AND status = 'scheduled'", mentorID, studentID).
+		Updates(map[string]any{
+			"status":       "cancelled",
+			"cancelled_at": now,
+		})
+	return result.RowsAffected, result.Error
 }
 
 func (r *mentoringSessionRepository) FindApprovedRequest(mentorID, studentID uint) (*models.MentorRequest, error) {

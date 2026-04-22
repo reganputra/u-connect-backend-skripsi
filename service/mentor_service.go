@@ -55,6 +55,7 @@ type MentorService interface {
 	ApproveRequest(mentorUserID, requestID uint) (*models.MentorRequest, error)
 	RejectRequest(mentorUserID, requestID uint, reason string) (*models.MentorRequest, error)
 	GetMyMentees(mentorUserID uint) ([]models.MentorRequest, error)
+	EndMentorship(mentorUserID, requestID uint, reason *string) (*models.MentorRequest, error)
 	CreateSession(mentorUserID uint, req SessionRequest) (*models.MentoringSession, error)
 	GetMentorSessions(mentorUserID uint) ([]models.MentoringSession, error)
 	UpdateSession(mentorUserID, sessionID uint, req UpdateSessionRequest) (*models.MentoringSession, error)
@@ -276,6 +277,39 @@ func (s *mentorService) GetMyMentees(mentorUserID uint) ([]models.MentorRequest,
 		}
 	}
 	return approved, nil
+}
+
+func (s *mentorService) EndMentorship(mentorUserID, requestID uint, reason *string) (*models.MentorRequest, error) {
+	req, cancelledSessions, err := s.requestRepo.EndMentorshipTransactional(mentorUserID, requestID, reason)
+	if err != nil {
+		switch {
+		case errors.Is(err, repository.ErrRequestNotFound):
+			return nil, errors.New("permintaan tidak ditemukan")
+		case errors.Is(err, repository.ErrRequestForbidden):
+			return nil, errors.New("akses ditolak")
+		case errors.Is(err, repository.ErrRequestAlreadyHandled):
+			return nil, errors.New("mentorship sudah tidak aktif")
+		default:
+			return nil, errors.New("gagal mengakhiri mentorship")
+		}
+	}
+
+	if mentor, err := s.userRepo.FindUserByID(mentorUserID); err == nil {
+		message := fmt.Sprintf("Mentorship dengan %s telah diakhiri", mentor.Name)
+		if cancelledSessions > 0 {
+			message = fmt.Sprintf("Mentorship dengan %s telah diakhiri, %d sesi terjadwal dibatalkan", mentor.Name, cancelledSessions)
+		}
+		_ = s.notifSvc.Notify(
+			req.StudentID,
+			"mentor_relationship_ended",
+			"Mentorship telah diakhiri",
+			message,
+			"mentor_request",
+			req.ID,
+		)
+	}
+
+	return req, nil
 }
 
 func (s *mentorService) CreateSession(mentorUserID uint, req SessionRequest) (*models.MentoringSession, error) {
