@@ -20,6 +20,7 @@ func RegisterMentorRoutes(app *fiber.App, ctrl *controllers.MentorController) {
 	student := app.Group("/api/student", middleware.Protected(), middleware.RequireRole("student"))
 	student.Get("/mentors", ctrl.GetMyMentors)
 	student.Get("/requests", ctrl.GetSentRequests)
+	student.Delete("/requests/:id", ctrl.WithdrawRequest)
 	student.Post("/sessions", ctrl.CreateSessionAsStudent)
 	student.Get("/sessions", ctrl.GetStudentSessions)
 

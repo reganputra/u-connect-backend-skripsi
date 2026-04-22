@@ -34,11 +34,11 @@ func TestMentor(t *testing.T) {
 
 	t.Run("setup_mentor_profile", func(t *testing.T) {
 		code, res := formReq(t, http.MethodPost, "/api/profile", mentorToken, map[string]string{
-			"job_status":  "employed",
-			"position":    "Senior Software Engineer",
+			"job_status":   "employed",
+			"position":     "Senior Software Engineer",
 			"company_name": "PT Tech Indonesia",
-			"skills":      "Python, Machine Learning, Cloud Computing, Docker, Kubernetes",
-			"interests":   "AI, Data Science, Backend Development",
+			"skills":       "Python, Machine Learning, Cloud Computing, Docker, Kubernetes",
+			"interests":    "AI, Data Science, Backend Development",
 		})
 		assertStatus(t, 201, code, res)
 		t.Log("✅ Mentor profile created with skills & interests")
@@ -260,8 +260,27 @@ func TestMentor(t *testing.T) {
 		code, res := jsonReq(t, http.MethodPost, fmt.Sprintf("/api/mentors/%.0f/request", mentorUserID), studentToken, map[string]any{
 			"message": "duplicate",
 		})
-		assertStatus(t, 400, code, res)
+		assertStatus(t, 409, code, res)
 		t.Log("✅ Duplicate pending request rejected")
+	})
+
+	t.Run("student_withdraw_pending_request", func(t *testing.T) {
+		sfxW := newSuffix()
+		withdrawToken, _ := registerAndLogin(t, sfxW,
+			"Withdraw Student "+sfxW, "withdraw+"+sfxW+"@test.com", "student", "Science", "Biology")
+		formReq(t, http.MethodPost, "/api/profile", withdrawToken, map[string]string{
+			"job_status": "student", "skills": "biology", "interests": "research",
+		})
+
+		code, res := jsonReq(t, http.MethodPost, fmt.Sprintf("/api/mentors/%.0f/request", mentorUserID), withdrawToken, map[string]any{
+			"message": "I might withdraw this",
+		})
+		assertStatus(t, 201, code, res)
+		withdrawReqID := safeID(t, res, "withdraw request")
+
+		code, res = jsonReq(t, http.MethodDelete, fmt.Sprintf("/api/student/requests/%.0f", withdrawReqID), withdrawToken, nil)
+		assertStatus(t, 200, code, res)
+		t.Log("✅ Student can withdraw pending request")
 	})
 
 	t.Run("alumni_blocked_from_requesting", func(t *testing.T) {
@@ -545,6 +564,17 @@ func TestMentor(t *testing.T) {
 		})
 		assertStatus(t, 400, code, res)
 		t.Log("✅ Invalid session status rejected")
+	})
+
+	t.Run("cannot_update_terminal_session", func(t *testing.T) {
+		if sessionID == 0 {
+			t.Skip("⏭️  Skipped — session not created")
+		}
+		code, res := jsonReq(t, http.MethodPatch, fmt.Sprintf("/api/mentor/sessions/%.0f", sessionID), mentorToken, map[string]any{
+			"topic": "retry after completed",
+		})
+		assertStatus(t, 400, code, res)
+		t.Log("✅ Terminal session cannot be modified")
 	})
 
 	t.Run("non_owner_cannot_update_session", func(t *testing.T) {

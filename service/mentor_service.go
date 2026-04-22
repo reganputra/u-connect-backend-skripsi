@@ -63,6 +63,7 @@ type MentorService interface {
 	GetAvailableMentors(page, limit int, search string) ([]models.UserProfile, int64, error)
 	GetMentorDetail(mentorUserID uint) (*models.UserProfile, error)
 	RequestMentoring(studentUserID, mentorUserID uint, req MentoringRequestInput) (*models.MentorRequest, error)
+	WithdrawRequest(studentUserID, requestID uint) error
 	GetMyMentors(studentUserID uint) ([]models.MentorRequest, error)
 	GetSentRequests(studentUserID uint) ([]models.MentorRequest, error)
 	CreateSessionAsStudent(studentUserID uint, req StudentSessionRequest) (*models.MentoringSession, error)
@@ -194,37 +195,26 @@ func (s *mentorService) GetIncomingRequests(mentorUserID uint) ([]models.MentorR
 }
 
 func (s *mentorService) ApproveRequest(mentorUserID, requestID uint) (*models.MentorRequest, error) {
-	req, err := s.requestRepo.FindByID(requestID)
+	req, err := s.requestRepo.ApprovePendingTransactional(mentorUserID, requestID)
 	if err != nil {
-		return nil, errors.New("permintaan tidak ditemukan")
-	}
-	if req.MentorID != mentorUserID {
-		return nil, errors.New("akses ditolak")
-	}
-	if req.Status != "pending" {
-		return nil, errors.New("permintaan sudah diproses")
-	}
-
-	// Check student hasn't exceeded 2-mentor limit
-	count, _ := s.requestRepo.CountApprovedForStudent(req.StudentID)
-	if count >= 2 {
-		return nil, errors.New("mentee sudah memiliki 2 mentor aktif")
-	}
-
-	// Check mentor capacity
-	mentorProfile, err := s.profileRepo.FindProfileByUserID(mentorUserID)
-	if err != nil || mentorProfile.MentorQuota == nil {
-		return nil, errors.New("profil mentor tidak ditemukan")
-	}
-	active, _ := s.mentorRepo.CountActiveMentees(mentorUserID)
-	if active >= int64(*mentorProfile.MentorQuota) {
-		return nil, errors.New("kapasitas mentor sudah penuh")
+		switch {
+		case errors.Is(err, repository.ErrRequestNotFound):
+			return nil, errors.New("permintaan tidak ditemukan")
+		case errors.Is(err, repository.ErrRequestForbidden):
+			return nil, errors.New("akses ditolak")
+		case errors.Is(err, repository.ErrRequestAlreadyHandled):
+			return nil, errors.New("permintaan sudah diproses")
+		case errors.Is(err, repository.ErrStudentLimitReached):
+			return nil, errors.New("mentee sudah memiliki 2 mentor aktif")
+		case errors.Is(err, repository.ErrMentorProfileMissing):
+			return nil, errors.New("profil mentor tidak ditemukan")
+		case errors.Is(err, repository.ErrMentorCapacityFull):
+			return nil, errors.New("kapasitas mentor sudah penuh")
+		default:
+			return nil, errors.New("gagal menyetujui permintaan")
+		}
 	}
 
-	req.Status = "approved"
-	if err := s.requestRepo.Update(req); err != nil {
-		return nil, errors.New("gagal menyetujui permintaan")
-	}
 	// Notify student
 	if mentor, err := s.userRepo.FindUserByID(mentorUserID); err == nil {
 		_ = s.notifSvc.Notify(
@@ -253,6 +243,9 @@ func (s *mentorService) RejectRequest(mentorUserID, requestID uint, reason strin
 
 	req.Status = "rejected"
 	req.RejectReason = &reason
+	now := time.Now()
+	req.RejectedAt = &now
+	req.ApprovedAt = nil
 	if err := s.requestRepo.Update(req); err != nil {
 		return nil, errors.New("gagal menolak permintaan")
 	}
@@ -379,10 +372,27 @@ func (s *mentorService) UpdateSession(mentorUserID, sessionID uint, req UpdateSe
 	if session.MentorID != mentorUserID {
 		return nil, errors.New("akses ditolak")
 	}
+	if session.Status == "completed" || session.Status == "cancelled" {
+		return nil, errors.New("status sesi sudah final")
+	}
 
 	validStatuses := map[string]bool{"scheduled": true, "completed": true, "cancelled": true}
 	if req.Status != "" && !validStatuses[req.Status] {
 		return nil, errors.New("status tidak valid")
+	}
+	if req.Status != "" {
+		if session.Status == "scheduled" && req.Status == "completed" {
+			if session.SessionDate != nil && session.SessionDate.After(time.Now()) {
+				return nil, errors.New("sesi belum dapat diselesaikan sebelum waktunya")
+			}
+			now := time.Now()
+			session.CompletedAt = &now
+			session.CancelledAt = nil
+		}
+		if session.Status == "scheduled" && req.Status == "cancelled" {
+			now := time.Now()
+			session.CancelledAt = &now
+		}
 	}
 
 	if req.Topic != "" {
@@ -459,6 +469,9 @@ func (s *mentorService) RequestMentoring(studentUserID, mentorUserID uint, req M
 		SimilarityScore: req.SimilarityScore,
 	}
 	if err := s.requestRepo.Create(mentorReq); err != nil {
+		if strings.Contains(strings.ToLower(err.Error()), "idx_active_request_pair") || strings.Contains(strings.ToLower(err.Error()), "duplicate key") {
+			return nil, errors.New("anda sudah memiliki permintaan aktif atau sedang dibimbing oleh mentor ini")
+		}
 		return nil, errors.New("gagal mengirim permintaan mentoring")
 	}
 	// Notify mentor
@@ -473,6 +486,26 @@ func (s *mentorService) RequestMentoring(studentUserID, mentorUserID uint, req M
 		)
 	}
 	return mentorReq, nil
+}
+
+func (s *mentorService) WithdrawRequest(studentUserID, requestID uint) error {
+	req, err := s.requestRepo.FindByID(requestID)
+	if err != nil {
+		return errors.New("permintaan tidak ditemukan")
+	}
+	if req.StudentID != studentUserID {
+		return errors.New("akses ditolak")
+	}
+	if req.Status != "pending" {
+		return errors.New("hanya permintaan pending yang bisa ditarik")
+	}
+	now := time.Now()
+	req.Status = "withdrawn"
+	req.WithdrawnAt = &now
+	if err := s.requestRepo.Update(req); err != nil {
+		return errors.New("gagal menarik permintaan")
+	}
+	return nil
 }
 
 func (s *mentorService) GetMyMentors(studentUserID uint) ([]models.MentorRequest, error) {

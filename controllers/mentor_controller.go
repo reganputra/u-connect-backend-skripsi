@@ -293,6 +293,9 @@ func (ctrl *MentorController) RequestMentoring(c *fiber.Ctx) error {
 
 	mentorReq, err := ctrl.mentorSvc.RequestMentoring(studentID, uint(mentorUserID), req)
 	if err != nil {
+		if err.Error() == "anda sudah memiliki permintaan aktif atau sedang dibimbing oleh mentor ini" {
+			return utils.ErrorResponse(c, fiber.StatusConflict, err.Error())
+		}
 		return utils.ErrorResponse(c, fiber.StatusBadRequest, err.Error())
 	}
 	return utils.SuccessResponse(c, fiber.StatusCreated, mentorReq)
@@ -322,6 +325,32 @@ func (ctrl *MentorController) GetSentRequests(c *fiber.Ctx) error {
 		return utils.ErrorResponse(c, fiber.StatusInternalServerError, "gagal mengambil data permintaan")
 	}
 	return utils.SuccessResponse(c, fiber.StatusOK, requests)
+}
+
+// WithdrawRequest godoc — DELETE /api/student/requests/:id  (student only)
+func (ctrl *MentorController) WithdrawRequest(c *fiber.Ctx) error {
+	studentID, err := getUserIDFromToken(c)
+	if err != nil {
+		return utils.ErrorResponse(c, fiber.StatusUnauthorized, err.Error())
+	}
+	reqID, err := strconv.ParseUint(c.Params("id"), 10, 64)
+	if err != nil {
+		return utils.ErrorResponse(c, fiber.StatusBadRequest, "ID permintaan tidak valid")
+	}
+
+	err = ctrl.mentorSvc.WithdrawRequest(studentID, uint(reqID))
+	if err != nil {
+		switch err.Error() {
+		case "permintaan tidak ditemukan":
+			return utils.ErrorResponse(c, fiber.StatusNotFound, err.Error())
+		case "akses ditolak":
+			return utils.ErrorResponse(c, fiber.StatusForbidden, err.Error())
+		default:
+			return utils.ErrorResponse(c, fiber.StatusBadRequest, err.Error())
+		}
+	}
+
+	return utils.SuccessResponse(c, fiber.StatusOK, fiber.Map{"message": "permintaan mentoring berhasil ditarik"})
 }
 
 // CreateSessionAsStudent godoc — POST /api/student/sessions  (student only)

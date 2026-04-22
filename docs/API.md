@@ -1724,7 +1724,7 @@ If one or more media files fail to upload or fail to persist, the API returns an
 
 #### GET `/api/mentor/requests` — View Incoming Requests
 
-Returns all mentoring requests (pending + approved + rejected) sent to this mentor.
+Returns all mentoring requests (pending + approved + rejected + withdrawn) sent to this mentor.
 
 ---
 
@@ -1735,6 +1735,7 @@ Returns all mentoring requests (pending + approved + rejected) sent to this ment
 - Request must be `pending`
 - Student must not already have 2 approved mentors
 - Mentor must have remaining quota capacity
+- Approval is executed transactionally to avoid race conditions under concurrent approvals
 
 **Response `200`:**
 
@@ -1820,6 +1821,8 @@ Returns all sessions where the caller is the mentor. Preloads `Student`.
 
 > Valid `status` values: `scheduled` · `completed` · `cancelled`  
 > Only the owning mentor can update (403 for others).
+> Session in terminal state (`completed` or `cancelled`) cannot be edited again.
+> Completing a session before `session_date` is rejected when `session_date` is in the future.
 
 ---
 
@@ -1878,10 +1881,15 @@ Returns the mentor's full profile including `User` and `Experiences`. Returns `4
 
 **How it works:**
 
-1. Tokenizes each mentor's `skills + interests + mentor_bio + position + company + industry`
-2. Tokenizes the student's query (or falls back to profile skills/interests)
-3. Builds a TF-IDF corpus (mentors + student query)
-4. Ranks mentors by cosine similarity to the student query vector
+1. Reads each mentor's `skills + interests + mentor_bio + position + company + industry + experiences`
+2. Parses lightweight constraints from free-text query, including:
+
+- `N years/tahun` minimum experience intent
+- `<keyword> industry` intent
+
+3. Applies matching filters (when detected) before scoring
+4. Builds TF-IDF corpus (mentors + student query)
+5. Computes hybrid score from text similarity + keyword overlap + experience/industry fit
 
 **NLP Pipeline:** case folding → special character removal → tokenization → Indonesian + English stopword removal → Indonesian suffix/prefix stemming
 
@@ -1901,6 +1909,14 @@ Returns the mentor's full profile including `User` and `Experiences`. Returns `4
       "position": "Senior Software Engineer",
       "company_name": "PT Tech Indonesia",
       "industry_name": "",
+      "years_experience": 5,
+      "matched_keywords": ["python", "cloud", "machine"],
+      "score_breakdown": {
+        "text_similarity": 0.61,
+        "keyword_overlap": 0.5,
+        "experience_fit": 1,
+        "industry_fit": 0
+      },
       "mentor_quota": 3,
       "similarity_score": 0.5263
     }
@@ -1930,6 +1946,10 @@ Returns the mentor's full profile including `User` and `Experiences`. Returns `4
 - Student may have **at most 2 approved mentors simultaneously**
 - Mentor's quota must not be exceeded
 
+**Error cases:**
+
+- `409 Conflict`: duplicate active request (`pending` or `approved`) for the same mentor
+
 **Response `201`:** returns `MentorRequest` with `Status: "pending"`.
 
 ---
@@ -1943,6 +1963,27 @@ Returns `MentorRequest` records where `Status = "approved"` for the current stud
 #### GET `/api/student/requests` — My Sent Requests
 
 Returns all `MentorRequest` records sent by the current student (all statuses).
+
+---
+
+#### DELETE `/api/student/requests/:id` — Withdraw Pending Request
+
+Withdraws a mentoring request sent by current student.
+
+**Business Rules:**
+
+- Only request owner can withdraw
+- Only `pending` requests can be withdrawn
+- Withdrawn requests remain in history with `Status = "withdrawn"`
+
+**Response `200`:**
+
+```json
+{
+  "success": true,
+  "data": { "message": "permintaan mentoring berhasil ditarik" }
+}
+```
 
 ---
 
@@ -1971,17 +2012,17 @@ Returns all `MentoringSession` records where the caller is the student. Preloads
 
 ### Business Rules Summary
 
-| Rule                     | Detail                                                           |
-| ------------------------ | ---------------------------------------------------------------- |
-| Mentor role              | `alumni` only                                                    |
-| Mentor quota             | Must be `1`, `2`, `3`, or `5`                                    |
-| Mentee limit per student | Max **2 approved mentors** at a time                             |
-| Capacity enforcement     | Request blocked when mentor's active mentees ≥ quota             |
-| Duplicate request        | Only one `pending` or `approved` request per student-mentor pair |
-| Session guard            | Session can only be created if an **approved** request exists    |
-| Unregister guard         | Cannot unregister while active mentees exist                     |
-| Status flow (Request)    | `pending` → `approved` \| `rejected`                             |
-| Status flow (Session)    | `scheduled` → `completed` \| `cancelled`                         |
+| Rule                     | Detail                                                                    |
+| ------------------------ | ------------------------------------------------------------------------- |
+| Mentor role              | `alumni` only                                                             |
+| Mentor quota             | Must be `1`, `2`, `3`, or `5`                                             |
+| Mentee limit per student | Max **2 approved mentors** at a time                                      |
+| Capacity enforcement     | Request blocked when mentor's active mentees ≥ quota                      |
+| Duplicate request        | Only one active (`pending` or `approved`) request per student-mentor pair |
+| Session guard            | Session can only be created if an **approved** request exists             |
+| Unregister guard         | Cannot unregister while active mentees exist                              |
+| Status flow (Request)    | `pending` → `approved` \| `rejected` \| `withdrawn`                       |
+| Status flow (Session)    | `scheduled` → `completed` \| `cancelled` (terminal)                       |
 
 ---
 
