@@ -3,6 +3,7 @@ package service
 import (
 	"errors"
 	"fmt"
+	"strings"
 
 	"github.com/reganputra/skripsi-backend/models"
 	"github.com/reganputra/skripsi-backend/repository"
@@ -43,6 +44,10 @@ func (s *followService) Follow(followerID, followingID uint, followerRole string
 		return errors.New("anda sudah mengikuti pengguna ini")
 	}
 	if err := s.repo.Follow(followerID, followingID); err != nil {
+		lowerErr := strings.ToLower(err.Error())
+		if strings.Contains(lowerErr, "idx_follow_pair") || strings.Contains(lowerErr, "duplicate key") {
+			return errors.New("anda sudah mengikuti pengguna ini")
+		}
 		return err
 	}
 	// Notify the followed user

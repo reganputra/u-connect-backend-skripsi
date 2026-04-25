@@ -613,6 +613,18 @@ func (s *groupService) AddGroupComment(userID uint, articleID uint, req GroupCom
 	if req.Content == "" {
 		return nil, errors.New("konten wajib diisi")
 	}
+
+	var parentComment *models.GroupComment
+	if req.ParentCommentID != nil {
+		parentComment, err = s.commentRepo.FindGroupCommentByID(*req.ParentCommentID)
+		if err != nil {
+			return nil, errors.New("komentar induk tidak ditemukan")
+		}
+		if parentComment.ArticleID != articleID {
+			return nil, errors.New("komentar induk tidak valid")
+		}
+	}
+
 	comment := &models.GroupComment{
 		ArticleID:       articleID,
 		UserID:          userID,
@@ -622,6 +634,32 @@ func (s *groupService) AddGroupComment(userID uint, articleID uint, req GroupCom
 	if err := s.commentRepo.CreateGroupComment(comment); err != nil {
 		return nil, errors.New("gagal menambahkan komentar")
 	}
+
+	// Notify parent comment owner for replies.
+	if parentComment != nil && parentComment.UserID != userID {
+		_ = s.notifSvc.Notify(
+			parentComment.UserID,
+			"group_article_replied",
+			"Balasan komentar artikel grup",
+			"Komentarmu di artikel grup mendapat balasan baru",
+			"group_comment",
+			parentComment.ID,
+		)
+	}
+
+	// Notify article owner for top-level comments.
+	if req.ParentCommentID == nil && article.UserID != userID {
+		_ = s.notifSvc.NotifyThrottled(
+			article.UserID,
+			"group_article_commented",
+			"Komentar baru di artikel grup",
+			"Artikel grupmu mendapat komentar baru",
+			"group_article",
+			articleID,
+			30*time.Minute,
+		)
+	}
+
 	return comment, nil
 }
 

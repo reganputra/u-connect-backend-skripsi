@@ -8,8 +8,8 @@ import "gorm.io/gorm"
 // both users may message each other.
 type Follow struct {
 	gorm.Model
-	FollowerID  uint `gorm:"not null;index"`
-	FollowingID uint `gorm:"not null;index"`
+	FollowerID  uint `gorm:"not null;index;uniqueIndex:idx_follow_pair"`
+	FollowingID uint `gorm:"not null;index;uniqueIndex:idx_follow_pair"`
 	Follower    User `gorm:"foreignKey:FollowerID"`
 	Following   User `gorm:"foreignKey:FollowingID"`
 }

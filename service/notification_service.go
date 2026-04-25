@@ -7,6 +7,7 @@ import (
 
 	"github.com/reganputra/skripsi-backend/models"
 	"github.com/reganputra/skripsi-backend/repository"
+	"gorm.io/gorm"
 )
 
 // Deliverer is satisfied by *ws.Hub — defined here to avoid an import cycle
@@ -31,10 +32,11 @@ type NotificationService interface {
 type notificationService struct {
 	repo      repository.NotificationRepository
 	deliverer Deliverer
+	db        *gorm.DB
 }
 
-func NewNotificationService(repo repository.NotificationRepository, deliverer Deliverer) NotificationService {
-	return &notificationService{repo: repo, deliverer: deliverer}
+func NewNotificationService(repo repository.NotificationRepository, deliverer Deliverer, db *gorm.DB) NotificationService {
+	return &notificationService{repo: repo, deliverer: deliverer, db: db}
 }
 
 func (s *notificationService) Notify(userID uint, notifType, title, body, refType string, refID uint) error {
@@ -45,6 +47,7 @@ func (s *notificationService) Notify(userID uint, notifType, title, body, refTyp
 		Body:             body,
 		ReferenceType:    refType,
 		ReferenceID:      refID,
+		RedirectURL:      s.buildNotificationRedirectURL(userID, refType, refID),
 	}
 	if err := s.repo.Create(n); err != nil {
 		return err
@@ -107,4 +110,59 @@ func truncate(s string, n int) string {
 		return s
 	}
 	return fmt.Sprintf("%s…", string(runes[:n]))
+}
+
+func (s *notificationService) buildNotificationRedirectURL(userID uint, refType string, refID uint) string {
+	switch refType {
+	case "post":
+		return fmt.Sprintf("/feed/%d", refID)
+	case "comment":
+		var comment models.Comment
+		if err := s.db.Select("id", "post_id").First(&comment, refID).Error; err == nil {
+			return fmt.Sprintf("/feed/%d", comment.PostID)
+		}
+		return fmt.Sprintf("/comments/%d", refID)
+	case "group":
+		return fmt.Sprintf("/groups/%d", refID)
+	case "group_article":
+		var article models.GroupArticle
+		if err := s.db.Select("id", "group_id").First(&article, refID).Error; err == nil {
+			return fmt.Sprintf("/groups/%d/article/%d", article.GroupID, article.ID)
+		}
+		return fmt.Sprintf("/groups/articles/%d", refID)
+	case "group_comment":
+		var comment models.GroupComment
+		if err := s.db.Select("id", "article_id").First(&comment, refID).Error; err == nil {
+			var article models.GroupArticle
+			if err := s.db.Select("id", "group_id").First(&article, comment.ArticleID).Error; err == nil {
+				return fmt.Sprintf("/groups/%d/article/%d", article.GroupID, article.ID)
+			}
+		}
+		return fmt.Sprintf("/groups/comments/%d", refID)
+	case "event":
+		return fmt.Sprintf("/events/%d", refID)
+	case "job":
+		return fmt.Sprintf("/jobs/%d", refID)
+	case "job_application":
+		return "/jobs/applications/mine"
+	case "follow":
+		return fmt.Sprintf("/directory/%d", refID)
+	case "mentor_request":
+		return "/student/requests"
+	case "report":
+		return "/reports/mine"
+	case "message":
+		var msg models.Message
+		if err := s.db.Select("id", "sender_id", "receiver_id").First(&msg, refID).Error; err == nil {
+			if msg.ReceiverID == userID {
+				return fmt.Sprintf("/messages/%d", msg.SenderID)
+			}
+			if msg.SenderID == userID {
+				return fmt.Sprintf("/messages/%d", msg.ReceiverID)
+			}
+		}
+		return "/messages"
+	default:
+		return ""
+	}
 }

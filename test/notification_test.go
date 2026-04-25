@@ -470,8 +470,11 @@ func TestNotificationFlows(t *testing.T) {
 		if got := notificationType(notif); got != "report_rejected" {
 			t.Fatalf("expected report_rejected notification, got %v", got)
 		}
-		if got := notificationRefID(notif); int(got) != int(reportID) {
-			t.Fatalf("expected ref id %.0f, got %v", reportID, got)
+		if got := notificationRefID(notif); int(got) != int(postID) {
+			t.Fatalf("expected ref id %.0f, got %v", postID, got)
+		}
+		if body := notificationBody(notif); !strings.Contains(body, "Reportable Post") {
+			t.Fatalf("expected notification body to include target title, got %q", body)
 		}
 	})
 
@@ -521,7 +524,7 @@ func TestNotificationFlows(t *testing.T) {
 
 	t.Run("Event Reminder Notification", func(t *testing.T) {
 		db := ensureTestDB(t)
-		notifSvc := service.NewNotificationService(repository.NewNotificationRepository(db), noopDeliverer{})
+		notifSvc := service.NewNotificationService(repository.NewNotificationRepository(db), noopDeliverer{}, db)
 
 		s7 := newSuffix()
 		ownerToken, _ := registerAndLogin(t, s7, "Reminder Owner", "reminder-owner+"+s7+"@test.com", "alumni", "FIK", "IF")

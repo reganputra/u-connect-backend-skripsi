@@ -7,7 +7,10 @@ import (
 
 	"github.com/reganputra/skripsi-backend/models"
 	"github.com/reganputra/skripsi-backend/repository"
+	"gorm.io/gorm"
 )
+
+const generalCategoryName = "General"
 
 // ─── DTOs ─────────────────────────────────────────────────────────────────────
 
@@ -70,6 +73,7 @@ type adminService struct {
 	reportRepo   repository.ReportRepository
 	categoryRepo repository.CategoryRepository
 	notifSvc     NotificationService
+	db           *gorm.DB
 }
 
 func NewAdminService(
@@ -77,12 +81,14 @@ func NewAdminService(
 	reportRepo repository.ReportRepository,
 	categoryRepo repository.CategoryRepository,
 	notifSvc NotificationService,
+	db *gorm.DB,
 ) AdminService {
 	return &adminService{
 		adminRepo:    adminRepo,
 		reportRepo:   reportRepo,
 		categoryRepo: categoryRepo,
 		notifSvc:     notifSvc,
+		db:           db,
 	}
 }
 
@@ -175,16 +181,7 @@ func (s *adminService) ResolveReport(adminID uint, reportID uint, req ResolveRep
 
 	// Optionally delete the reported content
 	if req.DeleteContent {
-		switch report.TargetType {
-		case "post":
-			_ = s.adminRepo.DeletePost(report.TargetID)
-		case "group":
-			_ = s.adminRepo.DeleteGroup(report.TargetID)
-		case "event":
-			_ = s.adminRepo.DeleteEvent(report.TargetID)
-		case "job":
-			_ = s.adminRepo.DeleteJob(report.TargetID)
-		}
+		_ = s.deleteTargetAndNotify(report.TargetType, report.TargetID, req.AdminNote)
 	}
 
 	now := time.Now()
@@ -221,14 +218,18 @@ func (s *adminService) RejectReport(adminID uint, reportID uint, req RejectRepor
 	if err := s.reportRepo.UpdateReport(report); err != nil {
 		return nil, errors.New("gagal memperbarui laporan")
 	}
+	targetLabel, err := s.describeTargetForNotification(report.TargetType, report.TargetID)
+	if err != nil {
+		targetLabel = fmt.Sprintf("konten (%s)", report.TargetType)
+	}
 	// Notify the reporter
 	_ = s.notifSvc.Notify(
 		report.ReporterID,
 		"report_rejected",
 		"Laporanmu ditolak",
-		fmt.Sprintf("Admin: %s", req.AdminNote),
-		"report",
-		report.ID,
+		fmt.Sprintf("Laporanmu terkait %s ditolak. Alasan: %s", targetLabel, req.AdminNote),
+		report.TargetType,
+		report.TargetID,
 	)
 
 	return report, nil
@@ -237,16 +238,171 @@ func (s *adminService) RejectReport(adminID uint, reportID uint, req RejectRepor
 // ─── Direct Content Deletion ──────────────────────────────────────────────────
 
 func (s *adminService) DeletePost(id uint) error {
-	return s.adminRepo.DeletePost(id)
+	return s.deleteTargetAndNotify("post", id, nil)
 }
 func (s *adminService) DeleteGroup(id uint) error {
-	return s.adminRepo.DeleteGroup(id)
+	return s.deleteTargetAndNotify("group", id, nil)
 }
 func (s *adminService) DeleteEvent(id uint) error {
-	return s.adminRepo.DeleteEvent(id)
+	return s.deleteTargetAndNotify("event", id, nil)
 }
 func (s *adminService) DeleteJob(id uint) error {
-	return s.adminRepo.DeleteJob(id)
+	return s.deleteTargetAndNotify("job", id, nil)
+}
+
+func (s *adminService) deleteTargetAndNotify(targetType string, targetID uint, adminNote *string) error {
+	ownerID, err := s.findContentOwner(targetType, targetID)
+	if err != nil {
+		return err
+	}
+
+	targetLabel, err := s.describeTargetForNotification(targetType, targetID)
+	if err != nil {
+		targetLabel = fmt.Sprintf("konten (%s)", targetType)
+	}
+
+	if err := s.deleteContentTarget(targetType, targetID); err != nil {
+		return err
+	}
+
+	reason := "Melanggar kebijakan komunitas"
+	if adminNote != nil && *adminNote != "" {
+		reason = *adminNote
+	}
+	body := fmt.Sprintf("%s dihapus oleh admin. Alasan: %s", targetLabel, reason)
+
+	_ = s.notifSvc.Notify(
+		ownerID,
+		"content_deleted_by_admin",
+		"Konten dihapus admin",
+		body,
+		targetType,
+		targetID,
+	)
+
+	return nil
+}
+
+func (s *adminService) describeTargetForNotification(targetType string, targetID uint) (string, error) {
+	switch targetType {
+	case "post":
+		var post models.Post
+		if err := s.db.Select("id", "title").First(&post, targetID).Error; err != nil {
+			return "", err
+		}
+		return fmt.Sprintf("Post \"%s\"", truncateNotifyText(post.Title, 80)), nil
+	case "group":
+		var group models.Group
+		if err := s.db.Select("id", "title").First(&group, targetID).Error; err != nil {
+			return "", err
+		}
+		return fmt.Sprintf("Grup \"%s\"", truncateNotifyText(group.Title, 80)), nil
+	case "event":
+		var event models.Event
+		if err := s.db.Select("id", "title").First(&event, targetID).Error; err != nil {
+			return "", err
+		}
+		return fmt.Sprintf("Event \"%s\"", truncateNotifyText(event.Title, 80)), nil
+	case "job":
+		var job models.Job
+		if err := s.db.Select("id", "title").First(&job, targetID).Error; err != nil {
+			return "", err
+		}
+		return fmt.Sprintf("Lowongan \"%s\"", truncateNotifyText(job.Title, 80)), nil
+	case "comment":
+		var comment models.Comment
+		if err := s.db.Select("id", "content").First(&comment, targetID).Error; err != nil {
+			return "", err
+		}
+		return fmt.Sprintf("Komentar \"%s\"", truncateNotifyText(comment.Content, 80)), nil
+	case "group_article":
+		var article models.GroupArticle
+		if err := s.db.Select("id", "title").First(&article, targetID).Error; err != nil {
+			return "", err
+		}
+		return fmt.Sprintf("Artikel grup \"%s\"", truncateNotifyText(article.Title, 80)), nil
+	default:
+		return fmt.Sprintf("Konten (%s) ID %d", targetType, targetID), nil
+	}
+}
+
+func truncateNotifyText(s string, max int) string {
+	runes := []rune(s)
+	if len(runes) <= max {
+		return s
+	}
+	if max <= 3 {
+		return string(runes[:max])
+	}
+	return string(runes[:max-3]) + "..."
+}
+
+func (s *adminService) findContentOwner(targetType string, targetID uint) (uint, error) {
+	switch targetType {
+	case "post":
+		var post models.Post
+		if err := s.db.Select("id", "user_id").First(&post, targetID).Error; err != nil {
+			return 0, err
+		}
+		return post.UserID, nil
+	case "group":
+		var group models.Group
+		if err := s.db.Select("id", "owner_id").First(&group, targetID).Error; err != nil {
+			return 0, err
+		}
+		return group.OwnerID, nil
+	case "event":
+		var event models.Event
+		if err := s.db.Select("id", "user_id").First(&event, targetID).Error; err != nil {
+			return 0, err
+		}
+		return event.UserID, nil
+	case "job":
+		var job models.Job
+		if err := s.db.Select("id", "user_id").First(&job, targetID).Error; err != nil {
+			return 0, err
+		}
+		return job.UserID, nil
+	case "comment":
+		var comment models.Comment
+		if err := s.db.Select("id", "user_id").First(&comment, targetID).Error; err != nil {
+			return 0, err
+		}
+		return comment.UserID, nil
+	case "group_article":
+		var article models.GroupArticle
+		if err := s.db.Select("id", "user_id").First(&article, targetID).Error; err != nil {
+			return 0, err
+		}
+		return article.UserID, nil
+	default:
+		return 0, errors.New("tipe target laporan tidak didukung")
+	}
+}
+
+func (s *adminService) deleteContentTarget(targetType string, targetID uint) error {
+	switch targetType {
+	case "post":
+		return s.adminRepo.DeletePost(targetID)
+	case "group":
+		return s.adminRepo.DeleteGroup(targetID)
+	case "event":
+		return s.adminRepo.DeleteEvent(targetID)
+	case "job":
+		return s.adminRepo.DeleteJob(targetID)
+	case "comment":
+		s.db.Where("comment_id = ?", targetID).Delete(&models.Reaction{})
+		s.db.Where("comment_id = ?", targetID).Delete(&models.Vote{})
+		return s.db.Delete(&models.Comment{}, targetID).Error
+	case "group_article":
+		s.db.Where("article_id = ?", targetID).Delete(&models.GroupReaction{})
+		s.db.Where("comment_id IN (SELECT id FROM group_comments WHERE article_id = ?)", targetID).Delete(&models.GroupReaction{})
+		s.db.Where("article_id = ?", targetID).Delete(&models.GroupComment{})
+		s.db.Where("article_id = ?", targetID).Delete(&models.GroupArticleImage{})
+		return s.db.Delete(&models.GroupArticle{}, targetID).Error
+	default:
+		return errors.New("tipe target laporan tidak didukung")
+	}
 }
 
 // ─── Categories ───────────────────────────────────────────────────────────────
@@ -263,6 +419,9 @@ func (s *adminService) CreateCategory(req CategoryRequest) (*models.Category, er
 	if req.Name == "" {
 		return nil, errors.New("nama kategori wajib diisi")
 	}
+	if req.Name == generalCategoryName {
+		return nil, errors.New("kategori General sudah tersedia sebagai kategori cadangan")
+	}
 	cat := &models.Category{Name: req.Name, Description: req.Description}
 	if err := s.categoryRepo.Create(cat); err != nil {
 		return nil, errors.New("gagal membuat kategori (nama mungkin sudah ada)")
@@ -271,25 +430,92 @@ func (s *adminService) CreateCategory(req CategoryRequest) (*models.Category, er
 }
 
 func (s *adminService) UpdateCategory(id uint, req CategoryRequest) (*models.Category, error) {
-	cat, err := s.categoryRepo.FindByID(id)
+	var updated *models.Category
+	err := s.db.Transaction(func(tx *gorm.DB) error {
+		var cat models.Category
+		if err := tx.First(&cat, id).Error; err != nil {
+			return errors.New("kategori tidak ditemukan")
+		}
+
+		oldName := cat.Name
+		if req.Name != "" {
+			cat.Name = req.Name
+		}
+		if req.Description != nil {
+			cat.Description = req.Description
+		}
+
+		if err := tx.Save(&cat).Error; err != nil {
+			return errors.New("gagal memperbarui kategori")
+		}
+
+		if req.Name != "" && req.Name != oldName {
+			if err := s.replaceCategoryInContent(tx, oldName, req.Name); err != nil {
+				return err
+			}
+		}
+
+		updated = &cat
+		return nil
+	})
 	if err != nil {
-		return nil, errors.New("kategori tidak ditemukan")
+		return nil, err
 	}
-	if req.Name != "" {
-		cat.Name = req.Name
-	}
-	if req.Description != nil {
-		cat.Description = req.Description
-	}
-	if err := s.categoryRepo.Update(cat); err != nil {
-		return nil, errors.New("gagal memperbarui kategori")
-	}
-	return cat, nil
+	return updated, nil
 }
 
 func (s *adminService) DeleteCategory(id uint) error {
-	if _, err := s.categoryRepo.FindByID(id); err != nil {
-		return errors.New("kategori tidak ditemukan")
+	return s.db.Transaction(func(tx *gorm.DB) error {
+		var cat models.Category
+		if err := tx.First(&cat, id).Error; err != nil {
+			return errors.New("kategori tidak ditemukan")
+		}
+		if cat.Name == generalCategoryName {
+			return errors.New("kategori General tidak dapat dihapus")
+		}
+
+		if err := s.ensureGeneralCategory(tx); err != nil {
+			return err
+		}
+		if err := s.replaceCategoryInContent(tx, cat.Name, generalCategoryName); err != nil {
+			return err
+		}
+		if err := tx.Delete(&models.Category{}, id).Error; err != nil {
+			return errors.New("gagal menghapus kategori")
+		}
+		return nil
+	})
+}
+
+func (s *adminService) ensureGeneralCategory(tx *gorm.DB) error {
+	var cat models.Category
+	if err := tx.Where("name = ?", generalCategoryName).First(&cat).Error; err == nil {
+		return nil
+	} else if !errors.Is(err, gorm.ErrRecordNotFound) {
+		return errors.New("gagal menyiapkan kategori General")
 	}
-	return s.categoryRepo.Delete(id)
+
+	return tx.Create(&models.Category{Name: generalCategoryName}).Error
+}
+
+func (s *adminService) replaceCategoryInContent(tx *gorm.DB, oldName, newName string) error {
+	if err := tx.Model(&models.Post{}).
+		Where("category = ?", oldName).
+		Update("category", newName).Error; err != nil {
+		return errors.New("gagal memperbarui kategori pada postingan")
+	}
+
+	if err := tx.Model(&models.Group{}).
+		Where("category = ?", oldName).
+		Update("category", newName).Error; err != nil {
+		return errors.New("gagal memperbarui kategori pada grup")
+	}
+
+	if err := tx.Model(&models.PortfolioItem{}).
+		Where("category = ?", oldName).
+		Update("category", newName).Error; err != nil {
+		return errors.New("gagal memperbarui kategori pada portofolio")
+	}
+
+	return nil
 }
