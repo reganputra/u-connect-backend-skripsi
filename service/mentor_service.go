@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/reganputra/skripsi-backend/models"
@@ -43,6 +44,12 @@ type UpdateSessionRequest struct {
 	Status      string     `json:"status"` // scheduled | completed | cancelled
 }
 
+type StudentDashboardResponse struct {
+	Mentors  []models.MentorRequest    `json:"mentors"`
+	Requests []models.MentorRequest    `json:"requests"`
+	Sessions []models.MentoringSession `json:"sessions"`
+}
+
 // ─── Interface ────────────────────────────────────────────────────────────────
 
 type MentorService interface {
@@ -69,6 +76,7 @@ type MentorService interface {
 	GetSentRequests(studentUserID uint) ([]models.MentorRequest, error)
 	CreateSessionAsStudent(studentUserID uint, req StudentSessionRequest) (*models.MentoringSession, error)
 	GetStudentSessions(studentUserID uint) ([]models.MentoringSession, error)
+	GetStudentDashboard(studentUserID uint) (*StudentDashboardResponse, error)
 
 	// ── Recommendation ────────────────────────────────────────────────────────
 	// GetRecommendations returns TF-IDF ranked mentors.
@@ -562,6 +570,58 @@ func (s *mentorService) GetSentRequests(studentUserID uint) ([]models.MentorRequ
 
 func (s *mentorService) GetStudentSessions(studentUserID uint) ([]models.MentoringSession, error) {
 	return s.sessionRepo.FindByStudentID(studentUserID)
+}
+
+func (s *mentorService) GetStudentDashboard(studentUserID uint) (*StudentDashboardResponse, error) {
+	var mentors, requests []models.MentorRequest
+	var sessions []models.MentoringSession
+	var errMentors, errRequests, errSessions error
+
+	var wg sync.WaitGroup
+	wg.Add(3)
+
+	go func() {
+		defer wg.Done()
+		mentors, errMentors = s.GetMyMentors(studentUserID)
+	}()
+
+	go func() {
+		defer wg.Done()
+		requests, errRequests = s.GetSentRequests(studentUserID)
+	}()
+
+	go func() {
+		defer wg.Done()
+		sessions, errSessions = s.GetStudentSessions(studentUserID)
+	}()
+
+	wg.Wait()
+
+	if errMentors != nil {
+		return nil, errMentors
+	}
+	if errRequests != nil {
+		return nil, errRequests
+	}
+	if errSessions != nil {
+		return nil, errSessions
+	}
+
+	if mentors == nil {
+		mentors = []models.MentorRequest{}
+	}
+	if requests == nil {
+		requests = []models.MentorRequest{}
+	}
+	if sessions == nil {
+		sessions = []models.MentoringSession{}
+	}
+
+	return &StudentDashboardResponse{
+		Mentors:  mentors,
+		Requests: requests,
+		Sessions: sessions,
+	}, nil
 }
 
 // ── Recommendation ────────────────────────────────────────────────────────────

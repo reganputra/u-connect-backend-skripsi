@@ -13,12 +13,12 @@ type MentoringSession struct {
 	Request     MentorRequest `gorm:"foreignKey:RequestID"`
 	MentorID    uint          `gorm:"not null;index"`
 	Mentor      User          `gorm:"foreignKey:MentorID"`
-	StudentID   uint          `gorm:"not null;index"`
+	StudentID   uint          `gorm:"not null;index;index:idx_mentor_sess_student,priority:1"`
 	Student     User          `gorm:"foreignKey:StudentID"`
 	Topic       string        `gorm:"not null"`
 	Notes       *string       `gorm:"default:null"`
 	SessionDate *time.Time    `gorm:"default:null"`
-	Status      string        `gorm:"not null;default:'scheduled'"` // scheduled | completed | cancelled
+	Status      string        `gorm:"not null;default:'scheduled';index:idx_mentor_sess_student,priority:2"` // scheduled | completed | cancelled
 	CompletedAt *time.Time    `gorm:"default:null"`
 	CancelledAt *time.Time    `gorm:"default:null"`
 }

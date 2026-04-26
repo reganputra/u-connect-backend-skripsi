@@ -356,6 +356,19 @@ func (ctrl *MentorController) GetSentRequests(c *fiber.Ctx) error {
 	return utils.SuccessResponse(c, fiber.StatusOK, requests)
 }
 
+// GetStudentDashboard godoc — GET /api/student/dashboard (student only)
+func (ctrl *MentorController) GetStudentDashboard(c *fiber.Ctx) error {
+	userID, err := getUserIDFromToken(c)
+	if err != nil {
+		return utils.ErrorResponse(c, fiber.StatusUnauthorized, err.Error())
+	}
+	dashboard, err := ctrl.mentorSvc.GetStudentDashboard(userID)
+	if err != nil {
+		return utils.ErrorResponse(c, fiber.StatusInternalServerError, err.Error())
+	}
+	return utils.SuccessResponse(c, fiber.StatusOK, dashboard)
+}
+
 // WithdrawRequest godoc — DELETE /api/student/requests/:id  (student only)
 func (ctrl *MentorController) WithdrawRequest(c *fiber.Ctx) error {
 	studentID, err := getUserIDFromToken(c)

@@ -27,10 +27,10 @@ type MentorRequest struct {
 	gorm.Model
 	MentorID        uint       `gorm:"not null;index"`
 	Mentor          User       `gorm:"foreignKey:MentorID"`
-	StudentID       uint       `gorm:"not null;index"`
+	StudentID       uint       `gorm:"not null;index;index:idx_mentor_req_student,priority:1"`
 	Student         User       `gorm:"foreignKey:StudentID"`
 	Message         *string    `gorm:"default:null"`               // optional message from student
-	Status          string     `gorm:"not null;default:'pending'"` // pending | approved | rejected | withdrawn | ended
+	Status          string     `gorm:"not null;default:'pending';index:idx_mentor_req_student,priority:2"` // pending | approved | rejected | withdrawn | ended
 	RejectReason    *string    `gorm:"default:null"`
 	SimilarityScore *float64   `gorm:"default:null"` // cosine similarity score recorded at request time
 	ApprovedAt      *time.Time `gorm:"default:null"`
