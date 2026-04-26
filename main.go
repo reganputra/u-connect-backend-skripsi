@@ -9,12 +9,10 @@ import (
 	"github.com/gofiber/fiber/v2/middleware/cors"
 	"github.com/gofiber/fiber/v2/middleware/logger"
 	"github.com/reganputra/skripsi-backend/config"
-	"github.com/reganputra/skripsi-backend/controllers"
+	"github.com/reganputra/skripsi-backend/container"
 	"github.com/reganputra/skripsi-backend/models"
-	"github.com/reganputra/skripsi-backend/repository"
 	"github.com/reganputra/skripsi-backend/routes"
 	"github.com/reganputra/skripsi-backend/scheduler"
-	"github.com/reganputra/skripsi-backend/service"
 	"github.com/reganputra/skripsi-backend/utils"
 	"github.com/reganputra/skripsi-backend/ws"
 	"golang.org/x/crypto/bcrypt"
@@ -22,9 +20,7 @@ import (
 )
 
 func main() {
-	// Redirect Go's standard logger to stdout so that [WS/*] structured logs
-	// appear on the same stream as Fiber's access log. Without this, log.Printf
-	// writes to stderr and the two streams appear separately in most terminals.
+
 	log.SetOutput(os.Stdout)
 	log.SetFlags(log.Ltime | log.Lmsgprefix) // match Fiber's time-only prefix style
 
@@ -86,76 +82,12 @@ func main() {
 
 	db := config.DB
 
-	// ── Repositories ──────────────────────────────────────────────────────────
-	userRepo := repository.NewUserRepository(db)
-	profileRepo := repository.NewProfileRepository(db)
-	companyRepo := repository.NewCompanyRepository(db)
-	portfolioRepo := repository.NewPortfolioRepository(db)
-	postRepo := repository.NewPostRepository(db)
-	commentRepo := repository.NewCommentRepository(db)
-	reactionRepo := repository.NewReactionRepository(db)
-	voteRepo := repository.NewVoteRepository(db)
-	groupRepo := repository.NewGroupRepository(db)
-	memberRepo := repository.NewGroupMemberRepository(db)
-	articleRepo := repository.NewGroupArticleRepository(db)
-	gCommentRepo := repository.NewGroupCommentRepository(db)
-	gReactionRepo := repository.NewGroupReactionRepository(db)
-	eventRepo := repository.NewEventRepository(db)
-	agendaRepo := repository.NewEventAgendaRepository(db)
-	regRepo := repository.NewEventRegistrationRepository(db)
-	jobRepo := repository.NewJobRepository(db)
-	jobAppRepo := repository.NewJobApplicationRepository(db)
-	reportRepo := repository.NewReportRepository(db)
-	adminRepo := repository.NewAdminRepository(db)
-	categoryRepo := repository.NewCategoryRepository(db)
-	mentorRepo := repository.NewMentorRepository(db)
-	mentorRequestRepo := repository.NewMentorRequestRepository(db)
-	mentoringSessionRepo := repository.NewMentoringSessionRepository(db)
-	followRepo := repository.NewFollowRepository(db)
-	messageRepo := repository.NewMessageRepository(db)
-	notifRepo := repository.NewNotificationRepository(db)
-
-	if err := profileRepo.BackfillMissingPartnerProfiles(); err != nil {
-		log.Fatalf("❌ Failed to backfill partner profiles: %v", err)
-	}
-
-	// ── WebSocket Hub + Notification Service (must come first) ──────────────
+	// ── WebSocket Hub ──────────────
 	hub := ws.NewHub()
 	go hub.Run()
-	notifSvc := service.NewNotificationService(notifRepo, hub, db)
 
-	// ── Services ──────────────────────────────────────────────────────────────
-	authSvc := service.NewAuthService(userRepo, profileRepo)
-	profileSvc := service.NewProfileService(profileRepo)
-	companySvc := service.NewCompanyService(companyRepo, userRepo, profileRepo)
-	portfolioSvc := service.NewPortfolioService(portfolioRepo)
-	feedSvc := service.NewFeedService(postRepo, commentRepo, reactionRepo, voteRepo, userRepo, notifSvc)
-	groupSvc := service.NewGroupService(groupRepo, memberRepo, articleRepo, gCommentRepo, gReactionRepo, notifSvc)
-	eventSvc := service.NewEventService(eventRepo, agendaRepo, regRepo)
-	jobSvc := service.NewJobService(jobRepo, jobAppRepo, companyRepo, userRepo, notifSvc)
-	reportSvc := service.NewReportService(reportRepo)
-	adminSvc := service.NewAdminService(adminRepo, reportRepo, categoryRepo, notifSvc, db)
-	recommendSvc := service.NewRecommendationService(mentorRepo)
-	mentorSvc := service.NewMentorService(profileRepo, mentorRepo, mentorRequestRepo, mentoringSessionRepo, recommendSvc, userRepo, notifSvc)
-	followSvc := service.NewFollowService(followRepo, userRepo, notifSvc)
-	messageSvc := service.NewMessageService(messageRepo, followRepo)
-
-	// ── Controllers ───────────────────────────────────────────────────────────
-	authCtrl := controllers.NewAuthController(authSvc)
-	profileCtrl := controllers.NewProfileController(profileSvc)
-	directoryCtrl := controllers.NewDirectoryController(profileSvc, portfolioSvc)
-	companyCtrl := controllers.NewCompanyController(companySvc)
-	portfolioCtrl := controllers.NewPortfolioController(portfolioSvc)
-	feedCtrl := controllers.NewFeedController(feedSvc)
-	groupCtrl := controllers.NewGroupController(groupSvc)
-	eventCtrl := controllers.NewEventController(eventSvc)
-	jobCtrl := controllers.NewJobController(jobSvc)
-	reportCtrl := controllers.NewReportController(reportSvc)
-	adminCtrl := controllers.NewAdminController(adminSvc)
-	mentorCtrl := controllers.NewMentorController(mentorSvc)
-	followCtrl := controllers.NewFollowController(followSvc)
-	messageCtrl := controllers.NewMessageController(messageSvc)
-	notifCtrl := controllers.NewNotificationController(notifSvc)
+	// ── Build Dependencies via Container ──────────────────────────────────────
+	c := container.Build(db, hub)
 
 	// ── Fiber app ─────────────────────────────────────────────────────────────
 	app := fiber.New(fiber.Config{
@@ -192,24 +124,24 @@ func main() {
 	})
 
 	// ── Routes ────────────────────────────────────────────────────────────────
-	routes.RegisterAuthRoutes(app, authCtrl)
-	routes.RegisterProfileRoutes(app, profileCtrl)
-	routes.SetupDirectoryRoutes(app, directoryCtrl)
-	routes.RegisterCompanyRoutes(app, companyCtrl)
-	routes.RegisterPortfolioRoutes(app, portfolioCtrl)
-	routes.RegisterFeedRoutes(app, feedCtrl)
-	routes.RegisterGroupRoutes(app, groupCtrl)
-	routes.RegisterEventRoutes(app, eventCtrl)
-	routes.RegisterJobRoutes(app, jobCtrl)
-	routes.RegisterReportRoutes(app, reportCtrl)
-	routes.RegisterAdminRoutes(app, adminCtrl)
-	routes.RegisterMentorRoutes(app, mentorCtrl)
-	routes.SetupFollowRoutes(app, followCtrl)
-	routes.SetupMessageRoutes(app, messageCtrl, hub, messageSvc, userRepo, notifSvc)
-	routes.SetupNotificationRoutes(app, notifCtrl)
+	routes.RegisterAuthRoutes(app, c.AuthCtrl)
+	routes.RegisterProfileRoutes(app, c.ProfileCtrl)
+	routes.SetupDirectoryRoutes(app, c.DirectoryCtrl)
+	routes.RegisterCompanyRoutes(app, c.CompanyCtrl)
+	routes.RegisterPortfolioRoutes(app, c.PortfolioCtrl)
+	routes.RegisterFeedRoutes(app, c.FeedCtrl)
+	routes.RegisterGroupRoutes(app, c.GroupCtrl)
+	routes.RegisterEventRoutes(app, c.EventCtrl)
+	routes.RegisterJobRoutes(app, c.JobCtrl)
+	routes.RegisterReportRoutes(app, c.ReportCtrl)
+	routes.RegisterAdminRoutes(app, c.AdminCtrl)
+	routes.RegisterMentorRoutes(app, c.MentorCtrl)
+	routes.SetupFollowRoutes(app, c.FollowCtrl)
+	routes.SetupMessageRoutes(app, c.MessageCtrl, hub, c.MessageSvc, c.UserRepo, c.NotifSvc)
+	routes.SetupNotificationRoutes(app, c.NotifCtrl)
 
 	// ── Background Schedulers ───────────────────────────────────────────────────
-	go scheduler.StartEventReminderScheduler(db, notifSvc)
+	go scheduler.StartEventReminderScheduler(db, c.NotifSvc)
 	go scheduler.StartEventStatusScheduler(db)
 
 	// ── Start server ──────────────────────────────────────────────────────────
