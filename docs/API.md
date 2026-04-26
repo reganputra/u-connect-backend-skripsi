@@ -1362,31 +1362,33 @@ Delivery rules:
 
 ### Notification Types
 
-| Type                        | Source                                                                            |
-| --------------------------- | --------------------------------------------------------------------------------- |
-| `new_follower`              | Follow system                                                                     |
-| `post_commented`            | Feed comment                                                                      |
-| `post_replied`              | Feed comment reply                                                                |
-| `post_reacted`              | Feed reaction                                                                     |
-| `group_article_commented`   | Group article comment                                                             |
-| `group_article_replied`     | Group article comment reply                                                       |
-| `group_kicked`              | Group kick                                                                        |
-| `content_deleted_by_admin`  | Admin removed user content (includes content title/name and deletion reason)      |
-| `job_application_updated`   | Job application status update                                                     |
-| `mentor_request_received`   | New mentor request                                                                |
-| `mentor_request_approved`   | Mentor approved request                                                           |
-| `mentor_request_rejected`   | Mentor rejected request                                                           |
-| `mentor_relationship_ended` | Mentor ended active mentorship                                                    |
-| `new_session`               | Mentor scheduled session                                                          |
-| `report_rejected`           | Admin rejected report (includes reported content title/name and clickable target) |
-| `new_message`               | WebSocket message delivery                                                        |
-| `event_reminder`            | Event reminder scheduler                                                          |
+| Type                        | Source                                                                                                |
+| --------------------------- | ----------------------------------------------------------------------------------------------------- |
+| `new_follower`              | Follow system                                                                                         |
+| `post_commented`            | Feed comment                                                                                          |
+| `post_replied`              | Feed comment reply                                                                                    |
+| `post_reacted`              | Feed reaction                                                                                         |
+| `group_article_commented`   | Group article comment                                                                                 |
+| `group_article_replied`     | Group article comment reply                                                                           |
+| `group_kicked`              | Group kick                                                                                            |
+| `content_deleted_by_admin`  | Admin removed user content (includes content title/name and deletion reason)                          |
+| `job_application_updated`   | Job application status update                                                                         |
+| `mentor_request_received`   | New mentor request                                                                                    |
+| `mentor_request_approved`   | Mentor approved request                                                                               |
+| `mentor_request_rejected`   | Mentor rejected request                                                                               |
+| `mentor_relationship_ended` | Mentor ended active mentorship                                                                        |
+| `new_session`               | Mentor scheduled session                                                                              |
+| `report_rejected`           | Admin rejected report (includes reported content title/name and clickable target)                     |
+| `report_resolved_deleted`   | Admin accepted report and deleted reported content (includes content title/name and clickable target) |
+| `new_message`               | WebSocket message delivery                                                                            |
+| `event_reminder`            | Event reminder scheduler                                                                              |
 
 ### Business Rules
 
 - Notifications are created on relevant domain actions and persisted even if WebSocket delivery fails
 - Unread counts and read flags are scoped to the authenticated user
 - WebSocket-delivered notifications are also retrievable later through REST
+- When admin resolves a report with `delete_content: true` and deletion succeeds, reporter receives `report_resolved_deleted`
 
 ---
 
@@ -1738,6 +1740,9 @@ Admin report moderation supports list, detail, resolve, and reject flows. Report
         "ReporterID": 2,
         "TargetType": "post",
         "TargetID": 12,
+        "TargetLabel": "Post \"Reportable Post\"",
+        "TargetRedirectURL": "/feed/12",
+        "TargetExists": true,
         "ReportType": "spam",
         "Status": "pending",
         "AdminNote": null,
@@ -1748,6 +1753,17 @@ Admin report moderation supports list, detail, resolve, and reject flows. Report
   }
 }
 ```
+
+Admin review helper fields:
+
+- `TargetLabel`: Human-readable label for the reported content (title/name/snippet)
+- `TargetRedirectURL`: Frontend route to open the reported content directly
+- `TargetExists`: `false` when the target content is already deleted/unavailable
+
+These helper fields are included in both:
+
+- `GET /api/admin/reports`
+- `GET /api/admin/reports/:id`
 
 **PATCH `/api/admin/reports/:id/resolve`:**
 
@@ -2133,7 +2149,7 @@ Returns the mentor's full profile including `User` and `Experiences`. Returns `4
 
 ---
 
-#### GET `/api/mentors/recommend` — Get Recommendations ⭐ NLP Engine
+#### GET `/api/mentors/recommend` — Auto Recommendations ⭐ NLP Engine
 
 > Uses **TF-IDF + Cosine Similarity** (pure Go, no external ML dependency) to rank mentors by relevance to the student's profile or a custom query.
 
@@ -2193,7 +2209,45 @@ Returns the mentor's full profile including `User` and `Experiences`. Returns `4
 
 ---
 
-#### POST `/api/mentors/:id/request` — Request Mentoring
+#### POST `/api/mentors/recommend/search` — Natural Language Search ⭐ NLP Engine
+
+> Uses the same **TF-IDF + Cosine Similarity** engine as auto-recommendations, but accepts a **free-text JSON body** instead of a URL query param — suitable for long or complex natural language queries sent from a search form.
+
+**Body (JSON):**
+
+| Field   | Required | Notes                                       |
+| ------- | -------- | ------------------------------------------- |
+| `query` | ✅       | Free-text natural language description      |
+| `top`   | ❌       | Max results to return (default: `10`)       |
+
+```json
+{
+  "query": "mentor with 3 year experience in Data Science, with skill of Big Data, Go, Cloud Computing, prefer with interest in machine learning, IoT, Data Mining",
+  "top": 10
+}
+```
+
+**How the query is parsed:**
+
+| Input phrase | Extracted as |
+| --- | --- |
+| `"3 year experience"` | `minYears = 3` (hard filter) |
+| `"Data Science industry"` | `industry` filter (if `industry` keyword follows) |
+| Remaining terms: `"Big Data"`, `"Go"`, `"Cloud Computing"`, `"machine learning"`, `"IoT"`, `"Data Mining"` | TF-IDF scored terms after tokenization + stemming |
+| Common words: `"mentor"`, `"skill"`, `"prefer"`, `"interest"` | Filtered by stopword list — no effect on score |
+
+**Response `200`:** same shape as `GET /api/mentors/recommend`.
+
+**Error cases:**
+
+| Status | Reason |
+| --- | --- |
+| `400` | `query` field is missing or empty |
+| `401` | Not authenticated |
+| `403` | Not a `student` account |
+
+---
+
 
 ```json
 {

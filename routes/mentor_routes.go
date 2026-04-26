@@ -8,10 +8,11 @@ import (
 
 func RegisterMentorRoutes(app *fiber.App, ctrl *controllers.MentorController) {
 	// ── Public mentor browsing (student only) ──────────────────────────────────
-	// /api/mentors/recommend MUST be registered before /api/mentors/:id to avoid
+	// /api/mentors/recommend* MUST be registered before /api/mentors/:id to avoid
 	// Fiber treating "recommend" as an :id parameter value.
 	mentors := app.Group("/api/mentors", middleware.Protected())
 	mentors.Get("/recommend", middleware.RequireRole("student"), ctrl.GetRecommendations)
+	mentors.Post("/recommend/search", middleware.RequireRole("student"), ctrl.SearchRecommendations)
 	mentors.Get("/", middleware.RequireRole("student"), ctrl.GetMentors)
 	mentors.Get("/:id", middleware.RequireRole("student"), ctrl.GetMentorDetail)
 	mentors.Post("/:id/request", middleware.RequireRole("student"), ctrl.RequestMentoring)

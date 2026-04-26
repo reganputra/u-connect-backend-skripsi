@@ -568,19 +568,34 @@ func (s *mentorService) GetStudentSessions(studentUserID uint) ([]models.Mentori
 
 func (s *mentorService) GetRecommendations(studentUserID uint, query string, topN int) ([]RecommendResult, error) {
 	if strings.TrimSpace(query) == "" {
-		// Auto mode: build student text from their profile skills + interests
+		// Auto mode: build student text from profile
+		// Uses Skills + Interests + Bio + Position + IndustryName for richer coverage
 		profile, err := s.profileRepo.FindProfileByUserID(studentUserID)
 		if err != nil {
 			return nil, errors.New("profil tidak ditemukan — buat profil terlebih dahulu")
 		}
 		parts := []string{}
-		if profile.Skills != nil {
+		if profile.Skills != nil && strings.TrimSpace(*profile.Skills) != "" {
 			parts = append(parts, *profile.Skills)
 		}
-		if profile.Interests != nil {
+		if profile.Interests != nil && strings.TrimSpace(*profile.Interests) != "" {
 			parts = append(parts, *profile.Interests)
 		}
+		if profile.Bio != nil && strings.TrimSpace(*profile.Bio) != "" {
+			parts = append(parts, *profile.Bio)
+		}
+		if profile.Position != nil && strings.TrimSpace(*profile.Position) != "" {
+			parts = append(parts, *profile.Position)
+		}
+		if profile.IndustryName != nil && strings.TrimSpace(*profile.IndustryName) != "" {
+			parts = append(parts, *profile.IndustryName)
+		}
 		query = strings.Join(parts, " ")
+
+		// #5: Detect empty profile early — avoid silent zero-score results
+		if strings.TrimSpace(query) == "" {
+			return nil, errors.New("lengkapi skills atau interests di profil untuk mendapatkan rekomendasi")
+		}
 	}
 
 	if topN <= 0 {

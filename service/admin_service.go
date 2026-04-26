@@ -36,6 +36,13 @@ type CategoryRequest struct {
 	Description *string `json:"description"`
 }
 
+type AdminReportView struct {
+	models.Report
+	TargetLabel       string `json:"TargetLabel"`
+	TargetRedirectURL string `json:"TargetRedirectURL"`
+	TargetExists      bool   `json:"TargetExists"`
+}
+
 // ─── Interface ────────────────────────────────────────────────────────────────
 
 type AdminService interface {
@@ -48,8 +55,8 @@ type AdminService interface {
 	SetUserRole(id uint, req UpdateUserRoleRequest) (*models.User, error)
 
 	// Report moderation
-	GetReports(page, limit int, status string) ([]models.Report, int64, error)
-	GetReportByID(id uint) (*models.Report, error)
+	GetReports(page, limit int, status string) ([]AdminReportView, int64, error)
+	GetReportByID(id uint) (*AdminReportView, error)
 	ResolveReport(adminID uint, reportID uint, req ResolveReportRequest) (*models.Report, error)
 	RejectReport(adminID uint, reportID uint, req RejectReportRequest) (*models.Report, error)
 
@@ -152,22 +159,33 @@ func (s *adminService) SetUserRole(id uint, req UpdateUserRoleRequest) (*models.
 
 // ─── Report Moderation ────────────────────────────────────────────────────────
 
-func (s *adminService) GetReports(page, limit int, status string) ([]models.Report, int64, error) {
+func (s *adminService) GetReports(page, limit int, status string) ([]AdminReportView, int64, error) {
 	if page < 1 {
 		page = 1
 	}
 	if limit < 1 || limit > 50 {
 		limit = 10
 	}
-	return s.reportRepo.FindReports(page, limit, status)
+	reports, total, err := s.reportRepo.FindReports(page, limit, status)
+	if err != nil {
+		return nil, 0, err
+	}
+
+	views := make([]AdminReportView, 0, len(reports))
+	for i := range reports {
+		views = append(views, s.buildAdminReportView(&reports[i]))
+	}
+
+	return views, total, nil
 }
 
-func (s *adminService) GetReportByID(id uint) (*models.Report, error) {
+func (s *adminService) GetReportByID(id uint) (*AdminReportView, error) {
 	r, err := s.reportRepo.FindReportByID(id)
 	if err != nil {
 		return nil, errors.New("laporan tidak ditemukan")
 	}
-	return r, nil
+	view := s.buildAdminReportView(r)
+	return &view, nil
 }
 
 func (s *adminService) ResolveReport(adminID uint, reportID uint, req ResolveReportRequest) (*models.Report, error) {
@@ -179,9 +197,17 @@ func (s *adminService) ResolveReport(adminID uint, reportID uint, req ResolveRep
 		return nil, errors.New("laporan sudah diproses sebelumnya")
 	}
 
+	targetLabel := fmt.Sprintf("konten (%s)", report.TargetType)
+	if label, err := s.describeTargetForNotification(report.TargetType, report.TargetID); err == nil {
+		targetLabel = label
+	}
+
+	contentDeleted := false
 	// Optionally delete the reported content
 	if req.DeleteContent {
-		_ = s.deleteTargetAndNotify(report.TargetType, report.TargetID, req.AdminNote)
+		if err := s.deleteTargetAndNotify(report.TargetType, report.TargetID, req.AdminNote); err == nil {
+			contentDeleted = true
+		}
 	}
 
 	now := time.Now()
@@ -193,6 +219,22 @@ func (s *adminService) ResolveReport(adminID uint, reportID uint, req ResolveRep
 	if err := s.reportRepo.UpdateReport(report); err != nil {
 		return nil, errors.New("gagal memperbarui laporan")
 	}
+
+	if contentDeleted {
+		reason := "Melanggar kebijakan komunitas"
+		if req.AdminNote != nil && *req.AdminNote != "" {
+			reason = *req.AdminNote
+		}
+		_ = s.notifSvc.Notify(
+			report.ReporterID,
+			"report_resolved_deleted",
+			"Laporanmu ditindaklanjuti",
+			fmt.Sprintf("Laporanmu terbukti valid. %s telah dihapus admin. Alasan: %s", targetLabel, reason),
+			report.TargetType,
+			report.TargetID,
+		)
+	}
+
 	return report, nil
 }
 
@@ -283,47 +325,72 @@ func (s *adminService) deleteTargetAndNotify(targetType string, targetID uint, a
 	return nil
 }
 
-func (s *adminService) describeTargetForNotification(targetType string, targetID uint) (string, error) {
+func (s *adminService) buildAdminReportView(report *models.Report) AdminReportView {
+	label, redirectURL, exists := s.resolveReportTargetMeta(report.TargetType, report.TargetID)
+	return AdminReportView{
+		Report:            *report,
+		TargetLabel:       label,
+		TargetRedirectURL: redirectURL,
+		TargetExists:      exists,
+	}
+}
+
+func (s *adminService) resolveReportTargetMeta(targetType string, targetID uint) (string, string, bool) {
 	switch targetType {
 	case "post":
 		var post models.Post
 		if err := s.db.Select("id", "title").First(&post, targetID).Error; err != nil {
-			return "", err
+			return s.missingTargetMeta(targetType, targetID, err)
 		}
-		return fmt.Sprintf("Post \"%s\"", truncateNotifyText(post.Title, 80)), nil
+		return fmt.Sprintf("Post \"%s\"", truncateNotifyText(post.Title, 80)), fmt.Sprintf("/feed/%d", post.ID), true
+	case "comment":
+		var comment models.Comment
+		if err := s.db.Select("id", "content", "post_id").First(&comment, targetID).Error; err != nil {
+			return s.missingTargetMeta(targetType, targetID, err)
+		}
+		return fmt.Sprintf("Komentar \"%s\"", truncateNotifyText(comment.Content, 80)), fmt.Sprintf("/feed/%d", comment.PostID), true
 	case "group":
 		var group models.Group
 		if err := s.db.Select("id", "title").First(&group, targetID).Error; err != nil {
-			return "", err
+			return s.missingTargetMeta(targetType, targetID, err)
 		}
-		return fmt.Sprintf("Grup \"%s\"", truncateNotifyText(group.Title, 80)), nil
+		return fmt.Sprintf("Grup \"%s\"", truncateNotifyText(group.Title, 80)), fmt.Sprintf("/groups/%d", group.ID), true
+	case "group_article":
+		var article models.GroupArticle
+		if err := s.db.Select("id", "title", "group_id").First(&article, targetID).Error; err != nil {
+			return s.missingTargetMeta(targetType, targetID, err)
+		}
+		return fmt.Sprintf("Artikel grup \"%s\"", truncateNotifyText(article.Title, 80)), fmt.Sprintf("/groups/%d/article/%d", article.GroupID, article.ID), true
 	case "event":
 		var event models.Event
 		if err := s.db.Select("id", "title").First(&event, targetID).Error; err != nil {
-			return "", err
+			return s.missingTargetMeta(targetType, targetID, err)
 		}
-		return fmt.Sprintf("Event \"%s\"", truncateNotifyText(event.Title, 80)), nil
+		return fmt.Sprintf("Event \"%s\"", truncateNotifyText(event.Title, 80)), fmt.Sprintf("/events/%d", event.ID), true
 	case "job":
 		var job models.Job
 		if err := s.db.Select("id", "title").First(&job, targetID).Error; err != nil {
-			return "", err
+			return s.missingTargetMeta(targetType, targetID, err)
 		}
-		return fmt.Sprintf("Lowongan \"%s\"", truncateNotifyText(job.Title, 80)), nil
-	case "comment":
-		var comment models.Comment
-		if err := s.db.Select("id", "content").First(&comment, targetID).Error; err != nil {
-			return "", err
-		}
-		return fmt.Sprintf("Komentar \"%s\"", truncateNotifyText(comment.Content, 80)), nil
-	case "group_article":
-		var article models.GroupArticle
-		if err := s.db.Select("id", "title").First(&article, targetID).Error; err != nil {
-			return "", err
-		}
-		return fmt.Sprintf("Artikel grup \"%s\"", truncateNotifyText(article.Title, 80)), nil
+		return fmt.Sprintf("Lowongan \"%s\"", truncateNotifyText(job.Title, 80)), fmt.Sprintf("/jobs/%d", job.ID), true
 	default:
-		return fmt.Sprintf("Konten (%s) ID %d", targetType, targetID), nil
+		return fmt.Sprintf("Konten (%s) ID %d", targetType, targetID), "", false
 	}
+}
+
+func (s *adminService) missingTargetMeta(targetType string, targetID uint, err error) (string, string, bool) {
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return fmt.Sprintf("Konten (%s) ID %d [sudah dihapus]", targetType, targetID), "", false
+	}
+	return fmt.Sprintf("Konten (%s) ID %d", targetType, targetID), "", false
+}
+
+func (s *adminService) describeTargetForNotification(targetType string, targetID uint) (string, error) {
+	label, _, exists := s.resolveReportTargetMeta(targetType, targetID)
+	if !exists {
+		return "", gorm.ErrRecordNotFound
+	}
+	return label, nil
 }
 
 func truncateNotifyText(s string, max int) string {
