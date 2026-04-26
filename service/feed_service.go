@@ -3,6 +3,7 @@ package service
 import (
 	"errors"
 	"fmt"
+	"sync"
 	"time"
 
 	"github.com/reganputra/skripsi-backend/models"
@@ -228,18 +229,16 @@ func (s *feedService) GetPosts(page, limit int) ([]*PostListItem, int64, error) 
 	if limit < 1 || limit > 50 {
 		limit = 10
 	}
-	posts, total, err := s.postRepo.FindPosts(page, limit)
+	// 1.3: SQL COUNT subqueries — no more Preload + len() N+1.
+	rows, total, err := s.postRepo.FindPostsSummary(page, limit)
 	if err != nil {
 		return nil, 0, err
 	}
-	var result []*PostListItem
-	for _, p := range posts {
+	result := make([]*PostListItem, 0, len(rows))
+	for _, p := range rows {
 		imageURLs := []string{}
 		for _, img := range p.Images {
 			imageURLs = append(imageURLs, img.ImageURL)
-		}
-		if imageURLs == nil {
-			imageURLs = []string{}
 		}
 		result = append(result, &PostListItem{
 			ID:            p.ID,
@@ -250,27 +249,37 @@ func (s *feedService) GetPosts(page, limit int) ([]*PostListItem, int64, error) 
 			Content:       p.Content,
 			ImageURL:      p.ImageURL,
 			ImageURLs:     imageURLs,
-			CommentCount:  len(p.Comments),
-			ReactionCount: len(p.Reactions),
-			VoteCount:     s.sumVoteValues(p.Votes),
+			CommentCount:  p.CommentCount,
+			ReactionCount: p.ReactionCount,
+			VoteCount:     p.VoteScore,
 			CreatedAt:     p.CreatedAt,
 			UpdatedAt:     p.UpdatedAt,
 		})
-	}
-	if result == nil {
-		result = []*PostListItem{}
 	}
 	return result, total, nil
 }
 
 func (s *feedService) GetPostByID(id uint) (*PostDetailResponse, error) {
-	post, err := s.postRepo.FindPostByID(id)
-	if err != nil {
+	var post *models.Post
+	var comments []models.Comment
+	var postErr, commErr error
+
+	var wg sync.WaitGroup
+	wg.Add(2)
+	go func() {
+		defer wg.Done()
+		post, postErr = s.postRepo.FindPostByID(id)
+	}()
+	go func() {
+		defer wg.Done()
+		comments, commErr = s.postRepo.FindAllCommentsByPostID(id)
+	}()
+	wg.Wait()
+
+	if postErr != nil {
 		return nil, errors.New("postingan tidak ditemukan")
 	}
-
-	comments, err := s.postRepo.FindAllCommentsByPostID(id)
-	if err != nil {
+	if commErr != nil {
 		return nil, errors.New("gagal memuat komentar")
 	}
 
@@ -574,11 +583,3 @@ func (s *feedService) VoteComment(userID uint, commentID uint, req VoteRequest) 
 	return "added", nil
 }
 
-// sumVoteValues aggregates vote value scores (1 = upvote, -1 = downvote)
-func (s *feedService) sumVoteValues(votes []models.Vote) int {
-	sum := 0
-	for _, v := range votes {
-		sum += v.Value
-	}
-	return sum
-}
