@@ -86,7 +86,7 @@ func BuildTFIDF(corpus [][]string) []map[string]float64 {
 		return nil
 	}
 
-	// Document frequency: jumlah dokumen yang memuat setiap term
+	// 1. Hitung Document Frequency (df): jumlah dokumen yang memuat setiap term
 	df := make(map[string]int, 512)
 	for _, doc := range corpus {
 		seen := make(map[string]struct{}, len(doc))
@@ -98,27 +98,103 @@ func BuildTFIDF(corpus [][]string) []map[string]float64 {
 		}
 	}
 
-	// Build TF-IDF vektor per dokumen
+	// 2. Bangun vektor TF-IDF per dokumen
 	vectors := make([]map[string]float64, N)
 	for i, doc := range corpus {
 		if len(doc) == 0 {
 			vectors[i] = map[string]float64{}
 			continue
 		}
-		tf := make(map[string]int, len(doc))
+
+		// Hitung TF (frekuensi relatif)
+		tf := make(map[string]float64, len(doc))
 		for _, t := range doc {
 			tf[t]++
 		}
+		totalTerms := float64(len(doc))
+		for term := range tf {
+			tf[term] = tf[term] / totalTerms // TF(t,d) = freq / total_terms
+		}
+
+		// Hitung TF-IDF (W = TF × IDF)
 		vec := make(map[string]float64, len(tf))
-		for term, count := range tf {
-			tfScore := float64(count) / float64(len(doc))
-			// Smoothed IDF: log((N)/(df+1)) + 1
-			idfScore := math.Log(float64(N)/float64(df[term]+1)) + 1.0
+		for term, tfScore := range tf {
+			// IDF(t,D) = log(1 + N/df(t)) — smoothed variant: prevents extreme weights for rare
+			// terms and avoids log(1)=0 zeroing out terms that appear in every document.
+			// df[term] is guaranteed >= 1 because term originates from a document in the corpus.
+			idfScore := math.Log(float64(N) / float64(df[term]))
 			vec[term] = tfScore * idfScore
 		}
 		vectors[i] = vec
 	}
+
 	return vectors
+}
+
+// BuildIDF computes a corpus-level IDF table from a pre-tokenized document set.
+// Separating IDF from TF lets mentor vectors be pre-built and cached independently of any query.
+// IDF(t) = log(N / df(t)); df[term] is guaranteed >= 1 for any term in the corpus.
+func BuildIDF(corpus [][]string) map[string]float64 {
+	N := len(corpus)
+	if N == 0 {
+		return map[string]float64{}
+	}
+	df := make(map[string]int, 512)
+	for _, doc := range corpus {
+		seen := make(map[string]struct{}, len(doc))
+		for _, t := range doc {
+			if _, ok := seen[t]; !ok {
+				df[t]++
+				seen[t] = struct{}{}
+			}
+		}
+	}
+	idf := make(map[string]float64, len(df))
+	for term, freq := range df {
+		idf[term] = math.Log(float64(N) / float64(freq))
+	}
+	return idf
+}
+
+// TFIDFVector computes the TF-IDF vector for a single document using a pre-built IDF table.
+// Terms absent from the IDF table (outside the mentor vocabulary) receive zero weight — they
+// carry no discriminating power against the mentor corpus and are safely ignored.
+func TFIDFVector(tokens []string, idf map[string]float64) map[string]float64 {
+	if len(tokens) == 0 {
+		return map[string]float64{}
+	}
+	tf := make(map[string]float64, len(tokens))
+	for _, t := range tokens {
+		tf[t]++
+	}
+	total := float64(len(tokens))
+	vec := make(map[string]float64, len(tf))
+	for term, count := range tf {
+		if idfScore, ok := idf[term]; ok {
+			vec[term] = (count / total) * idfScore
+		}
+	}
+	return vec
+}
+
+// L2Normalize scales a TF-IDF vector to unit length (‖v‖₂ = 1).
+// Pre-normalizing mentor vectors once lets the scoring loop use a plain dot product
+// instead of re-computing magnitudes on every query — dot(a_hat, b_hat) = cos(a, b).
+// Returns the original map unchanged when the vector is all-zero.
+func L2Normalize(vec map[string]float64) map[string]float64 {
+	var norm float64
+	for _, v := range vec {
+		norm += v * v
+	}
+	if norm == 0 {
+		return vec
+	}
+	norm = math.Sqrt(norm)
+	normalized := make(map[string]float64, len(vec))
+	for k, v := range vec {
+		normalized[k] = v / norm
+	}
+	return normalized
 }
 
 // CosineSimilarity menghitung kesamaan kosinus antara dua vektor TF-IDF.

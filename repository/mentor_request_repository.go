@@ -59,7 +59,10 @@ func (r *mentorRequestRepository) FindByID(id uint) (*models.MentorRequest, erro
 func (r *mentorRequestRepository) FindByMentorID(mentorID uint) ([]models.MentorRequest, error) {
 	var reqs []models.MentorRequest
 	err := r.db.
+		Preload("Mentor").
+		Preload("Mentor.Profile").
 		Preload("Student").
+		Preload("Student.Profile").
 		Where("mentor_id = ?", mentorID).
 		Order("created_at DESC").
 		Find(&reqs).Error
@@ -70,6 +73,9 @@ func (r *mentorRequestRepository) FindByStudentID(studentID uint) ([]models.Ment
 	var reqs []models.MentorRequest
 	err := r.db.
 		Preload("Mentor").
+		Preload("Mentor.Profile").
+		Preload("Student").
+		Preload("Student.Profile").
 		Where("student_id = ?", studentID).
 		Order("created_at DESC").
 		Find(&reqs).Error

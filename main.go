@@ -38,10 +38,12 @@ func main() {
 
 	// Connect to the database
 	config.ConnectDB()
+	if err := cleanupDuplicateFollows(config.DB); err != nil {
+		log.Fatalf("❌ Failed to clean duplicate follows: %v", err)
+	}
 
 	// Initialize Cloudinary
 	config.ConnectCloudinary()
-
 	// Auto-migrate models
 	if err := config.DB.AutoMigrate(
 		&models.User{},
@@ -76,6 +78,8 @@ func main() {
 		log.Fatalf("❌ AutoMigrate failed: %v", err)
 	}
 	log.Println("✅ Database migrated successfully!")
+
+	seedGeneralCategory(config.DB)
 
 	// ── Admin Seeder ──────────────────────────────────────────────────────────
 	seedAdmin(config.DB)
@@ -118,7 +122,7 @@ func main() {
 	// ── WebSocket Hub + Notification Service (must come first) ──────────────
 	hub := ws.NewHub()
 	go hub.Run()
-	notifSvc := service.NewNotificationService(notifRepo, hub)
+	notifSvc := service.NewNotificationService(notifRepo, hub, db)
 
 	// ── Services ──────────────────────────────────────────────────────────────
 	authSvc := service.NewAuthService(userRepo, profileRepo)
@@ -130,7 +134,7 @@ func main() {
 	eventSvc := service.NewEventService(eventRepo, agendaRepo, regRepo)
 	jobSvc := service.NewJobService(jobRepo, jobAppRepo, companyRepo, userRepo, notifSvc)
 	reportSvc := service.NewReportService(reportRepo)
-	adminSvc := service.NewAdminService(adminRepo, reportRepo, categoryRepo, notifSvc)
+	adminSvc := service.NewAdminService(adminRepo, reportRepo, categoryRepo, notifSvc, db)
 	recommendSvc := service.NewRecommendationService(mentorRepo)
 	mentorSvc := service.NewMentorService(profileRepo, mentorRepo, mentorRequestRepo, mentoringSessionRepo, recommendSvc, userRepo, notifSvc)
 	followSvc := service.NewFollowService(followRepo, userRepo, notifSvc)
@@ -220,6 +224,24 @@ func main() {
 	}
 }
 
+func cleanupDuplicateFollows(db *gorm.DB) error {
+	return db.Transaction(func(tx *gorm.DB) error {
+		return tx.Exec(`
+			DELETE FROM follows f
+			USING (
+				SELECT id,
+					ROW_NUMBER() OVER (
+						PARTITION BY follower_id, following_id
+						ORDER BY (deleted_at IS NOT NULL) ASC, created_at DESC, id DESC
+					) AS rn
+				FROM follows
+			) ranked
+			WHERE f.id = ranked.id
+				AND ranked.rn > 1
+		`).Error
+	})
+}
+
 // seedAdmin creates the first admin account from environment variables
 // if no admin user already exists. Safe to call on every startup.
 func seedAdmin(db *gorm.DB) {
@@ -263,4 +285,20 @@ func seedAdmin(db *gorm.DB) {
 	}
 
 	log.Printf("✅ Admin user seeded: %s", email)
+}
+
+// seedGeneralCategory ensures the fallback category exists for content cleanup.
+func seedGeneralCategory(db *gorm.DB) {
+	var count int64
+	db.Model(&models.Category{}).Where("name = ?", "General").Count(&count)
+	if count > 0 {
+		return
+	}
+
+	if err := db.Create(&models.Category{Name: "General"}).Error; err != nil {
+		log.Printf("❌ Failed to seed General category: %v", err)
+		return
+	}
+
+	log.Println("✅ General category seeded")
 }

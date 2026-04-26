@@ -448,3 +448,32 @@ func (ctrl *MentorController) GetRecommendations(c *fiber.Ctx) error {
 	}
 	return utils.SuccessResponse(c, fiber.StatusOK, results)
 }
+
+// SearchRecommendations godoc — POST /api/mentors/recommend/search  (student only)
+// Accepts a JSON body with a natural-language query for richer search expressions
+// that would be cumbersome to encode as a URL query param.
+//
+// Body: { "query": "mentor with 3 year experience in Data Science...", "top": 10 }
+func (ctrl *MentorController) SearchRecommendations(c *fiber.Ctx) error {
+	userID, err := getUserIDFromToken(c)
+	if err != nil {
+		return utils.ErrorResponse(c, fiber.StatusUnauthorized, err.Error())
+	}
+
+	var body struct {
+		Query string `json:"query"`
+		Top   int    `json:"top"`
+	}
+	if err := c.BodyParser(&body); err != nil {
+		return utils.ErrorResponse(c, fiber.StatusBadRequest, "isi permintaan tidak valid")
+	}
+	if body.Query == "" {
+		return utils.ErrorResponse(c, fiber.StatusBadRequest, "query wajib diisi")
+	}
+
+	results, err := ctrl.mentorSvc.GetRecommendations(userID, body.Query, body.Top)
+	if err != nil {
+		return utils.ErrorResponse(c, fiber.StatusBadRequest, err.Error())
+	}
+	return utils.SuccessResponse(c, fiber.StatusOK, results)
+}

@@ -365,9 +365,22 @@ func (s *feedService) AddComment(userID uint, postID uint, req CommentRequest) (
 	if req.Content == "" {
 		return nil, errors.New("konten wajib diisi")
 	}
-	if _, err := s.postRepo.FindPostByID(postID); err != nil {
+	post, err := s.postRepo.FindPostByID(postID)
+	if err != nil {
 		return nil, errors.New("postingan tidak ditemukan")
 	}
+
+	var parentComment *models.Comment
+	if req.ParentCommentID != nil {
+		parentComment, err = s.commentRepo.FindCommentByID(*req.ParentCommentID)
+		if err != nil {
+			return nil, errors.New("komentar induk tidak ditemukan")
+		}
+		if parentComment.PostID != postID {
+			return nil, errors.New("komentar induk tidak valid")
+		}
+	}
+
 	comment := &models.Comment{
 		PostID:          postID,
 		UserID:          userID,
@@ -377,19 +390,35 @@ func (s *feedService) AddComment(userID uint, postID uint, req CommentRequest) (
 	if err := s.commentRepo.CreateComment(comment); err != nil {
 		return nil, errors.New("gagal menambahkan komentar")
 	}
-	// Throttled notification to post owner (skip if commenter == owner)
-	if post, err := s.postRepo.FindPostByID(postID); err == nil && post.UserID != userID {
-		if commenter, err := s.userRepo.FindUserByID(userID); err == nil {
-			_ = s.notifSvc.NotifyThrottled(
-				post.UserID,
-				"post_commented",
-				"Komentar baru",
-				fmt.Sprintf("%s mengomentari postinganmu", commenter.Name),
-				"post",
-				postID,
-				30*time.Minute,
-			)
-		}
+
+	commenterName := "Seseorang"
+	if commenter, err := s.userRepo.FindUserByID(userID); err == nil && commenter.Name != "" {
+		commenterName = commenter.Name
+	}
+
+	// Notify parent comment owner for replies.
+	if parentComment != nil && parentComment.UserID != userID {
+		_ = s.notifSvc.Notify(
+			parentComment.UserID,
+			"post_replied",
+			"Balasan komentar",
+			fmt.Sprintf("%s membalas komentarmu di postingan", commenterName),
+			"comment",
+			parentComment.ID,
+		)
+	}
+
+	// Notify post owner for new top-level comments.
+	if req.ParentCommentID == nil && post.UserID != userID {
+		_ = s.notifSvc.NotifyThrottled(
+			post.UserID,
+			"post_commented",
+			"Komentar baru",
+			fmt.Sprintf("%s mengomentari postinganmu", commenterName),
+			"post",
+			postID,
+			30*time.Minute,
+		)
 	}
 	return comment, nil
 }

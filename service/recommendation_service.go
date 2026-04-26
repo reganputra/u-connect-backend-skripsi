@@ -1,9 +1,12 @@
 package service
 
 import (
+	"math"
 	"regexp"
 	"sort"
 	"strings"
+	"sync"
+	"time"
 
 	"github.com/reganputra/skripsi-backend/repository"
 	"github.com/reganputra/skripsi-backend/utils"
@@ -69,26 +72,119 @@ func overlapKeywords(studentSet, mentorSet map[string]struct{}) ([]string, float
 		}
 	}
 	sort.Strings(matches)
+	// #6: Score on the full match count, then cap the display slice separately.
+	// Previously the cap was applied before scoring, understating overlap for rich queries.
+	scoreCount := len(matches)
 	if len(matches) > 8 {
 		matches = matches[:8]
 	}
-	return matches, float64(len(matches)) / float64(len(studentSet))
+	return matches, float64(scoreCount) / float64(len(studentSet))
 }
 
 // RecommendationService computes mentor recommendations using TF-IDF + Cosine Similarity.
 type RecommendationService interface {
-	// RecommendMentors ranks available mentors against a student's query text.
-	// studentText is either the student's skills+interests (auto mode) or a custom query.
-	// topN limits the number of results (0 = return all).
 	RecommendMentors(studentText string, topN int) ([]RecommendResult, error)
 }
 
+// corpusCacheSnapshot is a consistent point-in-time read of all corpus cache fields.
+type corpusCacheSnapshot struct {
+	docs           []repository.MentorDoc
+	texts          []string
+	tokenSets      []map[string]struct{}
+	idf            map[string]float64
+	normalizedVecs []map[string]float64
+}
+
+// corpusCache holds pre-built, pre-normalized mentor vectors.
+// Invalidated after cacheTTL; thread-safe via RWMutex.
+type corpusCache struct {
+	mu             sync.RWMutex
+	docs           []repository.MentorDoc
+	tokenSets      []map[string]struct{}
+	texts          []string
+	idf            map[string]float64       // corpus-level IDF (mentor docs only)
+	normalizedVecs []map[string]float64     // L2-normalized TF-IDF vectors per mentor
+	loadedAt       time.Time
+}
+
+const cacheTTL = 5 * time.Minute
+
 type recommendationService struct {
 	mentorRepo repository.MentorRepository
+	cache      corpusCache
 }
 
 func NewRecommendationService(mentorRepo repository.MentorRepository) RecommendationService {
 	return &recommendationService{mentorRepo: mentorRepo}
+}
+
+// dotProduct computes the dot product of two sparse vectors.
+// When both vectors are L2-normalized, dot(a, b) == CosineSimilarity(a, b) — no sqrt needed.
+func dotProduct(a, b map[string]float64) float64 {
+	var sum float64
+	for k, va := range a {
+		sum += va * b[k]
+	}
+	return sum
+}
+
+// loadCorpus returns a consistent cache snapshot (refreshed if stale).
+// On a cache miss it: queries DB → tokenizes → builds IDF → pre-normalizes mentor vectors.
+func (s *recommendationService) loadCorpus() (corpusCacheSnapshot, error) {
+	s.cache.mu.RLock()
+	if !s.cache.loadedAt.IsZero() && time.Since(s.cache.loadedAt) < cacheTTL {
+		snap := corpusCacheSnapshot{
+			docs:           s.cache.docs,
+			texts:          s.cache.texts,
+			tokenSets:      s.cache.tokenSets,
+			idf:            s.cache.idf,
+			normalizedVecs: s.cache.normalizedVecs,
+		}
+		s.cache.mu.RUnlock()
+		return snap, nil
+	}
+	s.cache.mu.RUnlock()
+
+	// Cache miss or expired — reload from DB
+	docs, err := s.mentorRepo.FindAllMentorDocs()
+	if err != nil {
+		return corpusCacheSnapshot{}, err
+	}
+	texts := make([]string, len(docs))
+	sets := make([]map[string]struct{}, len(docs))
+	corpusTokens := make([][]string, len(docs))
+	for i, d := range docs {
+		parts := []string{d.Skills, d.Interests, d.MentorBio, d.Position, d.CompanyName, d.IndustryName, d.ExperienceText}
+		texts[i] = strings.Join(parts, " ")
+		corpusTokens[i] = utils.Tokenize(texts[i])
+		sets[i] = toSet(corpusTokens[i])
+	}
+
+	// Build IDF from mentor corpus only (query is NOT included — it shouldn't bias IDF)
+	idf := utils.BuildIDF(corpusTokens)
+
+	// Pre-compute and L2-normalize each mentor's TF-IDF vector once
+	normVecs := make([]map[string]float64, len(docs))
+	for i, tokens := range corpusTokens {
+		normVecs[i] = utils.L2Normalize(utils.TFIDFVector(tokens, idf))
+	}
+
+	s.cache.mu.Lock()
+	s.cache.docs = docs
+	s.cache.texts = texts
+	s.cache.tokenSets = sets
+	s.cache.idf = idf
+	s.cache.normalizedVecs = normVecs
+	s.cache.loadedAt = time.Now()
+	s.cache.mu.Unlock()
+
+	return corpusCacheSnapshot{
+		docs:           docs,
+		texts:          texts,
+		tokenSets:      sets,
+		idf:            idf,
+		normalizedVecs: normVecs,
+	}, nil
 }
 
 func (s *recommendationService) RecommendMentors(studentText string, topN int) ([]RecommendResult, error) {
@@ -97,19 +193,20 @@ func (s *recommendationService) RecommendMentors(studentText string, topN int) (
 		cleanedQuery = studentText
 	}
 
-	// ── Step 1: Load all available mentor documents ───────────────────────────
-	docs, err := s.mentorRepo.FindAllMentorDocs()
+	// ── Step 1: Load mentor corpus (from cache or DB) ─────────────────────────
+	snap, err := s.loadCorpus()
 	if err != nil {
 		return nil, err
 	}
-	if len(docs) == 0 {
+	if len(snap.docs) == 0 {
 		return []RecommendResult{}, nil
 	}
 
-	// ── Step 2: Build combined text per mentor ────────────────────────────────
-	// text = skills + interests + mentor_bio + position + company + industry
-	filtered := make([]repository.MentorDoc, 0, len(docs))
-	for _, d := range docs {
+	// ── Step 2: Apply hard filters (years / industry) ─────────────────────────
+	filtered := make([]repository.MentorDoc, 0, len(snap.docs))
+	mentorTokenSets := make([]map[string]struct{}, 0, len(snap.docs))
+	filteredNormVecs := make([]map[string]float64, 0, len(snap.docs))
+	for i, d := range snap.docs {
 		if minYears > 0 && d.YearsExperience < minYears {
 			continue
 		}
@@ -117,37 +214,24 @@ func (s *recommendationService) RecommendMentors(studentText string, topN int) (
 			continue
 		}
 		filtered = append(filtered, d)
+		mentorTokenSets = append(mentorTokenSets, snap.tokenSets[i])
+		filteredNormVecs = append(filteredNormVecs, snap.normalizedVecs[i])
 	}
 	if len(filtered) == 0 {
 		return []RecommendResult{}, nil
 	}
 
-	mentorTexts := make([]string, len(filtered))
-	mentorTokenSets := make([]map[string]struct{}, len(filtered))
-	for i, d := range filtered {
-		parts := []string{d.Skills, d.Interests, d.MentorBio, d.Position, d.CompanyName, d.IndustryName, d.ExperienceText}
-		mentorTexts[i] = strings.Join(parts, " ")
-		mentorTokenSets[i] = toSet(utils.Tokenize(mentorTexts[i]))
-	}
-
-	// ── Step 3: Tokenize corpus (mentor docs + student query) ─────────────────
-	// Last element in corpus = student query vector
-	corpus := make([][]string, len(mentorTexts)+1)
-	for i, txt := range mentorTexts {
-		corpus[i] = utils.Tokenize(txt)
-	}
+	// ── Step 3: Vectorize student query ───────────────────────────────────────
+	// IDF comes from the cached mentor corpus. Terms outside mentor vocab get weight 0.
+	// Both student and mentor vectors are L2-normalized → dot product == cosine similarity.
 	studentTokens := utils.Tokenize(cleanedQuery)
-	corpus[len(corpus)-1] = studentTokens
 	studentTokenSet := toSet(studentTokens)
+	studentVec := utils.L2Normalize(utils.TFIDFVector(studentTokens, snap.idf))
 
-	// ── Step 4: Build TF-IDF matrix ───────────────────────────────────────────
-	vectors := utils.BuildTFIDF(corpus)
-	studentVec := vectors[len(vectors)-1]
-
-	// ── Step 5: Compute cosine similarity for each mentor ─────────────────────
+	// ── Step 4: Score each mentor ─────────────────────────────────────────────
 	results := make([]RecommendResult, len(filtered))
 	for i, doc := range filtered {
-		textScore := utils.CosineSimilarity(studentVec, vectors[i])
+		textScore := dotProduct(studentVec, filteredNormVecs[i])
 		matched, overlapScore := overlapKeywords(studentTokenSet, mentorTokenSets[i])
 
 		experienceScore := 0.0
@@ -163,9 +247,18 @@ func (s *recommendationService) RecommendMentors(studentText string, topN int) (
 			industryScore = 1.0
 		}
 
-		finalScore := (0.55 * textScore) + (0.20 * overlapScore) + (0.15 * experienceScore) + (0.10 * industryScore)
-		if minYears == 0 && industry == "" {
-			finalScore = (0.75 * textScore) + (0.25 * overlapScore)
+		// #3: Dynamic weight calibration — overlap weight grows with query richness.
+		// A 1-token query shouldn't be dominated by keyword overlap; a 10-token query
+		// deserves more overlap credit because there are enough terms to match meaningfully.
+		overlapW := math.Min(0.30, 0.10+0.025*float64(len(studentTokens)))
+		textW := 1.0 - overlapW
+
+		finalScore := (textW * textScore) + (overlapW * overlapScore)
+		if minYears > 0 || industry != "" {
+			// When hard filters are active, redistribute weight: text=0.55, overlap adaptive,
+			// experience=0.15, industry=0.10 — overlap gets the remainder.
+			overlapW = math.Min(0.20, 0.05+0.015*float64(len(studentTokens)))
+			finalScore = (0.55 * textScore) + (overlapW * overlapScore) + (0.15 * experienceScore) + (0.10 * industryScore)
 		}
 
 		results[i] = RecommendResult{

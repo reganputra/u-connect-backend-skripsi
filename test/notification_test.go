@@ -470,14 +470,58 @@ func TestNotificationFlows(t *testing.T) {
 		if got := notificationType(notif); got != "report_rejected" {
 			t.Fatalf("expected report_rejected notification, got %v", got)
 		}
-		if got := notificationRefID(notif); int(got) != int(reportID) {
-			t.Fatalf("expected ref id %.0f, got %v", reportID, got)
+		if got := notificationRefID(notif); int(got) != int(postID) {
+			t.Fatalf("expected ref id %.0f, got %v", postID, got)
+		}
+		if body := notificationBody(notif); !strings.Contains(body, "Reportable Post") {
+			t.Fatalf("expected notification body to include target title, got %q", body)
 		}
 	})
 
 	// ========================================================================
 	// Scenario: websocket message notification
 	// ========================================================================
+	t.Run("Report Resolved Deleted Notification", func(t *testing.T) {
+		adminToken := loginAdmin(t)
+		reporterToken, _ := registerAndLogin(t, newSuffix(), "Resolved Reporter", "resolved-reporter@test.com", "alumni", "FIK", "IF")
+		authorToken, _ := registerAndLogin(t, newSuffix(), "Resolved Author", "resolved-author@test.com", "alumni", "FIK", "IF")
+
+		status, res := formReq(t, http.MethodPost, "/api/feed", authorToken, map[string]string{
+			"title":   "Delete Confirmed Post",
+			"content": "This post should be removed",
+		})
+		assertStatus(t, http.StatusCreated, status, res)
+		postID := safeID(t, res, "resolved post")
+
+		status, res = jsonReq(t, http.MethodPost, "/api/reports", reporterToken, map[string]any{
+			"target_type": "post",
+			"target_id":   postID,
+			"report_type": "spam",
+		})
+		assertStatus(t, http.StatusCreated, status, res)
+		reportID := safeID(t, res, "resolved report")
+
+		baseUnread := getUnreadCount(t, reporterToken)
+		note := "Konten memang melanggar aturan"
+		status, res = jsonReq(t, http.MethodPatch, fmt.Sprintf("/api/admin/reports/%.0f/resolve", reportID), adminToken, map[string]any{
+			"admin_note":     note,
+			"delete_content": true,
+		})
+		assertStatus(t, http.StatusOK, status, res)
+
+		notificationReadCountDelta(t, reporterToken, baseUnread, 1)
+		notif := latestNotification(t, reporterToken)
+		if got := notificationType(notif); got != "report_resolved_deleted" {
+			t.Fatalf("expected report_resolved_deleted notification, got %v", got)
+		}
+		if got := notificationRefID(notif); int(got) != int(postID) {
+			t.Fatalf("expected ref id %.0f, got %v", postID, got)
+		}
+		if body := notificationBody(notif); !strings.Contains(body, "Delete Confirmed Post") {
+			t.Fatalf("expected notification body to include target title, got %q", body)
+		}
+	})
+
 	t.Run("WebSocket Message Notification", func(t *testing.T) {
 		s6 := newSuffix()
 		senderToken, _ := registerAndLogin(t, s6, "WS Sender", "ws-sender+"+s6+"@test.com", "alumni", "FIK", "IF")
@@ -521,7 +565,7 @@ func TestNotificationFlows(t *testing.T) {
 
 	t.Run("Event Reminder Notification", func(t *testing.T) {
 		db := ensureTestDB(t)
-		notifSvc := service.NewNotificationService(repository.NewNotificationRepository(db), noopDeliverer{})
+		notifSvc := service.NewNotificationService(repository.NewNotificationRepository(db), noopDeliverer{}, db)
 
 		s7 := newSuffix()
 		ownerToken, _ := registerAndLogin(t, s7, "Reminder Owner", "reminder-owner+"+s7+"@test.com", "alumni", "FIK", "IF")

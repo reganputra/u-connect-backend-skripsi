@@ -39,6 +39,7 @@ func (r *followRepository) Follow(followerID, followingID uint) error {
 
 func (r *followRepository) Unfollow(followerID, followingID uint) error {
 	return r.db.
+		Unscoped().
 		Where("follower_id = ? AND following_id = ?", followerID, followingID).
 		Delete(&models.Follow{}).Error
 }

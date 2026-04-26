@@ -17,4 +17,7 @@ type User struct {
 
 	// partner only
 	CompanyName *string `gorm:"default:null"`
+
+	// Association — populated only when explicitly Preloaded
+	Profile *UserProfile `gorm:"foreignKey:UserID"`
 }
