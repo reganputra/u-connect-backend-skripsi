@@ -3,6 +3,7 @@ package service
 import (
 	"encoding/json"
 	"fmt"
+	"log"
 	"time"
 
 	"github.com/reganputra/skripsi-backend/models"
@@ -10,19 +11,14 @@ import (
 	"gorm.io/gorm"
 )
 
-// Deliverer is satisfied by *ws.Hub — defined here to avoid an import cycle
-// between the service and ws packages.
+// Deliverer is satisfied by *ws.Hub — avoids import cycle between service and ws packages.
 type Deliverer interface {
 	SendToUser(userID uint, payload []byte) bool
 }
 
 type NotificationService interface {
-	// Notify creates a notification immediately (no throttle).
 	Notify(userID uint, notifType, title, body, refType string, refID uint) error
-	// NotifyThrottled skips creating a notification if one of the same type+reference
-	// already exists within the throttle window.
 	NotifyThrottled(userID uint, notifType, title, body, refType string, refID uint, throttle time.Duration) error
-
 	GetMyNotifications(userID uint, page, limit int) ([]models.Notification, int64, error)
 	MarkAsRead(notificationID, userID uint) error
 	MarkAllAsRead(userID uint) error
@@ -39,6 +35,8 @@ func NewNotificationService(repo repository.NotificationRepository, deliverer De
 	return &notificationService{repo: repo, deliverer: deliverer, db: db}
 }
 
+// Notify persists and delivers a notification.
+// Redirect URL resolution and WS delivery are async (fire-and-forget).
 func (s *notificationService) Notify(userID uint, notifType, title, body, refType string, refID uint) error {
 	n := &models.Notification{
 		UserID:           userID,
@@ -47,12 +45,18 @@ func (s *notificationService) Notify(userID uint, notifType, title, body, refTyp
 		Body:             body,
 		ReferenceType:    refType,
 		ReferenceID:      refID,
-		RedirectURL:      s.buildNotificationRedirectURL(userID, refType, refID),
 	}
 	if err := s.repo.Create(n); err != nil {
 		return err
 	}
-	s.deliver(n)
+	// 1.1 + 1.2: resolve redirect URL and push to WS off the request path.
+	go func() {
+		n.RedirectURL = s.buildRedirectURL(userID, refType, refID)
+		if err := s.repo.UpdateRedirectURL(n.ID, n.RedirectURL); err != nil {
+			log.Printf("[NOTIF] redirect update failed id=%d: %v", n.ID, err)
+		}
+		s.deliver(n)
+	}()
 	return nil
 }
 
@@ -62,7 +66,7 @@ func (s *notificationService) NotifyThrottled(userID uint, notifType, title, bod
 		return err
 	}
 	if exists {
-		return nil // throttled — skip silently
+		return nil
 	}
 	return s.Notify(userID, notifType, title, body, refType, refID)
 }
@@ -89,8 +93,6 @@ func (s *notificationService) CountUnread(userID uint) (int64, error) {
 	return s.repo.CountUnread(userID)
 }
 
-// deliver pushes a notification to the WebSocket hub if the user is connected.
-// Failures are silently ignored — the notification is already persisted.
 func (s *notificationService) deliver(n *models.Notification) {
 	type outgoing struct {
 		Type string               `json:"type"`
@@ -103,7 +105,6 @@ func (s *notificationService) deliver(n *models.Notification) {
 	s.deliverer.SendToUser(n.UserID, payload)
 }
 
-// ── Helper: truncate a string to max N runes ───────────────────────────────
 func truncate(s string, n int) string {
 	runes := []rune(s)
 	if len(runes) <= n {
@@ -112,7 +113,9 @@ func truncate(s string, n int) string {
 	return fmt.Sprintf("%s…", string(runes[:n]))
 }
 
-func (s *notificationService) buildNotificationRedirectURL(userID uint, refType string, refID uint) string {
+// buildRedirectURL computes the frontend route for a notification reference.
+// 1.4: group_comment uses a single JOIN instead of two sequential queries.
+func (s *notificationService) buildRedirectURL(userID uint, refType string, refID uint) string {
 	switch refType {
 	case "post":
 		return fmt.Sprintf("/feed/%d", refID)
@@ -131,12 +134,19 @@ func (s *notificationService) buildNotificationRedirectURL(userID uint, refType 
 		}
 		return fmt.Sprintf("/groups/articles/%d", refID)
 	case "group_comment":
-		var comment models.GroupComment
-		if err := s.db.Select("id", "article_id").First(&comment, refID).Error; err == nil {
-			var article models.GroupArticle
-			if err := s.db.Select("id", "group_id").First(&article, comment.ArticleID).Error; err == nil {
-				return fmt.Sprintf("/groups/%d/article/%d", article.GroupID, article.ID)
-			}
+		// 1.4: single JOIN replaces two sequential queries.
+		var row struct {
+			ArticleID uint
+			GroupID   uint
+		}
+		s.db.Raw(`
+			SELECT gc.article_id, ga.group_id
+			FROM group_comments gc
+			JOIN group_articles ga ON ga.id = gc.article_id
+			WHERE gc.id = ? AND gc.deleted_at IS NULL AND ga.deleted_at IS NULL
+		`, refID).Scan(&row)
+		if row.ArticleID != 0 {
+			return fmt.Sprintf("/groups/%d/article/%d", row.GroupID, row.ArticleID)
 		}
 		return fmt.Sprintf("/groups/comments/%d", refID)
 	case "event":

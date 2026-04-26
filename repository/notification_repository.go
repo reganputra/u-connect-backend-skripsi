@@ -9,12 +9,11 @@ import (
 
 type NotificationRepository interface {
 	Create(n *models.Notification) error
+	UpdateRedirectURL(id uint, url string) error
 	GetByUserID(userID uint, page, limit int) ([]models.Notification, int64, error)
 	MarkAsRead(notificationID, userID uint) error
 	MarkAllAsRead(userID uint) error
 	CountUnread(userID uint) (int64, error)
-	// ExistsRecent returns true if a notification of the given type+reference already
-	// exists for userID within the last `within` duration. Used for throttling.
 	ExistsRecent(userID uint, notifType, refType string, refID uint, within time.Duration) (bool, error)
 }
 
@@ -28,6 +27,10 @@ func NewNotificationRepository(db *gorm.DB) NotificationRepository {
 
 func (r *notificationRepository) Create(n *models.Notification) error {
 	return r.db.Create(n).Error
+}
+
+func (r *notificationRepository) UpdateRedirectURL(id uint, url string) error {
+	return r.db.Model(&models.Notification{}).Where("id = ?", id).Update("redirect_url", url).Error
 }
 
 func (r *notificationRepository) GetByUserID(userID uint, page, limit int) ([]models.Notification, int64, error) {
