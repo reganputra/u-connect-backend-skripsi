@@ -816,7 +816,12 @@ Behavior:
       {
         "id": 3,
         "user_id": 2,
-        "user": { "ID": 2, "Name": "Regan Putra", "Role": "alumni" },
+        "user": {
+          "ID": 2,
+          "Name": "Regan Putra",
+          "Role": "alumni",
+          "picture_url": "https://res.cloudinary.com/.../profiles/regan.jpg"
+        },
         "title": "Hello everyone",
         "content": "My first post!",
         "category": "General",
@@ -855,14 +860,23 @@ Behavior:
       "https://res.cloudinary.com/.../image1.jpg",
       "https://res.cloudinary.com/.../image2.jpg"
     ],
-    "user": { "ID": 2, "Name": "Regan Putra", "Role": "alumni" },
+    "user": {
+      "ID": 2,
+      "Name": "Regan Putra",
+      "Role": "alumni",
+      "picture_url": "https://res.cloudinary.com/.../profiles/regan.jpg"
+    },
     "reactions": [{ "ID": 1, "UserID": 2, "Type": "like" }],
     "votes": [{ "ID": 1, "UserID": 3, "Value": 1 }],
     "comments": [
       {
         "id": 1,
         "content": "Great post!",
-        "user": { "ID": 3, "Name": "Ani" },
+        "user": {
+          "ID": 3,
+          "Name": "Ani",
+          "picture_url": "https://res.cloudinary.com/.../profiles/ani.jpg"
+        },
         "reactions": [],
         "votes": [],
         "replies": [
@@ -881,6 +895,7 @@ Behavior:
 ```
 
 > **Note:** `image_url` contains the first image (for backward compatibility). Use `image_urls` array for all images.
+> User objects in feed responses now also include `picture_url` when available.
 
 ### PUT `/api/feed/:id` — Update Post
 
@@ -1268,10 +1283,25 @@ Returns paginated events where the authenticated user has an active registration
     "SeatLeft": 13,
     "Status": "upcoming",
     "Agendas": [],
-    "Registrations": []
+    "Registrations": [
+      {
+        "ID": 21,
+        "EventID": 5,
+        "UserID": 8,
+        "ReminderSent": false,
+        "User": {
+          "ID": 8,
+          "Name": "Student Budi",
+          "Role": "student",
+          "picture_url": "https://res.cloudinary.com/.../profiles/budi.jpg"
+        }
+      }
+    ]
   }
 }
 ```
+
+> `Registrations[].User` now includes `picture_url` when a profile picture exists.
 
 ### POST `/api/events/:id/agenda` — Add Agenda (JSON)
 
@@ -1600,12 +1630,19 @@ Returns paginated jobs where `UserID` equals the authenticated user.
       "ID": 10,
       "JobID": 7,
       "UserID": 5,
+      "User": {
+        "ID": 5,
+        "Name": "Siti Rahma",
+        "picture_url": "https://res.cloudinary.com/.../profiles/siti.jpg"
+      },
       "Status": "pending",
       "ResumeURL": "https://api.cloudinary.com/v1_1/<cloud_name>/raw/download?public_id=alumni-platform/resumes/abc123&format=pdf&expires_at=1777000000&signature=..."
     }
   ]
 }
 ```
+
+> Applicant rows include nested `User` info with `Name` and `picture_url` for avatar rendering.
 
 ### PUT `/api/jobs/applications/:id/status` — Update Status (JSON)
 
@@ -2590,6 +2627,7 @@ messages persisted to DB first, then delivered live if recipient is connected
     {
       "partner_id": 8,
       "partner_name": "Student Budi",
+      "partner_picture": "https://res.cloudinary.com/.../profiles/budi.jpg",
       "last_message": "Halo kak, ada waktu untuk diskusi?",
       "last_message_at": "2026-04-04T10:30:00Z",
       "unread_count": 3
@@ -2626,6 +2664,11 @@ Returns paginated messages newest-first between the caller and `:userID`.
         "ID": 15,
         "SenderID": 8,
         "ReceiverID": 2,
+        "Sender": {
+          "ID": 8,
+          "Name": "Student Budi",
+          "picture_url": "https://res.cloudinary.com/.../profiles/budi.jpg"
+        },
         "Content": "Halo kak!",
         "IsRead": true,
         "CreatedAt": "2026-04-04T10:30:00Z"
@@ -2634,6 +2677,8 @@ Returns paginated messages newest-first between the caller and `:userID`.
   }
 }
 ```
+
+> Conversation list includes `partner_picture`, and message history includes `Sender.picture_url` when available.
 
 #### PATCH `/api/messages/:userID/read` — Mark as Read
 
