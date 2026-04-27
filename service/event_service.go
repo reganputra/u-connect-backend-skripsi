@@ -39,6 +39,8 @@ type EventAgendaRequest struct {
 type EventService interface {
 	CreateEvent(userID uint, req EventRequest) (*models.Event, error)
 	GetEvents(page, limit int) ([]models.Event, int64, error)
+	GetMyOwnedEvents(userID uint, page, limit int) ([]models.Event, int64, error)
+	GetMyRegisteredEvents(userID uint, page, limit int) ([]models.Event, int64, error)
 	GetEventByID(id uint) (*models.Event, error)
 	UpdateEvent(userID, eventID uint, req EventRequest) (*models.Event, error)
 	DeleteEvent(userID, eventID uint) error
@@ -153,6 +155,54 @@ func (s *eventService) GetEvents(page, limit int) ([]models.Event, int64, error)
 	}
 	offset := (page - 1) * limit
 	events, total, err := s.eventRepo.FindEvents(offset, limit)
+	if err != nil {
+		return nil, 0, err
+	}
+
+	if err := s.attachEventsRegistrationStats(events); err != nil {
+		return nil, 0, errors.New("gagal menghitung peserta acara")
+	}
+
+	return events, total, nil
+}
+
+func (s *eventService) GetMyOwnedEvents(userID uint, page, limit int) ([]models.Event, int64, error) {
+	if err := s.syncPastEventStatuses(); err != nil {
+		return nil, 0, errors.New("gagal memperbarui status acara")
+	}
+	if page < 1 {
+		page = 1
+	}
+	if limit < 1 || limit > 100 {
+		limit = 10
+	}
+
+	offset := (page - 1) * limit
+	events, total, err := s.eventRepo.FindEventsByOwner(userID, offset, limit)
+	if err != nil {
+		return nil, 0, err
+	}
+
+	if err := s.attachEventsRegistrationStats(events); err != nil {
+		return nil, 0, errors.New("gagal menghitung peserta acara")
+	}
+
+	return events, total, nil
+}
+
+func (s *eventService) GetMyRegisteredEvents(userID uint, page, limit int) ([]models.Event, int64, error) {
+	if err := s.syncPastEventStatuses(); err != nil {
+		return nil, 0, errors.New("gagal memperbarui status acara")
+	}
+	if page < 1 {
+		page = 1
+	}
+	if limit < 1 || limit > 100 {
+		limit = 10
+	}
+
+	offset := (page - 1) * limit
+	events, total, err := s.regRepo.FindRegisteredEventsByUser(userID, offset, limit)
 	if err != nil {
 		return nil, 0, err
 	}

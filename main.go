@@ -139,6 +139,7 @@ func main() {
 	routes.SetupFollowRoutes(app, c.FollowCtrl)
 	routes.SetupMessageRoutes(app, c.MessageCtrl, hub, c.MessageSvc, c.UserRepo, c.NotifSvc)
 	routes.SetupNotificationRoutes(app, c.NotifCtrl)
+	routes.RegisterActivityRoutes(app, c.ActivityCtrl)
 
 	// ── Background Schedulers ───────────────────────────────────────────────────
 	go scheduler.StartEventReminderScheduler(db, c.NotifSvc)

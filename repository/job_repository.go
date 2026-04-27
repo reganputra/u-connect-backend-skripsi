@@ -8,6 +8,7 @@ import (
 type JobRepository interface {
 	CreateJob(job *models.Job) error
 	FindJobs(search, jobType, status string, offset, limit int) ([]models.Job, int64, error)
+	FindJobsByOwner(userID uint, offset, limit int) ([]models.Job, int64, error)
 	FindJobByID(id uint) (*models.Job, error)
 	UpdateJob(job *models.Job) error
 	DeleteJob(id uint) error
@@ -44,6 +45,27 @@ func (r *jobRepository) FindJobs(search, jobType, status string, offset, limit i
 
 	query.Count(&total)
 	err := query.Order("created_at DESC").Offset(offset).Limit(limit).Find(&jobs).Error
+	return jobs, total, err
+}
+
+func (r *jobRepository) FindJobsByOwner(userID uint, offset, limit int) ([]models.Job, int64, error) {
+	var jobs []models.Job
+	var total int64
+
+	query := r.db.Model(&models.Job{}).Where("user_id = ?", userID)
+	if err := query.Count(&total).Error; err != nil {
+		return nil, 0, err
+	}
+
+	err := r.db.
+		Preload("User").
+		Preload("Company").
+		Where("user_id = ?", userID).
+		Order("created_at DESC").
+		Offset(offset).
+		Limit(limit).
+		Find(&jobs).Error
+
 	return jobs, total, err
 }
 

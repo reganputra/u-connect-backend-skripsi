@@ -57,6 +57,27 @@ func (ctrl *GroupController) GetGroups(c *fiber.Ctx) error {
 	})
 }
 
+func (ctrl *GroupController) GetOwnedGroups(c *fiber.Ctx) error {
+	userID, err := getUserIDFromToken(c)
+	if err != nil {
+		return utils.ErrorResponse(c, fiber.StatusUnauthorized, err.Error())
+	}
+	page, _ := strconv.Atoi(c.Query("page", "1"))
+	limit, _ := strconv.Atoi(c.Query("limit", "20"))
+
+	groups, total, err := ctrl.groupSvc.GetOwnedGroups(userID, page, limit)
+	if err != nil {
+		return utils.ErrorResponse(c, fiber.StatusInternalServerError, "gagal mengambil data grup milik pengguna")
+	}
+
+	return utils.SuccessResponse(c, fiber.StatusOK, fiber.Map{
+		"total": total,
+		"page":  page,
+		"limit": limit,
+		"data":  groups,
+	})
+}
+
 func (ctrl *GroupController) GetGroupByID(c *fiber.Ctx) error {
 	groupID, err := strconv.ParseUint(c.Params("id"), 10, 64)
 	if err != nil {

@@ -12,6 +12,7 @@ type EventRegistrationRepository interface {
 	FindEventRegistration(eventID, userID uint) (*models.EventRegistration, error)
 	DeleteEventRegistration(eventID, userID uint) error
 	FindEventParticipants(eventID uint) ([]models.EventRegistration, error)
+	FindRegisteredEventsByUser(userID uint, offset, limit int) ([]models.Event, int64, error)
 }
 
 type eventRegistrationRepository struct {
@@ -72,4 +73,28 @@ func (r *eventRegistrationRepository) FindEventParticipants(eventID uint) ([]mod
 		Where("event_id = ?", eventID).
 		Find(&regs).Error
 	return regs, err
+}
+
+func (r *eventRegistrationRepository) FindRegisteredEventsByUser(userID uint, offset, limit int) ([]models.Event, int64, error) {
+	var events []models.Event
+	var total int64
+
+	countQuery := r.db.Model(&models.Event{}).
+		Joins("JOIN event_registrations ON event_registrations.event_id = events.id").
+		Where("event_registrations.user_id = ?", userID)
+
+	if err := countQuery.Count(&total).Error; err != nil {
+		return nil, 0, err
+	}
+
+	err := r.db.Model(&models.Event{}).
+		Joins("JOIN event_registrations ON event_registrations.event_id = events.id").
+		Where("event_registrations.user_id = ?", userID).
+		Preload("User").
+		Order("event_registrations.created_at DESC").
+		Offset(offset).
+		Limit(limit).
+		Find(&events).Error
+
+	return events, total, err
 }

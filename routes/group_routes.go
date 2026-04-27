@@ -12,6 +12,7 @@ func RegisterGroupRoutes(app *fiber.App, ctrl *controllers.GroupController) {
 
 	groups.Get("/", ctrl.GetGroups)
 	groups.Get("/joined", middleware.RequireRole("alumni", "student"), ctrl.GetJoinedGroups)
+	groups.Get("/owned", middleware.RequireRole("alumni", "student"), ctrl.GetOwnedGroups)
 	groups.Post("/", middleware.RequireRole("alumni", "student"), ctrl.CreateGroup)
 	groups.Get("/:id", ctrl.GetGroupByID)
 	groups.Put("/:id", middleware.RequireRole("alumni", "student"), ctrl.UpdateGroup)

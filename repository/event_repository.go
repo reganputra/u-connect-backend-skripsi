@@ -10,6 +10,7 @@ import (
 type EventRepository interface {
 	CreateEvent(event *models.Event) error
 	FindEvents(offset, limit int) ([]models.Event, int64, error)
+	FindEventsByOwner(userID uint, offset, limit int) ([]models.Event, int64, error)
 	FindEventByID(id uint) (*models.Event, error)
 	UpdateEvent(event *models.Event) error
 	DeleteEvent(id uint) error
@@ -38,6 +39,25 @@ func (r *eventRepository) FindEvents(offset, limit int) ([]models.Event, int64, 
 		Order("created_at DESC").
 		Offset(offset).Limit(limit).
 		Find(&events).Error
+	return events, total, err
+}
+
+func (r *eventRepository) FindEventsByOwner(userID uint, offset, limit int) ([]models.Event, int64, error) {
+	var events []models.Event
+	var total int64
+
+	base := r.db.Model(&models.Event{}).Where("user_id = ?", userID)
+	if err := base.Count(&total).Error; err != nil {
+		return nil, 0, err
+	}
+
+	err := r.db.
+		Preload("User").
+		Where("user_id = ?", userID).
+		Order("created_at DESC").
+		Offset(offset).Limit(limit).
+		Find(&events).Error
+
 	return events, total, err
 }
 

@@ -10,6 +10,7 @@ type JobApplicationRepository interface {
 	FindJobApplication(jobID, userID uint) (*models.JobApplication, error)
 	FindApplicantsByJobID(jobID uint) ([]models.JobApplication, error)
 	FindApplicationsByUserID(userID uint) ([]models.JobApplication, error)
+	CountApplicationsByUserID(userID uint) (int64, error)
 	FindJobApplicationByID(id uint) (*models.JobApplication, error)
 	UpdateJobApplication(app *models.JobApplication) error
 }
@@ -45,6 +46,12 @@ func (r *jobApplicationRepository) FindApplicationsByUserID(userID uint) ([]mode
 	var apps []models.JobApplication
 	err := r.db.Preload("Job").Preload("Job.User").Where("user_id = ?", userID).Order("created_at DESC").Find(&apps).Error
 	return apps, err
+}
+
+func (r *jobApplicationRepository) CountApplicationsByUserID(userID uint) (int64, error) {
+	var total int64
+	err := r.db.Model(&models.JobApplication{}).Where("user_id = ?", userID).Count(&total).Error
+	return total, err
 }
 
 func (r *jobApplicationRepository) FindJobApplicationByID(id uint) (*models.JobApplication, error) {

@@ -286,6 +286,37 @@ Notes:
 > For backward compatibility, `user_id`, `email`, and `role` are still included at the top level of `data`.
 > For `partner` accounts, the nested `user` object also includes `company_name` so the frontend can detect company onboarding without an extra `/api/company` call.
 
+### GET `/api/me/activity/summary` — My Activity Summary
+
+**Auth required.**
+
+Returns lightweight counters used for dashboard/activity cards.
+
+**Response `200`:**
+
+```json
+{
+  "success": true,
+  "data": {
+    "events_owned": 4,
+    "events_registered": 11,
+    "jobs_owned": 3,
+    "jobs_applied": 7,
+    "groups_owned": 2,
+    "groups_joined": 9
+  }
+}
+```
+
+Notes:
+
+- `events_owned`: events created by current user
+- `events_registered`: events where current user is registered
+- `jobs_owned`: jobs posted by current user
+- `jobs_applied`: job applications submitted by current user
+- `groups_owned`: groups created by current user
+- `groups_joined`: groups where current user is an active member
+
 ---
 
 ## User Profile
@@ -938,6 +969,7 @@ To reply to an existing comment:
 | GET    | `/api/groups`                     | ✅   | —           | List all groups                                      |
 | POST   | `/api/groups`                     | ✅   | `form-data` | Create group                                         |
 | GET    | `/api/groups/joined`              | ✅   | —           | Groups current user belongs to (student/alumni only) |
+| GET    | `/api/groups/owned`               | ✅   | —           | Groups owned by current user (student/alumni only)   |
 | GET    | `/api/groups/:id`                 | ✅   | —           | Group detail                                         |
 | PUT    | `/api/groups/:id`                 | ✅   | `form-data` | Update group (owner only)                            |
 | DELETE | `/api/groups/:id`                 | ✅   | —           | Delete group + all data                              |
@@ -950,12 +982,14 @@ Pagination for group list endpoints:
 
 - `GET /api/groups?page=1&limit=20`
 - `GET /api/groups/joined?page=1&limit=20`
+- `GET /api/groups/owned?page=1&limit=20`
 - `GET /api/groups/:id/members?page=1&limit=20`
 
 Each paginated response includes `total`, `page`, and `limit`.
 
 - `GET /api/groups` response shape: `{ total, page, limit, data }`
 - `GET /api/groups/joined` response shape: `{ total, page, limit, data }`
+- `GET /api/groups/owned` response shape: `{ total, page, limit, data }`
 - `GET /api/groups/:id/members` response shape: `{ total, page, limit, members }`
 
 ### Group Article Endpoints
@@ -1071,6 +1105,8 @@ If one or more media files fail to upload or fail to persist, the API returns an
 | Method | Endpoint                       | Auth | Body        | Description                              |
 | ------ | ------------------------------ | ---- | ----------- | ---------------------------------------- |
 | GET    | `/api/events`                  | ✅   | —           | List events (paginated)                  |
+| GET    | `/api/events/mine/owned`       | ✅   | —           | List events created by current user      |
+| GET    | `/api/events/mine/registered`  | ✅   | —           | List events registered by current user   |
 | POST   | `/api/events`                  | ✅   | `form-data` | Create event                             |
 | GET    | `/api/events/:id`              | ✅   | —           | Event detail with agendas & participants |
 | PUT    | `/api/events/:id`              | ✅   | `form-data` | Update own event                         |
@@ -1154,6 +1190,63 @@ If one or more media files fail to upload or fail to persist, the API returns an
         "AttendantCount": 120,
         "SeatLeft": null,
         "Status": "ongoing"
+      }
+    ]
+  }
+}
+```
+
+### GET `/api/events/mine/owned` — My Owned Events
+
+**Query params:** `?page=1&limit=10`
+
+Returns paginated events where `UserID` equals the authenticated user.
+
+**Response `200`:**
+
+```json
+{
+  "success": true,
+  "data": {
+    "total": 4,
+    "page": 1,
+    "limit": 10,
+    "events": [
+      {
+        "ID": 5,
+        "Title": "Alumni Seminar 2026",
+        "UserID": 2,
+        "Status": "upcoming",
+        "AttendantCount": 37,
+        "SeatLeft": 13
+      }
+    ]
+  }
+}
+```
+
+### GET `/api/events/mine/registered` — My Registered Events
+
+**Query params:** `?page=1&limit=10`
+
+Returns paginated events where the authenticated user has an active registration.
+
+**Response `200`:**
+
+```json
+{
+  "success": true,
+  "data": {
+    "total": 11,
+    "page": 1,
+    "limit": 10,
+    "events": [
+      {
+        "ID": 9,
+        "Title": "Open Networking Night",
+        "Status": "ongoing",
+        "AttendantCount": 120,
+        "SeatLeft": null
       }
     ]
   }
@@ -1402,6 +1495,7 @@ Delivery rules:
 | Method | Endpoint                            | Auth | Body        | Description                            |
 | ------ | ----------------------------------- | ---- | ----------- | -------------------------------------- |
 | GET    | `/api/jobs`                         | ✅   | —           | List jobs (paginated + filters)        |
+| GET    | `/api/jobs/mine/owned`              | ✅   | —           | View jobs posted by current user       |
 | POST   | `/api/jobs`                         | ✅   | `form-data` | Create job posting                     |
 | GET    | `/api/jobs/:id`                     | ✅   | —           | Job detail                             |
 | PUT    | `/api/jobs/:id`                     | ✅   | `form-data` | Update own posting                     |
@@ -1421,6 +1515,35 @@ Delivery rules:
 | `status`   | `open` · `closed` · `filled`                                        |
 | `page`     | Default: `1`                                                        |
 | `limit`    | Default: `10`                                                       |
+
+### GET `/api/jobs/mine/owned` — My Owned Jobs
+
+**Query params:** `?page=1&limit=10`
+
+Returns paginated jobs where `UserID` equals the authenticated user.
+
+**Response `200`:**
+
+```json
+{
+  "success": true,
+  "data": {
+    "total": 3,
+    "page": 1,
+    "limit": 10,
+    "jobs": [
+      {
+        "ID": 14,
+        "UserID": 2,
+        "Title": "Backend Engineer",
+        "CompanyName": "PT Tech Indonesia",
+        "Status": "open",
+        "Openings": 2
+      }
+    ]
+  }
+}
+```
 
 ### POST `/api/jobs` — Create Job (form-data)
 
@@ -2215,10 +2338,10 @@ Returns the mentor's full profile including `User` and `Experiences`. Returns `4
 
 **Body (JSON):**
 
-| Field   | Required | Notes                                       |
-| ------- | -------- | ------------------------------------------- |
-| `query` | ✅       | Free-text natural language description      |
-| `top`   | ❌       | Max results to return (default: `10`)       |
+| Field   | Required | Notes                                  |
+| ------- | -------- | -------------------------------------- |
+| `query` | ✅       | Free-text natural language description |
+| `top`   | ❌       | Max results to return (default: `10`)  |
 
 ```json
 {
@@ -2229,25 +2352,24 @@ Returns the mentor's full profile including `User` and `Experiences`. Returns `4
 
 **How the query is parsed:**
 
-| Input phrase | Extracted as |
-| --- | --- |
-| `"3 year experience"` | `minYears = 3` (hard filter) |
-| `"Data Science industry"` | `industry` filter (if `industry` keyword follows) |
+| Input phrase                                                                                               | Extracted as                                      |
+| ---------------------------------------------------------------------------------------------------------- | ------------------------------------------------- |
+| `"3 year experience"`                                                                                      | `minYears = 3` (hard filter)                      |
+| `"Data Science industry"`                                                                                  | `industry` filter (if `industry` keyword follows) |
 | Remaining terms: `"Big Data"`, `"Go"`, `"Cloud Computing"`, `"machine learning"`, `"IoT"`, `"Data Mining"` | TF-IDF scored terms after tokenization + stemming |
-| Common words: `"mentor"`, `"skill"`, `"prefer"`, `"interest"` | Filtered by stopword list — no effect on score |
+| Common words: `"mentor"`, `"skill"`, `"prefer"`, `"interest"`                                              | Filtered by stopword list — no effect on score    |
 
 **Response `200`:** same shape as `GET /api/mentors/recommend`.
 
 **Error cases:**
 
-| Status | Reason |
-| --- | --- |
-| `400` | `query` field is missing or empty |
-| `401` | Not authenticated |
-| `403` | Not a `student` account |
+| Status | Reason                            |
+| ------ | --------------------------------- |
+| `400`  | `query` field is missing or empty |
+| `401`  | Not authenticated                 |
+| `403`  | Not a `student` account           |
 
 ---
-
 
 ```json
 {

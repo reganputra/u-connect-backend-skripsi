@@ -66,6 +66,48 @@ func (ctrl *EventController) GetEvents(c *fiber.Ctx) error {
 	})
 }
 
+func (ctrl *EventController) GetMyOwnedEvents(c *fiber.Ctx) error {
+	userID, err := getUserIDFromToken(c)
+	if err != nil {
+		return utils.ErrorResponse(c, fiber.StatusUnauthorized, err.Error())
+	}
+	page, _ := strconv.Atoi(c.Query("page", "1"))
+	limit, _ := strconv.Atoi(c.Query("limit", "10"))
+
+	events, total, err := ctrl.eventSvc.GetMyOwnedEvents(userID, page, limit)
+	if err != nil {
+		return utils.ErrorResponse(c, fiber.StatusInternalServerError, "gagal mengambil data acara milik pengguna")
+	}
+
+	return utils.SuccessResponse(c, fiber.StatusOK, fiber.Map{
+		"total":  total,
+		"page":   page,
+		"limit":  limit,
+		"events": events,
+	})
+}
+
+func (ctrl *EventController) GetMyRegisteredEvents(c *fiber.Ctx) error {
+	userID, err := getUserIDFromToken(c)
+	if err != nil {
+		return utils.ErrorResponse(c, fiber.StatusUnauthorized, err.Error())
+	}
+	page, _ := strconv.Atoi(c.Query("page", "1"))
+	limit, _ := strconv.Atoi(c.Query("limit", "10"))
+
+	events, total, err := ctrl.eventSvc.GetMyRegisteredEvents(userID, page, limit)
+	if err != nil {
+		return utils.ErrorResponse(c, fiber.StatusInternalServerError, "gagal mengambil data acara terdaftar pengguna")
+	}
+
+	return utils.SuccessResponse(c, fiber.StatusOK, fiber.Map{
+		"total":  total,
+		"page":   page,
+		"limit":  limit,
+		"events": events,
+	})
+}
+
 func (ctrl *EventController) GetEventByID(c *fiber.Ctx) error {
 	eventID, err := strconv.ParseUint(c.Params("id"), 10, 64)
 	if err != nil {

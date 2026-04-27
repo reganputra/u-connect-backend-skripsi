@@ -156,6 +156,7 @@ type GroupService interface {
 	CreateGroup(userID uint, req GroupRequest) (*models.Group, error)
 	GetGroups(page, limit int) ([]*GroupListItemResponse, int64, error)
 	GetGroupByID(id uint) (*GroupDetailResponse, error)
+	GetOwnedGroups(userID uint, page, limit int) ([]models.Group, int64, error)
 	UpdateGroup(userID uint, groupID uint, req GroupRequest) (*models.Group, error)
 	DeleteGroup(userID uint, groupID uint) error
 
@@ -343,6 +344,17 @@ func (s *groupService) GetGroupByID(id uint) (*GroupDetailResponse, error) {
 		MemberCount:  len(group.Members),
 		ArticleCount: len(group.Articles),
 	}, nil
+}
+
+func (s *groupService) GetOwnedGroups(userID uint, page, limit int) ([]models.Group, int64, error) {
+	if page < 1 {
+		page = 1
+	}
+	if limit < 1 || limit > 100 {
+		limit = 20
+	}
+
+	return s.groupRepo.FindGroupsByOwner(userID, page, limit)
 }
 
 func (s *groupService) UpdateGroup(userID uint, groupID uint, req GroupRequest) (*models.Group, error) {

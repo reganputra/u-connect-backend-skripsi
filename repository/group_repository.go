@@ -8,6 +8,7 @@ import (
 type GroupRepository interface {
 	CreateGroup(group *models.Group) error
 	FindGroups(page, limit int) ([]models.Group, int64, error)
+	FindGroupsByOwner(ownerID uint, page, limit int) ([]models.Group, int64, error)
 	FindGroupByID(id uint) (*models.Group, error)
 	UpdateGroup(group *models.Group) error
 	DeleteGroup(id uint) error
@@ -39,6 +40,27 @@ func (r *groupRepository) FindGroups(page, limit int) ([]models.Group, int64, er
 		Offset(offset).
 		Limit(limit).
 		Find(&groups).Error
+	return groups, total, err
+}
+
+func (r *groupRepository) FindGroupsByOwner(ownerID uint, page, limit int) ([]models.Group, int64, error) {
+	var groups []models.Group
+	var total int64
+
+	base := r.db.Model(&models.Group{}).Where("owner_id = ?", ownerID)
+	if err := base.Count(&total).Error; err != nil {
+		return nil, 0, err
+	}
+
+	offset := (page - 1) * limit
+	err := r.db.
+		Preload("Owner").
+		Where("owner_id = ?", ownerID).
+		Order("created_at desc").
+		Offset(offset).
+		Limit(limit).
+		Find(&groups).Error
+
 	return groups, total, err
 }
 

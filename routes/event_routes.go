@@ -11,6 +11,8 @@ func RegisterEventRoutes(app *fiber.App, ctrl *controllers.EventController) {
 	events := app.Group("/api/events", middleware.Protected())
 
 	events.Get("/", ctrl.GetEvents)
+	events.Get("/mine/owned", middleware.RequireRole("alumni", "student"), ctrl.GetMyOwnedEvents)
+	events.Get("/mine/registered", middleware.RequireRole("alumni", "student"), ctrl.GetMyRegisteredEvents)
 	events.Post("/", middleware.RequireRole("alumni", "student"), ctrl.CreateEvent)
 	events.Get("/:id", ctrl.GetEventByID)
 	events.Put("/:id", middleware.RequireRole("alumni", "student"), ctrl.UpdateEvent)

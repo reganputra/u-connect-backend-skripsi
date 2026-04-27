@@ -12,8 +12,8 @@ import (
 
 type AppContainer struct {
 	// Only exposing the repositories/services we need directly outside
-	UserRepo repository.UserRepository
-	NotifSvc service.NotificationService
+	UserRepo   repository.UserRepository
+	NotifSvc   service.NotificationService
 	MessageSvc service.MessageService
 
 	// All Controllers
@@ -32,6 +32,7 @@ type AppContainer struct {
 	FollowCtrl    *controllers.FollowController
 	MessageCtrl   *controllers.MessageController
 	NotifCtrl     *controllers.NotificationController
+	ActivityCtrl  *controllers.ActivityController
 }
 
 // Build wires up all dependencies and returns the container.
@@ -106,5 +107,6 @@ func Build(db *gorm.DB, hub *ws.Hub) *AppContainer {
 		FollowCtrl:    controllers.NewFollowController(followSvc),
 		MessageCtrl:   controllers.NewMessageController(messageSvc),
 		NotifCtrl:     controllers.NewNotificationController(notifSvc),
+		ActivityCtrl:  controllers.NewActivityController(eventSvc, jobSvc, groupSvc),
 	}
 }
