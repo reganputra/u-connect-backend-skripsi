@@ -38,7 +38,7 @@ func (r *jobApplicationRepository) FindJobApplication(jobID, userID uint) (*mode
 
 func (r *jobApplicationRepository) FindApplicantsByJobID(jobID uint) ([]models.JobApplication, error) {
 	var apps []models.JobApplication
-	err := r.db.Preload("User").Where("job_id = ? AND status <> ?", jobID, "withdrawn").Order("created_at DESC").Find(&apps).Error
+	err := r.db.Preload("User").Preload("User.Profile").Where("job_id = ? AND status <> ?", jobID, "withdrawn").Order("created_at DESC").Find(&apps).Error
 	return apps, err
 }
 

@@ -52,11 +52,13 @@ func (r *postRepository) FindPostsSummary(page, limit int) ([]PostListRow, int64
 			u.email      AS "User__email",
 			u.role       AS "User__role",
 			u.is_active  AS "User__is_active",
+			up.profile_picture AS "User__picture_url",
 			(SELECT COUNT(*) FROM comments  c WHERE c.post_id = p.id AND c.deleted_at IS NULL)           AS comment_count,
 			(SELECT COUNT(*) FROM reactions r WHERE r.post_id = p.id AND r.deleted_at IS NULL)           AS reaction_count,
 			(SELECT COALESCE(SUM(v.value),0) FROM votes v WHERE v.post_id = p.id AND v.deleted_at IS NULL) AS vote_score
 		FROM posts p
 		JOIN users u ON u.id = p.user_id AND u.deleted_at IS NULL
+		LEFT JOIN user_profiles up ON up.user_id = u.id AND up.deleted_at IS NULL
 		WHERE p.deleted_at IS NULL
 		ORDER BY p.created_at DESC
 		LIMIT ? OFFSET ?
@@ -68,6 +70,7 @@ func (r *postRepository) FindPostByID(id uint) (*models.Post, error) {
 	var post models.Post
 	err := r.db.
 		Preload("User").
+		Preload("User.Profile").
 		Preload("Images").
 		Preload("Reactions").
 		Preload("Votes").
@@ -83,6 +86,7 @@ func (r *postRepository) FindAllCommentsByPostID(postID uint) ([]models.Comment,
 	err := r.db.
 		Where("post_id = ?", postID).
 		Preload("User").
+		Preload("User.Profile").
 		Preload("Reactions").
 		Preload("Votes").
 		Order("created_at asc").

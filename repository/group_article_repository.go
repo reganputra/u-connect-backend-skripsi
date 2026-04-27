@@ -35,6 +35,7 @@ func (r *groupArticleRepository) FindGroupArticles(groupID uint) ([]models.Group
 	err := r.db.
 		Where("group_id = ?", groupID).
 		Preload("User").
+		Preload("User.Profile").
 		Order("created_at desc").
 		Find(&articles).Error
 	return articles, err
@@ -44,6 +45,7 @@ func (r *groupArticleRepository) FindGroupArticleByID(id uint) (*models.GroupArt
 	var article models.GroupArticle
 	err := r.db.
 		Preload("User").
+		Preload("User.Profile").
 		Preload("Reactions").
 		First(&article, id).Error
 	if err != nil {
@@ -57,6 +59,7 @@ func (r *groupArticleRepository) FindAllCommentsByArticleID(articleID uint) ([]m
 	err := r.db.
 		Where("article_id = ?", articleID).
 		Preload("User").
+		Preload("User.Profile").
 		Preload("Reactions").
 		Order("created_at asc").
 		Find(&comments).Error

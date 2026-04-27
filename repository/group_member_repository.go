@@ -71,6 +71,7 @@ func (r *groupMemberRepository) FindGroupMembers(groupID uint, page, limit int) 
 	offset := (page - 1) * limit
 	err := r.db.Where("group_id = ?", groupID).
 		Preload("User").
+		Preload("User.Profile").
 		Order("created_at asc").
 		Offset(offset).
 		Limit(limit).
@@ -92,6 +93,7 @@ func (r *groupMemberRepository) FindJoinedGroups(userID uint, page, limit int) (
 	offset := (page - 1) * limit
 	err := q.
 		Preload("Owner").
+		Preload("Owner.Profile").
 		Order("groups.created_at desc").
 		Offset(offset).
 		Limit(limit).

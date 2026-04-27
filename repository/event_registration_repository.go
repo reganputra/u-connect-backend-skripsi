@@ -70,6 +70,7 @@ func (r *eventRegistrationRepository) FindEventParticipants(eventID uint) ([]mod
 	var regs []models.EventRegistration
 	err := r.db.
 		Preload("User").
+		Preload("User.Profile").
 		Where("event_id = ?", eventID).
 		Find(&regs).Error
 	return regs, err

@@ -36,6 +36,7 @@ func (r *groupRepository) FindGroups(page, limit int) ([]models.Group, int64, er
 
 	offset := (page - 1) * limit
 	err := r.db.Preload("Owner").
+		Preload("Owner.Profile").
 		Order("created_at desc").
 		Offset(offset).
 		Limit(limit).
@@ -55,6 +56,7 @@ func (r *groupRepository) FindGroupsByOwner(ownerID uint, page, limit int) ([]mo
 	offset := (page - 1) * limit
 	err := r.db.
 		Preload("Owner").
+		Preload("Owner.Profile").
 		Where("owner_id = ?", ownerID).
 		Order("created_at desc").
 		Offset(offset).
@@ -68,10 +70,13 @@ func (r *groupRepository) FindGroupByID(id uint) (*models.Group, error) {
 	var group models.Group
 	err := r.db.
 		Preload("Owner").
+		Preload("Owner.Profile").
 		Preload("Members").
 		Preload("Members.User").
+		Preload("Members.User.Profile").
 		Preload("Articles").
 		Preload("Articles.User").
+		Preload("Articles.User.Profile").
 		First(&group, id).Error
 	if err != nil {
 		return nil, err

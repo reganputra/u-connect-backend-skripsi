@@ -65,8 +65,10 @@ func (r *eventRepository) FindEventByID(id uint) (*models.Event, error) {
 	var event models.Event
 	err := r.db.
 		Preload("User").
+		Preload("User.Profile").
 		Preload("Agendas").
 		Preload("Registrations.User").
+		Preload("Registrations.User.Profile").
 		First(&event, id).Error
 	if err != nil {
 		return nil, err

@@ -60,6 +60,37 @@ type eventService struct {
 	regRepo    repository.EventRegistrationRepository
 }
 
+func applyEventUserPicture(user *models.User) {
+	if user == nil {
+		return
+	}
+	if user.Profile != nil {
+		if user.Profile.ProfilePicture != "" {
+			picture := user.Profile.ProfilePicture
+			user.PictureURL = &picture
+		} else {
+			user.PictureURL = nil
+		}
+		user.Profile = nil
+	}
+}
+
+func hydrateEventUsers(event *models.Event) {
+	if event == nil {
+		return
+	}
+	applyEventUserPicture(&event.User)
+	for i := range event.Registrations {
+		applyEventUserPicture(&event.Registrations[i].User)
+	}
+}
+
+func hydrateParticipantUsers(regs []models.EventRegistration) {
+	for i := range regs {
+		applyEventUserPicture(&regs[i].User)
+	}
+}
+
 func calculateEventSeatLeft(capacity *int, registeredCount int64) *int {
 	if capacity == nil || *capacity <= 0 {
 		return nil
@@ -226,6 +257,7 @@ func (s *eventService) GetEventByID(id uint) (*models.Event, error) {
 	if err := s.attachEventRegistrationStats(event); err != nil {
 		return nil, errors.New("gagal menghitung peserta acara")
 	}
+	hydrateEventUsers(event)
 
 	return event, nil
 }
@@ -354,7 +386,12 @@ func (s *eventService) GetParticipants(eventID uint) ([]models.EventRegistration
 	if err != nil {
 		return nil, errors.New("acara tidak ditemukan")
 	}
-	return s.regRepo.FindEventParticipants(eventID)
+	regs, err := s.regRepo.FindEventParticipants(eventID)
+	if err != nil {
+		return nil, err
+	}
+	hydrateParticipantUsers(regs)
+	return regs, nil
 }
 
 // ─── Agenda ───────────────────────────────────────────────────────────────────

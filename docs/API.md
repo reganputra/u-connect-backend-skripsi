@@ -1007,6 +1007,16 @@ Each paginated response includes `total`, `page`, and `limit`.
 - `GET /api/groups/owned` response shape: `{ total, page, limit, data }`
 - `GET /api/groups/:id/members` response shape: `{ total, page, limit, members }`
 
+User payloads inside group responses now include avatar-ready fields:
+
+- `Owner.picture_url`
+- `Members[].User.picture_url`
+- `Articles[].User.picture_url`
+- `Articles[].Comments[].User.picture_url`
+- `GET /api/groups/articles/:id` comment tree user avatars are included in each nested `user`
+
+Frontend can use the returned user `ID` to navigate to the profile page route, for example `/directory/:id`.
+
 ### Group Article Endpoints
 
 | Method | Endpoint                            | Auth | Body        | Description                                       |
@@ -1031,9 +1041,12 @@ Each paginated response includes `total`, `page`, and `limit`.
   - `article_count` (total active articles)
   - `Articles[].comment_count` (total comments for each article in the `Articles` array)
   - `Articles[].media_urls` (array of all image URLs for each article)
+  - `Owner.picture_url`, `Members[].User.picture_url`, and `Articles[].User.picture_url`
 - `GET /api/groups/articles/:id` includes:
   - `comment_count` (total visible comments in the response)
   - `media_urls` (array of all image URLs for the article)
+  - `user.picture_url` for the article author
+  - nested `comments[].user.picture_url` for visible comment threads
 
 ### POST `/api/groups/:id/articles` — Create Article (form-data)
 
