@@ -80,20 +80,6 @@ type jobService struct {
 	notifSvc    NotificationService
 }
 
-func applyJobUserPicture(user *models.User) {
-	if user == nil {
-		return
-	}
-	if user.Profile != nil {
-		if user.Profile.ProfilePicture != "" {
-			picture := user.Profile.ProfilePicture
-			user.PictureURL = &picture
-		} else {
-			user.PictureURL = nil
-		}
-		user.Profile = nil
-	}
-}
 
 func NewJobService(jobRepo repository.JobRepository, jobAppRepo repository.JobApplicationRepository, companyRepo repository.CompanyRepository, userRepo repository.UserRepository, notifSvc NotificationService) JobService {
 	return &jobService{
@@ -385,7 +371,7 @@ func (s *jobService) GetApplicants(userID, jobID uint) ([]models.JobApplication,
 	}
 
 	for i := range apps {
-		applyJobUserPicture(&apps[i].User)
+		ApplyUserPicture(&apps[i].User)
 		resumeURL := strings.TrimSpace(apps[i].ResumeURL)
 		if resumeURL == "" || !strings.Contains(strings.ToLower(resumeURL), "cloudinary.com") {
 			continue

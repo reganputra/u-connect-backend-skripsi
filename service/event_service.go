@@ -60,34 +60,20 @@ type eventService struct {
 	regRepo    repository.EventRegistrationRepository
 }
 
-func applyEventUserPicture(user *models.User) {
-	if user == nil {
-		return
-	}
-	if user.Profile != nil {
-		if user.Profile.ProfilePicture != "" {
-			picture := user.Profile.ProfilePicture
-			user.PictureURL = &picture
-		} else {
-			user.PictureURL = nil
-		}
-		user.Profile = nil
-	}
-}
 
 func hydrateEventUsers(event *models.Event) {
 	if event == nil {
 		return
 	}
-	applyEventUserPicture(&event.User)
+	ApplyUserPicture(&event.User)
 	for i := range event.Registrations {
-		applyEventUserPicture(&event.Registrations[i].User)
+		ApplyUserPicture(&event.Registrations[i].User)
 	}
 }
 
 func hydrateParticipantUsers(regs []models.EventRegistration) {
 	for i := range regs {
-		applyEventUserPicture(&regs[i].User)
+		ApplyUserPicture(&regs[i].User)
 	}
 }
 
@@ -359,7 +345,7 @@ func (s *eventService) RegisterForEvent(userID, eventID uint) error {
 
 	existing, _ := s.regRepo.FindEventRegistration(eventID, userID)
 	if existing != nil {
-		return errors.New("sudah terdaftar untuk acara ini")
+		return repository.ErrAlreadyRegistered
 	}
 
 	if event.Capacity != nil && *event.Capacity > 0 {
@@ -377,10 +363,11 @@ func (s *eventService) RegisterForEvent(userID, eventID uint) error {
 		UserID:  userID,
 	}
 	if err := s.regRepo.CreateEventRegistration(reg); err != nil {
-		return errors.New("gagal mendaftar ke acara")
+		return err // passes ErrAlreadyRegistered through for 409 at controller
 	}
 	return nil
 }
+
 
 func (s *eventService) CancelRegistration(userID, eventID uint) error {
 	_, err := s.eventRepo.FindEventByID(eventID)

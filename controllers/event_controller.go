@@ -1,13 +1,16 @@
 package controllers
 
 import (
+	"errors"
 	"strconv"
 	"time"
 
 	"github.com/gofiber/fiber/v2"
+	"github.com/reganputra/skripsi-backend/repository"
 	"github.com/reganputra/skripsi-backend/service"
 	"github.com/reganputra/skripsi-backend/utils"
 )
+
 
 type EventController struct {
 	eventSvc service.EventService
@@ -186,10 +189,14 @@ func (ctrl *EventController) RegisterForEvent(c *fiber.Ctx) error {
 		return utils.ErrorResponse(c, fiber.StatusBadRequest, "ID acara tidak valid")
 	}
 	if err := ctrl.eventSvc.RegisterForEvent(userID, uint(eventID)); err != nil {
+		if errors.Is(err, repository.ErrAlreadyRegistered) {
+			return utils.ErrorResponse(c, fiber.StatusConflict, "sudah terdaftar untuk acara ini")
+		}
 		return utils.ErrorResponse(c, fiber.StatusBadRequest, err.Error())
 	}
 	return utils.SuccessResponse(c, fiber.StatusOK, fiber.Map{"message": "berhasil mendaftar"})
 }
+
 
 func (ctrl *EventController) CancelRegistration(c *fiber.Ctx) error {
 	userID, err := getUserIDFromToken(c)

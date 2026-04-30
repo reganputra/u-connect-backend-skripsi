@@ -206,26 +206,12 @@ type groupService struct {
 	notifSvc          NotificationService
 }
 
-func applyGroupUserPicture(user *models.User) {
-	if user == nil {
-		return
-	}
-	if user.Profile != nil {
-		if user.Profile.ProfilePicture != "" {
-			picture := user.Profile.ProfilePicture
-			user.PictureURL = &picture
-		} else {
-			user.PictureURL = nil
-		}
-		user.Profile = nil
-	}
-}
 
 func hydrateGroupCommentNode(node *GroupCommentNode) {
 	if node == nil {
 		return
 	}
-	applyGroupUserPicture(&node.User)
+	ApplyUserPicture(&node.User)
 	for _, reply := range node.Replies {
 		hydrateGroupCommentNode(reply)
 	}
@@ -233,7 +219,7 @@ func hydrateGroupCommentNode(node *GroupCommentNode) {
 
 func hydrateGroupArticleComments(comments []models.GroupComment) {
 	for i := range comments {
-		applyGroupUserPicture(&comments[i].User)
+		ApplyUserPicture(&comments[i].User)
 	}
 }
 
@@ -241,7 +227,7 @@ func hydrateGroupArticle(article *GroupArticleWithCount) {
 	if article == nil {
 		return
 	}
-	applyGroupUserPicture(&article.User)
+	ApplyUserPicture(&article.User)
 	hydrateGroupArticleComments(article.Comments)
 }
 
@@ -249,9 +235,9 @@ func hydrateGroupDetail(response *GroupDetailResponse) {
 	if response == nil {
 		return
 	}
-	applyGroupUserPicture(&response.Owner)
+	ApplyUserPicture(&response.Owner)
 	for i := range response.Members {
-		applyGroupUserPicture(&response.Members[i].User)
+		ApplyUserPicture(&response.Members[i].User)
 	}
 	for i := range response.Articles {
 		hydrateGroupArticle(&response.Articles[i])
@@ -302,15 +288,14 @@ func (s *groupService) CreateGroup(userID uint, req GroupRequest) (*models.Group
 		Rules:       req.Rules,
 		BannerURL:   req.BannerURL,
 	}
-	if err := s.groupRepo.CreateGroup(group); err != nil {
+	// CreateGroupWithOwner wraps both inserts (group + owner member) in a
+	// transaction — no orphaned groups can be left on partial failure.
+	if err := s.groupRepo.CreateGroupWithOwner(group, userID); err != nil {
 		return nil, errors.New("gagal membuat grup")
-	}
-	member := &models.GroupMember{GroupID: group.ID, UserID: userID, Role: "owner"}
-	if err := s.memberRepo.AddGroupMember(member); err != nil {
-		return nil, errors.New("gagal menambahkan pemilik sebagai anggota grup")
 	}
 	return group, nil
 }
+
 
 func (s *groupService) GetGroups(page, limit int) ([]*GroupListItemResponse, int64, error) {
 	if page < 1 {
@@ -339,7 +324,7 @@ func (s *groupService) GetGroups(page, limit int) ([]*GroupListItemResponse, int
 	result := make([]*GroupListItemResponse, 0, len(groups))
 	for i := range groups {
 		group := groups[i]
-		applyGroupUserPicture(&group.Owner)
+		ApplyUserPicture(&group.Owner)
 		counts := stats[group.ID]
 		result = append(result, &GroupListItemResponse{
 			Group:        &group,
@@ -377,7 +362,7 @@ func (s *groupService) GetGroupByID(id uint, articlePage, articleLimit int) (*Gr
 	articles := make([]GroupArticleWithCount, 0, len(rawArticles))
 	for i := range rawArticles {
 		article := rawArticles[i]
-		applyGroupUserPicture(&article.User)
+		ApplyUserPicture(&article.User)
 
 		// Fetch article images
 		images, _ := s.articleRepo.FindArticleImages(article.ID)
@@ -455,7 +440,7 @@ func (s *groupService) GetOwnedGroups(userID uint, page, limit int) ([]models.Gr
 		return nil, 0, err
 	}
 	for i := range groups {
-		applyGroupUserPicture(&groups[i].Owner)
+		ApplyUserPicture(&groups[i].Owner)
 	}
 	return groups, total, nil
 }
@@ -486,12 +471,12 @@ func (s *groupService) UpdateGroup(userID uint, groupID uint, req GroupRequest) 
 	if err := s.groupRepo.UpdateGroup(group); err != nil {
 		return nil, errors.New("gagal memperbarui grup")
 	}
-	applyGroupUserPicture(&group.Owner)
+	ApplyUserPicture(&group.Owner)
 	for i := range group.Members {
-		applyGroupUserPicture(&group.Members[i].User)
+		ApplyUserPicture(&group.Members[i].User)
 	}
 	for i := range group.Articles {
-		applyGroupUserPicture(&group.Articles[i].User)
+		ApplyUserPicture(&group.Articles[i].User)
 	}
 	return group, nil
 }
@@ -537,7 +522,7 @@ func (s *groupService) GetGroupMembers(groupID uint, page, limit int) ([]models.
 		return nil, 0, err
 	}
 	for i := range members {
-		applyGroupUserPicture(&members[i].User)
+		ApplyUserPicture(&members[i].User)
 	}
 	return members, total, nil
 }
@@ -554,7 +539,7 @@ func (s *groupService) GetJoinedGroups(userID uint, page, limit int) ([]models.G
 		return nil, 0, err
 	}
 	for i := range groups {
-		applyGroupUserPicture(&groups[i].Owner)
+		ApplyUserPicture(&groups[i].Owner)
 	}
 	return groups, total, nil
 }
@@ -636,7 +621,7 @@ func (s *groupService) CreateGroupArticle(userID uint, groupID uint, req GroupAr
 	if err != nil {
 		return article, nil
 	}
-	applyGroupUserPicture(&created.User)
+	ApplyUserPicture(&created.User)
 	return created, nil
 }
 
@@ -645,7 +630,7 @@ func (s *groupService) GetGroupArticleDetail(userID uint, articleID uint) (*Grou
 	if err != nil {
 		return nil, errors.New("artikel tidak ditemukan")
 	}
-	applyGroupUserPicture(&article.User)
+	ApplyUserPicture(&article.User)
 	comments, _ := s.articleRepo.FindAllCommentsByArticleID(articleID)
 	if !s.isMember(article.GroupID, userID) {
 		comments = []models.GroupComment{}
@@ -725,7 +710,7 @@ func (s *groupService) UpdateGroupArticle(userID uint, articleID uint, req Group
 		}
 	}
 
-	applyGroupUserPicture(&article.User)
+	ApplyUserPicture(&article.User)
 	return article, nil
 }
 
@@ -776,10 +761,10 @@ func (s *groupService) AddGroupComment(userID uint, articleID uint, req GroupCom
 	}
 	createdComment, err := s.commentRepo.FindGroupCommentByID(comment.ID)
 	if err == nil {
-		applyGroupUserPicture(&createdComment.User)
+		ApplyUserPicture(&createdComment.User)
 		comment = createdComment
 	} else {
-		applyGroupUserPicture(&comment.User)
+		ApplyUserPicture(&comment.User)
 	}
 
 	// Notify parent comment owner for replies.
@@ -825,7 +810,7 @@ func (s *groupService) UpdateGroupComment(userID uint, commentID uint, req Group
 	if err := s.commentRepo.UpdateGroupComment(comment); err != nil {
 		return nil, errors.New("gagal memperbarui komentar")
 	}
-	applyGroupUserPicture(&comment.User)
+	ApplyUserPicture(&comment.User)
 	return comment, nil
 }
 

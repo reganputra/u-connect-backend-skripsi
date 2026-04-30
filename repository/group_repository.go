@@ -6,6 +6,8 @@ import (
 )
 
 type GroupRepository interface {
+	// CreateGroupWithOwner atomically creates the group and adds the creator as owner member.
+	CreateGroupWithOwner(group *models.Group, ownerUserID uint) error
 	CreateGroup(group *models.Group) error
 	FindGroups(page, limit int) ([]models.Group, int64, error)
 	FindGroupsByOwner(ownerID uint, page, limit int) ([]models.Group, int64, error)
@@ -27,6 +29,23 @@ func NewGroupRepository(db *gorm.DB) GroupRepository {
 
 func (r *groupRepository) CreateGroup(group *models.Group) error {
 	return r.db.Create(group).Error
+}
+
+// CreateGroupWithOwner atomically creates a group and adds its creator as the
+// owner member. Both operations are wrapped in a single transaction so a crash
+// between them cannot leave an orphaned group.
+func (r *groupRepository) CreateGroupWithOwner(group *models.Group, ownerUserID uint) error {
+	return r.db.Transaction(func(tx *gorm.DB) error {
+		if err := tx.Create(group).Error; err != nil {
+			return err
+		}
+		member := &models.GroupMember{
+			GroupID: group.ID,
+			UserID:  ownerUserID,
+			Role:    "owner",
+		}
+		return tx.Create(member).Error
+	})
 }
 
 func (r *groupRepository) FindGroups(page, limit int) ([]models.Group, int64, error) {
@@ -90,13 +109,26 @@ func (r *groupRepository) UpdateGroup(group *models.Group) error {
 }
 
 func (r *groupRepository) DeleteGroup(id uint) error {
-	r.db.Where("article_id IN (SELECT id FROM group_articles WHERE group_id = ?)", id).Delete(&models.GroupReaction{})
-	r.db.Where("comment_id IN (SELECT id FROM group_comments WHERE article_id IN (SELECT id FROM group_articles WHERE group_id = ?))", id).Delete(&models.GroupReaction{})
-	r.db.Where("article_id IN (SELECT id FROM group_articles WHERE group_id = ?)", id).Delete(&models.GroupComment{})
-	r.db.Where("group_id = ?", id).Delete(&models.GroupArticle{})
-	r.db.Where("group_id = ?", id).Delete(&models.GroupMember{})
-	return r.db.Delete(&models.Group{}, id).Error
+	return r.db.Transaction(func(tx *gorm.DB) error {
+		if err := tx.Where("article_id IN (SELECT id FROM group_articles WHERE group_id = ?)", id).Delete(&models.GroupReaction{}).Error; err != nil {
+			return err
+		}
+		if err := tx.Where("comment_id IN (SELECT id FROM group_comments WHERE article_id IN (SELECT id FROM group_articles WHERE group_id = ?))", id).Delete(&models.GroupReaction{}).Error; err != nil {
+			return err
+		}
+		if err := tx.Where("article_id IN (SELECT id FROM group_articles WHERE group_id = ?)", id).Delete(&models.GroupComment{}).Error; err != nil {
+			return err
+		}
+		if err := tx.Where("group_id = ?", id).Delete(&models.GroupArticle{}).Error; err != nil {
+			return err
+		}
+		if err := tx.Where("group_id = ?", id).Delete(&models.GroupMember{}).Error; err != nil {
+			return err
+		}
+		return tx.Delete(&models.Group{}, id).Error
+	})
 }
+
 
 // CountGroupStats returns member and article counts for multiple groups in one
 // query, avoiding N+1 when building the groups list response.

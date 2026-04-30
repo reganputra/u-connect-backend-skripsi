@@ -31,6 +31,7 @@ func (r *eventRegistrationRepository) CreateEventRegistration(reg *models.EventR
 
 	if err == nil {
 		if existing.DeletedAt.Valid {
+			// Restore a previously-cancelled registration.
 			return r.db.Unscoped().
 				Model(&models.EventRegistration{}).
 				Where("id = ?", existing.ID).
@@ -39,17 +40,24 @@ func (r *eventRegistrationRepository) CreateEventRegistration(reg *models.EventR
 					"reminder_sent": false,
 				}).Error
 		}
-
-		// Let DB enforce uniqueness for concurrent duplicate registrations.
-		return r.db.Create(reg).Error
+		// Record exists and is active — treat as duplicate.
+		return ErrAlreadyRegistered
 	}
 
 	if !errors.Is(err, gorm.ErrRecordNotFound) {
 		return err
 	}
 
-	return r.db.Create(reg).Error
+	// No existing record — create fresh. Catch concurrent duplicate inserts.
+	if err := r.db.Create(reg).Error; err != nil {
+		if isDuplicateKeyError(err) {
+			return ErrAlreadyRegistered
+		}
+		return err
+	}
+	return nil
 }
+
 
 func (r *eventRegistrationRepository) FindEventRegistration(eventID, userID uint) (*models.EventRegistration, error) {
 	var reg models.EventRegistration

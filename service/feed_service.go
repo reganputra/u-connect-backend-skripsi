@@ -65,20 +65,7 @@ type PostListItem struct {
 	UpdatedAt     time.Time   `json:"updated_at"`
 }
 
-func applyUserPicture(user *models.User) {
-	if user == nil {
-		return
-	}
-	if user.Profile != nil {
-		if user.Profile.ProfilePicture != "" {
-			picture := user.Profile.ProfilePicture
-			user.PictureURL = &picture
-		} else {
-			user.PictureURL = nil
-		}
-		user.Profile = nil
-	}
-}
+
 
 // buildCommentTree converts a flat comment list into an infinitely nested tree.
 func buildCommentTree(comments []models.Comment) []*CommentNode {
@@ -251,7 +238,7 @@ func (s *feedService) GetPosts(page, limit int) ([]*PostListItem, int64, error) 
 	}
 	result := make([]*PostListItem, 0, len(rows))
 	for _, p := range rows {
-		applyUserPicture(&p.User)
+		ApplyUserPicture(&p.User)
 		imageURLs := []string{}
 		for _, img := range p.Images {
 			imageURLs = append(imageURLs, img.ImageURL)
@@ -307,9 +294,9 @@ func (s *feedService) GetPostByID(id uint) (*PostDetailResponse, error) {
 		imageURLs = []string{}
 	}
 
-	applyUserPicture(&post.User)
+	ApplyUserPicture(&post.User)
 	for i := range comments {
-		applyUserPicture(&comments[i].User)
+		ApplyUserPicture(&comments[i].User)
 	}
 
 	return &PostDetailResponse{

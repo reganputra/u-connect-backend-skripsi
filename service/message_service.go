@@ -26,20 +26,7 @@ type messageService struct {
 	followRepo repository.FollowRepository
 }
 
-func applyMessageUserPicture(user *models.User) {
-	if user == nil {
-		return
-	}
-	if user.Profile != nil {
-		if user.Profile.ProfilePicture != "" {
-			picture := user.Profile.ProfilePicture
-			user.PictureURL = &picture
-		} else {
-			user.PictureURL = nil
-		}
-		user.Profile = nil
-	}
-}
+
 
 func NewMessageService(
 	msgRepo repository.MessageRepository,
@@ -96,8 +83,8 @@ func (s *messageService) GetConversation(callerID, partnerID uint, page, limit i
 		return nil, 0, err
 	}
 	for i := range msgs {
-		applyMessageUserPicture(&msgs[i].Sender)
-		applyMessageUserPicture(&msgs[i].Receiver)
+		ApplyUserPicture(&msgs[i].Sender)
+		ApplyUserPicture(&msgs[i].Receiver)
 	}
 	return msgs, total, nil
 }

@@ -14,6 +14,7 @@ import (
 	"github.com/gofiber/fiber/v2"
 	"github.com/gofiber/fiber/v2/middleware/cors"
 	"github.com/gofiber/fiber/v2/middleware/logger"
+	"github.com/gofiber/fiber/v2/middleware/recover"
 	"github.com/reganputra/skripsi-backend/config"
 	"github.com/reganputra/skripsi-backend/container"
 	"github.com/reganputra/skripsi-backend/models"
@@ -24,6 +25,8 @@ import (
 	"golang.org/x/crypto/bcrypt"
 	"gorm.io/gorm"
 )
+
+
 
 func main() {
 
@@ -97,8 +100,20 @@ func main() {
 
 	// ── Fiber app ─────────────────────────────────────────────────────────────
 	app := fiber.New(fiber.Config{
-		AppName: "Alumni Community Platform API v1.0",
+		AppName:      "Alumni Community Platform API v1.0",
+		ReadTimeout:  15 * time.Second, // 3.5: cancel slow/stalled requests
+		WriteTimeout: 15 * time.Second,
+		IdleTimeout:  60 * time.Second,
 	})
+
+	// 3.6 Panic recovery — catches any handler panic, logs it with stack
+	// trace, and returns 500 without crashing the server.
+	app.Use(recover.New(recover.Config{
+		EnableStackTrace: true,
+		StackTraceHandler: func(c *fiber.Ctx, e interface{}) {
+			log.Printf("[PANIC] recovered: %v | %s %s", e, c.Method(), c.Path())
+		},
+	}))
 
 	app.Use(logger.New())
 
