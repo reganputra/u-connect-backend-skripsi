@@ -1,9 +1,15 @@
 package main
 
 import (
+	"context"
+	"errors"
 	"log"
+	"net"
 	"os"
+	"os/signal"
 	"strings"
+	"syscall"
+	"time"
 
 	"github.com/gofiber/fiber/v2"
 	"github.com/gofiber/fiber/v2/middleware/cors"
@@ -141,9 +147,10 @@ func main() {
 	routes.SetupNotificationRoutes(app, c.NotifCtrl)
 	routes.RegisterActivityRoutes(app, c.ActivityCtrl)
 
-	// ── Background Schedulers ───────────────────────────────────────────────────
-	go scheduler.StartEventReminderScheduler(db, c.NotifSvc)
-	go scheduler.StartEventStatusScheduler(db)
+	// ── Background Schedulers (with context for graceful shutdown) ──────────────
+	schedulerCtx, cancelSchedulers := context.WithCancel(context.Background())
+	go scheduler.StartEventReminderScheduler(schedulerCtx, db, c.NotifSvc)
+	go scheduler.StartEventStatusScheduler(schedulerCtx, db)
 
 	// ── Start server ──────────────────────────────────────────────────────────
 	port := os.Getenv("APP_PORT")
@@ -151,8 +158,35 @@ func main() {
 		port = "8080"
 	}
 
+	// ── Graceful Shutdown ─────────────────────────────────────────────────────
+	shutdownChan := make(chan os.Signal, 1)
+	signal.Notify(shutdownChan, syscall.SIGINT, syscall.SIGTERM)
+
+	go func() {
+		<-shutdownChan
+		log.Println("⏳ Shutting down gracefully...")
+
+		// 1. Stop accepting new HTTP requests (30 second drain window)
+		if err := app.ShutdownWithTimeout(30 * time.Second); err != nil {
+			log.Printf("⚠️  App shutdown error: %v", err)
+		}
+
+		// 2. Cancel context → stops schedulers
+		cancelSchedulers()
+
+		// 3. Close WebSocket hub (signals all clients to disconnect)
+		hub.Close()
+
+		// 4. Close database connection pool
+		if sqlDB, err := config.DB.DB(); err == nil {
+			_ = sqlDB.Close()
+		}
+
+		log.Println("✅ Server stopped cleanly")
+	}()
+
 	log.Printf("🚀 Server starting on port %s", port)
-	if err := app.Listen(":" + port); err != nil {
+	if err := app.Listen(":" + port); err != nil && !errors.Is(err, net.ErrClosed) {
 		log.Fatalf("❌ Failed to start server: %v", err)
 	}
 }

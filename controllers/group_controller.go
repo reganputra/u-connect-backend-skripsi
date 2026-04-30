@@ -83,12 +83,15 @@ func (ctrl *GroupController) GetGroupByID(c *fiber.Ctx) error {
 	if err != nil {
 		return utils.ErrorResponse(c, fiber.StatusBadRequest, "ID grup tidak valid")
 	}
-	group, err := ctrl.groupSvc.GetGroupByID(uint(groupID))
+	articlePage, _ := strconv.Atoi(c.Query("article_page", "1"))
+	articleLimit, _ := strconv.Atoi(c.Query("article_limit", "10"))
+	group, err := ctrl.groupSvc.GetGroupByID(uint(groupID), articlePage, articleLimit)
 	if err != nil {
 		return utils.ErrorResponse(c, fiber.StatusNotFound, err.Error())
 	}
 	return utils.SuccessResponse(c, fiber.StatusOK, group)
 }
+
 
 func (ctrl *GroupController) UpdateGroup(c *fiber.Ctx) error {
 	userID, err := getUserIDFromToken(c)

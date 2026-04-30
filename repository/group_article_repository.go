@@ -8,6 +8,9 @@ import (
 type GroupArticleRepository interface {
 	CreateGroupArticle(article *models.GroupArticle) error
 	FindGroupArticles(groupID uint) ([]models.GroupArticle, error)
+	// FindGroupArticlesPaginated returns paginated articles without comments;
+	// use for group detail to avoid loading unbounded nested data.
+	FindGroupArticlesPaginated(groupID uint, page, limit int) ([]models.GroupArticle, int64, error)
 	FindGroupArticleByID(id uint) (*models.GroupArticle, error)
 	FindAllCommentsByArticleID(articleID uint) ([]models.GroupComment, error)
 	UpdateGroupArticle(article *models.GroupArticle) error
@@ -39,6 +42,31 @@ func (r *groupArticleRepository) FindGroupArticles(groupID uint) ([]models.Group
 		Order("created_at desc").
 		Find(&articles).Error
 	return articles, err
+}
+
+// FindGroupArticlesPaginated returns articles for a group with pagination.
+// It does NOT preload comments (use GetGroupArticleDetail for that),
+// keeping this query bounded for use in group detail responses.
+func (r *groupArticleRepository) FindGroupArticlesPaginated(groupID uint, page, limit int) ([]models.GroupArticle, int64, error) {
+	var articles []models.GroupArticle
+	var total int64
+
+	base := r.db.Model(&models.GroupArticle{}).Where("group_id = ?", groupID)
+	if err := base.Count(&total).Error; err != nil {
+		return nil, 0, err
+	}
+
+	offset := (page - 1) * limit
+	err := r.db.
+		Where("group_id = ?", groupID).
+		Preload("User").
+		Preload("User.Profile").
+		Preload("Reactions").
+		Order("created_at desc").
+		Offset(offset).
+		Limit(limit).
+		Find(&articles).Error
+	return articles, total, err
 }
 
 func (r *groupArticleRepository) FindGroupArticleByID(id uint) (*models.GroupArticle, error) {

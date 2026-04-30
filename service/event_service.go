@@ -116,14 +116,29 @@ func (s *eventService) attachEventRegistrationStats(event *models.Event) error {
 }
 
 func (s *eventService) attachEventsRegistrationStats(events []models.Event) error {
+	if len(events) == 0 {
+		return nil
+	}
+
+	// Collect event IDs and fetch all counts in one query (avoids N+1).
+	eventIDs := make([]uint, 0, len(events))
 	for i := range events {
-		if err := s.attachEventRegistrationStats(&events[i]); err != nil {
-			return err
-		}
+		eventIDs = append(eventIDs, events[i].ID)
+	}
+	counts, err := s.eventRepo.CountEventRegistrationsBatch(eventIDs)
+	if err != nil {
+		return err
+	}
+
+	for i := range events {
+		count := counts[events[i].ID] // zero if not in map (no registrations)
+		events[i].AttendantCount = count
+		events[i].SeatLeft = calculateEventSeatLeft(events[i].Capacity, count)
 	}
 
 	return nil
 }
+
 
 func (s *eventService) syncPastEventStatuses() error {
 	_, err := s.eventRepo.AutoCompletePastEvents(time.Now())

@@ -78,6 +78,16 @@ type GroupListItemResponse struct {
 	ArticleCount int `json:"article_count"`
 }
 
+// PaginationMeta is included in responses with paginated sub-collections.
+type PaginationMeta struct {
+	Total      int64 `json:"total"`
+	Page       int   `json:"page"`
+	Limit      int   `json:"limit"`
+	TotalPages int   `json:"total_pages"`
+	HasNext    bool  `json:"has_next"`
+	HasPrev    bool  `json:"has_prev"`
+}
+
 type GroupArticleWithCount struct {
 	ID           uint                   `json:"ID"`
 	CreatedAt    time.Time              `json:"CreatedAt"`
@@ -96,21 +106,22 @@ type GroupArticleWithCount struct {
 }
 
 type GroupDetailResponse struct {
-	ID           uint                    `json:"ID"`
-	CreatedAt    time.Time               `json:"CreatedAt"`
-	UpdatedAt    time.Time               `json:"UpdatedAt"`
-	DeletedAt    gorm.DeletedAt          `json:"DeletedAt"`
-	OwnerID      uint                    `json:"OwnerID"`
-	Category     string                  `json:"Category"`
-	Title        string                  `json:"Title"`
-	Description  *string                 `json:"Description"`
-	Rules        *string                 `json:"Rules"`
-	BannerURL    *string                 `json:"BannerURL"`
-	Owner        models.User             `json:"Owner"`
-	Members      []models.GroupMember    `json:"Members"`
-	Articles     []GroupArticleWithCount `json:"Articles"`
-	MemberCount  int                     `json:"member_count"`
-	ArticleCount int                     `json:"article_count"`
+	ID                uint                    `json:"ID"`
+	CreatedAt         time.Time               `json:"CreatedAt"`
+	UpdatedAt         time.Time               `json:"UpdatedAt"`
+	DeletedAt         gorm.DeletedAt          `json:"DeletedAt"`
+	OwnerID           uint                    `json:"OwnerID"`
+	Category          string                  `json:"Category"`
+	Title             string                  `json:"Title"`
+	Description       *string                 `json:"Description"`
+	Rules             *string                 `json:"Rules"`
+	BannerURL         *string                 `json:"BannerURL"`
+	Owner             models.User             `json:"Owner"`
+	Members           []models.GroupMember    `json:"Members"`
+	Articles          []GroupArticleWithCount `json:"Articles"`
+	MemberCount       int                     `json:"member_count"`
+	ArticleCount      int                     `json:"article_count"`
+	ArticlePagination PaginationMeta          `json:"article_pagination"`
 }
 
 func buildGroupCommentTree(comments []models.GroupComment) []*GroupCommentNode {
@@ -158,7 +169,9 @@ func buildGroupCommentTree(comments []models.GroupComment) []*GroupCommentNode {
 type GroupService interface {
 	CreateGroup(userID uint, req GroupRequest) (*models.Group, error)
 	GetGroups(page, limit int) ([]*GroupListItemResponse, int64, error)
-	GetGroupByID(id uint) (*GroupDetailResponse, error)
+	// GetGroupByID returns the group detail with paginated articles.
+	// articlePage/articleLimit control which page of articles to return (default 1/10).
+	GetGroupByID(id uint, articlePage, articleLimit int) (*GroupDetailResponse, error)
 	GetOwnedGroups(userID uint, page, limit int) ([]models.Group, int64, error)
 	UpdateGroup(userID uint, groupID uint, req GroupRequest) (*models.Group, error)
 	DeleteGroup(userID uint, groupID uint) error
@@ -312,25 +325,26 @@ func (s *groupService) GetGroups(page, limit int) ([]*GroupListItemResponse, int
 		return nil, 0, err
 	}
 
+	// Batch-fetch member + article counts in one query (avoids N+1).
+	groupIDs := make([]uint, 0, len(groups))
+	for i := range groups {
+		groupIDs = append(groupIDs, groups[i].ID)
+	}
+	stats, err := s.groupRepo.CountGroupStats(groupIDs)
+	if err != nil {
+		// Non-fatal: degrade gracefully with zero counts.
+		stats = map[uint][2]int{}
+	}
+
 	result := make([]*GroupListItemResponse, 0, len(groups))
 	for i := range groups {
 		group := groups[i]
 		applyGroupUserPicture(&group.Owner)
-
-		memberCount64, err := s.memberRepo.CountGroupMembers(group.ID)
-		if err != nil {
-			memberCount64 = 0
-		}
-
-		articles, err := s.articleRepo.FindGroupArticles(group.ID)
-		if err != nil {
-			articles = []models.GroupArticle{}
-		}
-
+		counts := stats[group.ID]
 		result = append(result, &GroupListItemResponse{
 			Group:        &group,
-			MemberCount:  int(memberCount64),
-			ArticleCount: len(articles),
+			MemberCount:  counts[0],
+			ArticleCount: counts[1],
 		})
 	}
 
@@ -340,21 +354,30 @@ func (s *groupService) GetGroups(page, limit int) ([]*GroupListItemResponse, int
 	return result, total, nil
 }
 
-func (s *groupService) GetGroupByID(id uint) (*GroupDetailResponse, error) {
+func (s *groupService) GetGroupByID(id uint, articlePage, articleLimit int) (*GroupDetailResponse, error) {
+	if articlePage < 1 {
+		articlePage = 1
+	}
+	if articleLimit < 1 || articleLimit > 50 {
+		articleLimit = 10
+	}
+
 	group, err := s.groupRepo.FindGroupByID(id)
 	if err != nil {
 		return nil, errors.New("grup tidak ditemukan")
 	}
 
-	articles := make([]GroupArticleWithCount, 0, len(group.Articles))
-	for i := range group.Articles {
-		article := group.Articles[i]
-		comments, err := s.articleRepo.FindAllCommentsByArticleID(article.ID)
-		if err != nil {
-			comments = []models.GroupComment{}
-		}
+	// Fetch articles with pagination (bounded); avoids loading all articles at once.
+	rawArticles, articleTotal, err := s.articleRepo.FindGroupArticlesPaginated(id, articlePage, articleLimit)
+	if err != nil {
+		rawArticles = []models.GroupArticle{}
+		articleTotal = 0
+	}
+
+	articles := make([]GroupArticleWithCount, 0, len(rawArticles))
+	for i := range rawArticles {
+		article := rawArticles[i]
 		applyGroupUserPicture(&article.User)
-		hydrateGroupArticleComments(comments)
 
 		// Fetch article images
 		images, _ := s.articleRepo.FindArticleImages(article.ID)
@@ -362,7 +385,6 @@ func (s *groupService) GetGroupByID(id uint) (*GroupDetailResponse, error) {
 		for _, img := range images {
 			mediaURLs = append(mediaURLs, img.ImageURL)
 		}
-		// If no images found but MediaURL exists (backward compat), use it
 		if len(mediaURLs) == 0 && article.MediaURL != nil {
 			mediaURLs = append(mediaURLs, *article.MediaURL)
 		}
@@ -379,28 +401,43 @@ func (s *groupService) GetGroupByID(id uint) (*GroupDetailResponse, error) {
 			MediaURL:     article.MediaURL,
 			MediaURLs:    mediaURLs,
 			User:         article.User,
-			Comments:     article.Comments,
+			Comments:     []models.GroupComment{}, // comments loaded per-article via detail endpoint
 			Reactions:    article.Reactions,
-			CommentCount: len(comments),
+			CommentCount: 0, // not loaded here; use article detail endpoint for accurate count
 		})
 	}
 
+	// Build article pagination metadata.
+	totalPages := 0
+	if articleLimit > 0 && articleTotal > 0 {
+		totalPages = int((articleTotal + int64(articleLimit) - 1) / int64(articleLimit))
+	}
+	articlePagination := PaginationMeta{
+		Total:      articleTotal,
+		Page:       articlePage,
+		Limit:      articleLimit,
+		TotalPages: totalPages,
+		HasNext:    articlePage < totalPages,
+		HasPrev:    articlePage > 1,
+	}
+
 	response := &GroupDetailResponse{
-		ID:           group.ID,
-		CreatedAt:    group.CreatedAt,
-		UpdatedAt:    group.UpdatedAt,
-		DeletedAt:    group.DeletedAt,
-		OwnerID:      group.OwnerID,
-		Category:     group.Category,
-		Title:        group.Title,
-		Description:  group.Description,
-		Rules:        group.Rules,
-		BannerURL:    group.BannerURL,
-		Owner:        group.Owner,
-		Members:      group.Members,
-		Articles:     articles,
-		MemberCount:  len(group.Members),
-		ArticleCount: len(group.Articles),
+		ID:                group.ID,
+		CreatedAt:         group.CreatedAt,
+		UpdatedAt:         group.UpdatedAt,
+		DeletedAt:         group.DeletedAt,
+		OwnerID:           group.OwnerID,
+		Category:          group.Category,
+		Title:             group.Title,
+		Description:       group.Description,
+		Rules:             group.Rules,
+		BannerURL:         group.BannerURL,
+		Owner:             group.Owner,
+		Members:           group.Members,
+		Articles:          articles,
+		MemberCount:       len(group.Members),
+		ArticleCount:      int(articleTotal),
+		ArticlePagination: articlePagination,
 	}
 	hydrateGroupDetail(response)
 	return response, nil

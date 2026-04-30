@@ -28,6 +28,7 @@ type Hub struct {
 	clients    map[uint]*Client // keyed by userID (one connection per user)
 	Register   chan *Client
 	Unregister chan *Client
+	quit       chan struct{} // closed by Close() to stop Run()
 }
 
 // NewHub creates a new Hub instance (not started yet).
@@ -36,6 +37,7 @@ func NewHub() *Hub {
 		clients:    make(map[uint]*Client),
 		Register:   make(chan *Client, 16),
 		Unregister: make(chan *Client, 16),
+		quit:       make(chan struct{}),
 	}
 }
 
@@ -44,6 +46,9 @@ func (h *Hub) Run() {
 	log.Println("[WS/HUB] INFO  hub started")
 	for {
 		select {
+		case <-h.quit:
+			log.Println("[WS/HUB] INFO  hub stopped")
+			return
 		case client := <-h.Register:
 			h.mu.Lock()
 			if old, ok := h.clients[client.UserID]; ok {
@@ -68,6 +73,18 @@ func (h *Hub) Run() {
 			}
 		}
 	}
+}
+
+// Close signals the hub to stop its Run loop and disconnects all clients.
+func (h *Hub) Close() {
+	close(h.quit)
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	for _, client := range h.clients {
+		close(client.Done)
+	}
+	h.clients = make(map[uint]*Client)
+	log.Println("[WS/HUB] INFO  all clients disconnected")
 }
 
 // SendToUser enqueues a payload for direct delivery to a connected user.

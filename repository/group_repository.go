@@ -12,6 +12,9 @@ type GroupRepository interface {
 	FindGroupByID(id uint) (*models.Group, error)
 	UpdateGroup(group *models.Group) error
 	DeleteGroup(id uint) error
+	// CountGroupStats returns a map of groupID -> [memberCount, articleCount]
+	// fetched in a single batch query to avoid N+1 when listing groups.
+	CountGroupStats(groupIDs []uint) (map[uint][2]int, error)
 }
 
 type groupRepository struct {
@@ -74,15 +77,13 @@ func (r *groupRepository) FindGroupByID(id uint) (*models.Group, error) {
 		Preload("Members").
 		Preload("Members.User").
 		Preload("Members.User.Profile").
-		Preload("Articles").
-		Preload("Articles.User").
-		Preload("Articles.User.Profile").
 		First(&group, id).Error
 	if err != nil {
 		return nil, err
 	}
 	return &group, nil
 }
+
 
 func (r *groupRepository) UpdateGroup(group *models.Group) error {
 	return r.db.Save(group).Error
@@ -95,4 +96,42 @@ func (r *groupRepository) DeleteGroup(id uint) error {
 	r.db.Where("group_id = ?", id).Delete(&models.GroupArticle{})
 	r.db.Where("group_id = ?", id).Delete(&models.GroupMember{})
 	return r.db.Delete(&models.Group{}, id).Error
+}
+
+// CountGroupStats returns member and article counts for multiple groups in one
+// query, avoiding N+1 when building the groups list response.
+func (r *groupRepository) CountGroupStats(groupIDs []uint) (map[uint][2]int, error) {
+	if len(groupIDs) == 0 {
+		return map[uint][2]int{}, nil
+	}
+
+	type statRow struct {
+		GroupID      uint `gorm:"column:group_id"`
+		MemberCount  int  `gorm:"column:member_count"`
+		ArticleCount int  `gorm:"column:article_count"`
+	}
+
+	var rows []statRow
+	err := r.db.Raw(`
+		SELECT
+			g.id AS group_id,
+			COUNT(DISTINCT gm.id) AS member_count,
+			COUNT(DISTINCT ga.id) AS article_count
+		FROM groups g
+		LEFT JOIN group_members gm
+			ON gm.group_id = g.id AND gm.deleted_at IS NULL
+		LEFT JOIN group_articles ga
+			ON ga.group_id = g.id AND ga.deleted_at IS NULL
+		WHERE g.id IN (?)
+		GROUP BY g.id
+	`, groupIDs).Scan(&rows).Error
+	if err != nil {
+		return nil, err
+	}
+
+	result := make(map[uint][2]int, len(rows))
+	for _, row := range rows {
+		result[row.GroupID] = [2]int{row.MemberCount, row.ArticleCount}
+	}
+	return result, nil
 }
