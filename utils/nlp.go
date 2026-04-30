@@ -119,9 +119,6 @@ func BuildTFIDF(corpus [][]string) []map[string]float64 {
 		// Hitung TF-IDF (W = TF × IDF)
 		vec := make(map[string]float64, len(tf))
 		for term, tfScore := range tf {
-			// IDF(t,D) = log(1 + N/df(t)) — smoothed variant: prevents extreme weights for rare
-			// terms and avoids log(1)=0 zeroing out terms that appear in every document.
-			// df[term] is guaranteed >= 1 because term originates from a document in the corpus.
 			idfScore := math.Log(float64(N) / float64(df[term]))
 			vec[term] = tfScore * idfScore
 		}
@@ -131,9 +128,8 @@ func BuildTFIDF(corpus [][]string) []map[string]float64 {
 	return vectors
 }
 
-// BuildIDF computes a corpus-level IDF table from a pre-tokenized document set.
-// Separating IDF from TF lets mentor vectors be pre-built and cached independently of any query.
-// IDF(t) = log(N / df(t)); df[term] is guaranteed >= 1 for any term in the corpus.
+// BuildIDF menghitung tabel IDF tingkat korpus dari kumpulan dokumen yang telah ditokenisasi sebelumnya.
+// Dengan memisahkan IDF dari TF, vektor mentor dapat dibuat terlebih dahulu dan disimpan dalam cache secara terpisah dari kueri apa pun.
 func BuildIDF(corpus [][]string) map[string]float64 {
 	N := len(corpus)
 	if N == 0 {
@@ -156,9 +152,7 @@ func BuildIDF(corpus [][]string) map[string]float64 {
 	return idf
 }
 
-// TFIDFVector computes the TF-IDF vector for a single document using a pre-built IDF table.
-// Terms absent from the IDF table (outside the mentor vocabulary) receive zero weight — they
-// carry no discriminating power against the mentor corpus and are safely ignored.
+// TFIDFVector menghitung vektor TF-IDF untuk satu dokumen menggunakan tabel IDF yang sudah disiapkan sebelumnya.
 func TFIDFVector(tokens []string, idf map[string]float64) map[string]float64 {
 	if len(tokens) == 0 {
 		return map[string]float64{}
@@ -177,10 +171,6 @@ func TFIDFVector(tokens []string, idf map[string]float64) map[string]float64 {
 	return vec
 }
 
-// L2Normalize scales a TF-IDF vector to unit length (‖v‖₂ = 1).
-// Pre-normalizing mentor vectors once lets the scoring loop use a plain dot product
-// instead of re-computing magnitudes on every query — dot(a_hat, b_hat) = cos(a, b).
-// Returns the original map unchanged when the vector is all-zero.
 func L2Normalize(vec map[string]float64) map[string]float64 {
 	var norm float64
 	for _, v := range vec {
