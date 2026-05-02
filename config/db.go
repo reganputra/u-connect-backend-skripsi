@@ -3,6 +3,7 @@ package config
 import (
 	"fmt"
 	"log"
+	"time"
 
 	"github.com/reganputra/skripsi-backend/utils"
 	"gorm.io/driver/postgres"
@@ -37,6 +38,13 @@ func ConnectDB() {
 	if err := sqlDB.Ping(); err != nil {
 		log.Fatalf("❌ Database ping failed: %v", err)
 	}
+
+	// ── Connection Pool Configuration ─────────────────────────────────────────
+	// Limit concurrent DB connections; tune against Postgres max_connections.
+	sqlDB.SetMaxOpenConns(25)             // max simultaneous open connections
+	sqlDB.SetMaxIdleConns(5)              // keep warm connections available for bursts
+	sqlDB.SetConnMaxLifetime(5 * time.Minute)  // recycle connections to avoid stale TCP
+	sqlDB.SetConnMaxIdleTime(1 * time.Hour)    // reap idle connections after inactivity
 
 	DB = db
 	log.Println("✅ Successfully connected to the database!")

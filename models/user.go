@@ -4,11 +4,12 @@ import "gorm.io/gorm"
 
 type User struct {
 	gorm.Model
-	Name     string `gorm:"not null"`
-	Email    string `gorm:"uniqueIndex;not null"`
-	Password string `gorm:"not null" json:"-"`
-	Role     string `gorm:"not null"` // alumni | student | partner | admin
-	IsActive bool   `gorm:"default:true"`
+	Name       string  `gorm:"not null"`
+	Email      string  `gorm:"uniqueIndex;not null"`
+	Password   string  `gorm:"not null" json:"-"`
+	Role       string  `gorm:"not null"` // alumni | student | partner | admin
+	IsActive   bool    `gorm:"default:true"`
+	PictureURL *string `gorm:"-" json:"picture_url"`
 
 	// alumni & student only
 	Faculty    *string `gorm:"default:null"`

@@ -1,6 +1,7 @@
 package scheduler
 
 import (
+	"context"
 	"log"
 	"time"
 
@@ -12,9 +13,10 @@ import (
 // StartEventReminderScheduler runs a ticker every 30 minutes.
 // It finds EventRegistrations for events starting between now+23h and now+25h
 // where ReminderSent = false, sends a notification, and marks ReminderSent = true.
+// The scheduler stops when ctx is cancelled (graceful shutdown).
 //
-// Call via: go scheduler.StartEventReminderScheduler(db, notifSvc)
-func StartEventReminderScheduler(db *gorm.DB, notifSvc service.NotificationService) {
+// Call via: go scheduler.StartEventReminderScheduler(ctx, db, notifSvc)
+func StartEventReminderScheduler(ctx context.Context, db *gorm.DB, notifSvc service.NotificationService) {
 	ticker := time.NewTicker(30 * time.Minute)
 	defer ticker.Stop()
 
@@ -23,8 +25,14 @@ func StartEventReminderScheduler(db *gorm.DB, notifSvc service.NotificationServi
 	// Run once immediately on startup to catch any missed reminders
 	RunEventRemindersOnce(db, notifSvc)
 
-	for range ticker.C {
-		RunEventRemindersOnce(db, notifSvc)
+	for {
+		select {
+		case <-ticker.C:
+			RunEventRemindersOnce(db, notifSvc)
+		case <-ctx.Done():
+			log.Println("🔔 Event reminder scheduler stopped")
+			return
+		}
 	}
 }
 

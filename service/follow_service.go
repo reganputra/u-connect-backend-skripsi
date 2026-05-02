@@ -3,11 +3,11 @@ package service
 import (
 	"errors"
 	"fmt"
-	"strings"
 
 	"github.com/reganputra/skripsi-backend/models"
 	"github.com/reganputra/skripsi-backend/repository"
 )
+
 
 type FollowService interface {
 	Follow(followerID, followingID uint, followerRole string) error
@@ -35,7 +35,7 @@ func (s *followService) Follow(followerID, followingID uint, followerRole string
 	if followerID == followingID {
 		return errors.New("tidak dapat mengikuti diri sendiri")
 	}
-	// Duplicate guard
+	// Duplicate guard (pre-check to avoid unnecessary DB write)
 	already, err := s.repo.IsFollowing(followerID, followingID)
 	if err != nil {
 		return err
@@ -44,8 +44,8 @@ func (s *followService) Follow(followerID, followingID uint, followerRole string
 		return errors.New("anda sudah mengikuti pengguna ini")
 	}
 	if err := s.repo.Follow(followerID, followingID); err != nil {
-		lowerErr := strings.ToLower(err.Error())
-		if strings.Contains(lowerErr, "idx_follow_pair") || strings.Contains(lowerErr, "duplicate key") {
+		// Race condition: another request created the row between IsFollowing and Follow.
+		if errors.Is(err, repository.ErrAlreadyFollowing) {
 			return errors.New("anda sudah mengikuti pengguna ini")
 		}
 		return err
@@ -63,6 +63,7 @@ func (s *followService) Follow(followerID, followingID uint, followerRole string
 	}
 	return nil
 }
+
 
 func (s *followService) Unfollow(followerID, followingID uint) error {
 	if followerID == followingID {

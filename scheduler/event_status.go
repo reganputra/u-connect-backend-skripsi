@@ -1,6 +1,7 @@
 package scheduler
 
 import (
+	"context"
 	"log"
 	"time"
 
@@ -11,7 +12,8 @@ import (
 // StartEventStatusScheduler keeps event status in sync with time.
 // Every 15 minutes it marks events as completed when start_time has passed,
 // excluding events that are already completed or cancelled.
-func StartEventStatusScheduler(db *gorm.DB) {
+// The scheduler stops when ctx is cancelled (graceful shutdown).
+func StartEventStatusScheduler(ctx context.Context, db *gorm.DB) {
 	ticker := time.NewTicker(15 * time.Minute)
 	defer ticker.Stop()
 
@@ -20,8 +22,14 @@ func StartEventStatusScheduler(db *gorm.DB) {
 	// Run once immediately on startup to catch stale records.
 	RunEventStatusSyncOnce(db)
 
-	for range ticker.C {
-		RunEventStatusSyncOnce(db)
+	for {
+		select {
+		case <-ticker.C:
+			RunEventStatusSyncOnce(db)
+		case <-ctx.Done():
+			log.Println("🕒 Event status scheduler stopped")
+			return
+		}
 	}
 }
 

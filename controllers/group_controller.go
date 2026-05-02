@@ -57,17 +57,41 @@ func (ctrl *GroupController) GetGroups(c *fiber.Ctx) error {
 	})
 }
 
+func (ctrl *GroupController) GetOwnedGroups(c *fiber.Ctx) error {
+	userID, err := getUserIDFromToken(c)
+	if err != nil {
+		return utils.ErrorResponse(c, fiber.StatusUnauthorized, err.Error())
+	}
+	page, _ := strconv.Atoi(c.Query("page", "1"))
+	limit, _ := strconv.Atoi(c.Query("limit", "20"))
+
+	groups, total, err := ctrl.groupSvc.GetOwnedGroups(userID, page, limit)
+	if err != nil {
+		return utils.ErrorResponse(c, fiber.StatusInternalServerError, "gagal mengambil data grup milik pengguna")
+	}
+
+	return utils.SuccessResponse(c, fiber.StatusOK, fiber.Map{
+		"total": total,
+		"page":  page,
+		"limit": limit,
+		"data":  groups,
+	})
+}
+
 func (ctrl *GroupController) GetGroupByID(c *fiber.Ctx) error {
 	groupID, err := strconv.ParseUint(c.Params("id"), 10, 64)
 	if err != nil {
 		return utils.ErrorResponse(c, fiber.StatusBadRequest, "ID grup tidak valid")
 	}
-	group, err := ctrl.groupSvc.GetGroupByID(uint(groupID))
+	articlePage, _ := strconv.Atoi(c.Query("article_page", "1"))
+	articleLimit, _ := strconv.Atoi(c.Query("article_limit", "10"))
+	group, err := ctrl.groupSvc.GetGroupByID(uint(groupID), articlePage, articleLimit)
 	if err != nil {
 		return utils.ErrorResponse(c, fiber.StatusNotFound, err.Error())
 	}
 	return utils.SuccessResponse(c, fiber.StatusOK, group)
 }
+
 
 func (ctrl *GroupController) UpdateGroup(c *fiber.Ctx) error {
 	userID, err := getUserIDFromToken(c)

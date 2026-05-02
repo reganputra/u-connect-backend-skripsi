@@ -1,30 +1,35 @@
 package main
 
 import (
+	"context"
+	"errors"
 	"log"
+	"net"
 	"os"
+	"os/signal"
 	"strings"
+	"syscall"
+	"time"
 
 	"github.com/gofiber/fiber/v2"
 	"github.com/gofiber/fiber/v2/middleware/cors"
 	"github.com/gofiber/fiber/v2/middleware/logger"
+	"github.com/gofiber/fiber/v2/middleware/recover"
 	"github.com/reganputra/skripsi-backend/config"
-	"github.com/reganputra/skripsi-backend/controllers"
+	"github.com/reganputra/skripsi-backend/container"
 	"github.com/reganputra/skripsi-backend/models"
-	"github.com/reganputra/skripsi-backend/repository"
 	"github.com/reganputra/skripsi-backend/routes"
 	"github.com/reganputra/skripsi-backend/scheduler"
-	"github.com/reganputra/skripsi-backend/service"
 	"github.com/reganputra/skripsi-backend/utils"
 	"github.com/reganputra/skripsi-backend/ws"
 	"golang.org/x/crypto/bcrypt"
 	"gorm.io/gorm"
 )
 
+
+
 func main() {
-	// Redirect Go's standard logger to stdout so that [WS/*] structured logs
-	// appear on the same stream as Fiber's access log. Without this, log.Printf
-	// writes to stderr and the two streams appear separately in most terminals.
+
 	log.SetOutput(os.Stdout)
 	log.SetFlags(log.Ltime | log.Lmsgprefix) // match Fiber's time-only prefix style
 
@@ -86,81 +91,29 @@ func main() {
 
 	db := config.DB
 
-	// ── Repositories ──────────────────────────────────────────────────────────
-	userRepo := repository.NewUserRepository(db)
-	profileRepo := repository.NewProfileRepository(db)
-	companyRepo := repository.NewCompanyRepository(db)
-	portfolioRepo := repository.NewPortfolioRepository(db)
-	postRepo := repository.NewPostRepository(db)
-	commentRepo := repository.NewCommentRepository(db)
-	reactionRepo := repository.NewReactionRepository(db)
-	voteRepo := repository.NewVoteRepository(db)
-	groupRepo := repository.NewGroupRepository(db)
-	memberRepo := repository.NewGroupMemberRepository(db)
-	articleRepo := repository.NewGroupArticleRepository(db)
-	gCommentRepo := repository.NewGroupCommentRepository(db)
-	gReactionRepo := repository.NewGroupReactionRepository(db)
-	eventRepo := repository.NewEventRepository(db)
-	agendaRepo := repository.NewEventAgendaRepository(db)
-	regRepo := repository.NewEventRegistrationRepository(db)
-	jobRepo := repository.NewJobRepository(db)
-	jobAppRepo := repository.NewJobApplicationRepository(db)
-	reportRepo := repository.NewReportRepository(db)
-	adminRepo := repository.NewAdminRepository(db)
-	categoryRepo := repository.NewCategoryRepository(db)
-	mentorRepo := repository.NewMentorRepository(db)
-	mentorRequestRepo := repository.NewMentorRequestRepository(db)
-	mentoringSessionRepo := repository.NewMentoringSessionRepository(db)
-	followRepo := repository.NewFollowRepository(db)
-	messageRepo := repository.NewMessageRepository(db)
-	notifRepo := repository.NewNotificationRepository(db)
-
-	if err := profileRepo.BackfillMissingPartnerProfiles(); err != nil {
-		log.Fatalf("❌ Failed to backfill partner profiles: %v", err)
-	}
-
-	// ── WebSocket Hub + Notification Service (must come first) ──────────────
+	// ── WebSocket Hub ──────────────
 	hub := ws.NewHub()
 	go hub.Run()
-	notifSvc := service.NewNotificationService(notifRepo, hub, db)
 
-	// ── Services ──────────────────────────────────────────────────────────────
-	authSvc := service.NewAuthService(userRepo, profileRepo)
-	profileSvc := service.NewProfileService(profileRepo)
-	companySvc := service.NewCompanyService(companyRepo, userRepo, profileRepo)
-	portfolioSvc := service.NewPortfolioService(portfolioRepo)
-	feedSvc := service.NewFeedService(postRepo, commentRepo, reactionRepo, voteRepo, userRepo, notifSvc)
-	groupSvc := service.NewGroupService(groupRepo, memberRepo, articleRepo, gCommentRepo, gReactionRepo, notifSvc)
-	eventSvc := service.NewEventService(eventRepo, agendaRepo, regRepo)
-	jobSvc := service.NewJobService(jobRepo, jobAppRepo, companyRepo, userRepo, notifSvc)
-	reportSvc := service.NewReportService(reportRepo)
-	adminSvc := service.NewAdminService(adminRepo, reportRepo, categoryRepo, notifSvc, db)
-	recommendSvc := service.NewRecommendationService(mentorRepo)
-	mentorSvc := service.NewMentorService(profileRepo, mentorRepo, mentorRequestRepo, mentoringSessionRepo, recommendSvc, userRepo, notifSvc)
-	followSvc := service.NewFollowService(followRepo, userRepo, notifSvc)
-	messageSvc := service.NewMessageService(messageRepo, followRepo)
-
-	// ── Controllers ───────────────────────────────────────────────────────────
-	authCtrl := controllers.NewAuthController(authSvc)
-	profileCtrl := controllers.NewProfileController(profileSvc)
-	directoryCtrl := controllers.NewDirectoryController(profileSvc, portfolioSvc)
-	companyCtrl := controllers.NewCompanyController(companySvc)
-	portfolioCtrl := controllers.NewPortfolioController(portfolioSvc)
-	feedCtrl := controllers.NewFeedController(feedSvc)
-	groupCtrl := controllers.NewGroupController(groupSvc)
-	eventCtrl := controllers.NewEventController(eventSvc)
-	jobCtrl := controllers.NewJobController(jobSvc)
-	reportCtrl := controllers.NewReportController(reportSvc)
-	adminCtrl := controllers.NewAdminController(adminSvc)
-	mentorCtrl := controllers.NewMentorController(mentorSvc)
-	followCtrl := controllers.NewFollowController(followSvc)
-	messageCtrl := controllers.NewMessageController(messageSvc)
-	notifCtrl := controllers.NewNotificationController(notifSvc)
+	// ── Build Dependencies via Container ──────────────────────────────────────
+	c := container.Build(db, hub)
 
 	// ── Fiber app ─────────────────────────────────────────────────────────────
 	app := fiber.New(fiber.Config{
-		AppName: "Alumni Community Platform API v1.0",
+		AppName:      "Alumni Community Platform API v1.0",
+		ReadTimeout:  15 * time.Second, // 3.5: cancel slow/stalled requests
+		WriteTimeout: 15 * time.Second,
+		IdleTimeout:  60 * time.Second,
 	})
+
+	// 3.6 Panic recovery — catches any handler panic, logs it with stack
+	// trace, and returns 500 without crashing the server.
+	app.Use(recover.New(recover.Config{
+		EnableStackTrace: true,
+		StackTraceHandler: func(c *fiber.Ctx, e interface{}) {
+			log.Printf("[PANIC] recovered: %v | %s %s", e, c.Method(), c.Path())
+		},
+	}))
 
 	app.Use(logger.New())
 
@@ -192,25 +145,27 @@ func main() {
 	})
 
 	// ── Routes ────────────────────────────────────────────────────────────────
-	routes.RegisterAuthRoutes(app, authCtrl)
-	routes.RegisterProfileRoutes(app, profileCtrl)
-	routes.SetupDirectoryRoutes(app, directoryCtrl)
-	routes.RegisterCompanyRoutes(app, companyCtrl)
-	routes.RegisterPortfolioRoutes(app, portfolioCtrl)
-	routes.RegisterFeedRoutes(app, feedCtrl)
-	routes.RegisterGroupRoutes(app, groupCtrl)
-	routes.RegisterEventRoutes(app, eventCtrl)
-	routes.RegisterJobRoutes(app, jobCtrl)
-	routes.RegisterReportRoutes(app, reportCtrl)
-	routes.RegisterAdminRoutes(app, adminCtrl)
-	routes.RegisterMentorRoutes(app, mentorCtrl)
-	routes.SetupFollowRoutes(app, followCtrl)
-	routes.SetupMessageRoutes(app, messageCtrl, hub, messageSvc, userRepo, notifSvc)
-	routes.SetupNotificationRoutes(app, notifCtrl)
+	routes.RegisterAuthRoutes(app, c.AuthCtrl)
+	routes.RegisterProfileRoutes(app, c.ProfileCtrl)
+	routes.SetupDirectoryRoutes(app, c.DirectoryCtrl)
+	routes.RegisterCompanyRoutes(app, c.CompanyCtrl)
+	routes.RegisterPortfolioRoutes(app, c.PortfolioCtrl)
+	routes.RegisterFeedRoutes(app, c.FeedCtrl)
+	routes.RegisterGroupRoutes(app, c.GroupCtrl)
+	routes.RegisterEventRoutes(app, c.EventCtrl)
+	routes.RegisterJobRoutes(app, c.JobCtrl)
+	routes.RegisterReportRoutes(app, c.ReportCtrl)
+	routes.RegisterAdminRoutes(app, c.AdminCtrl)
+	routes.RegisterMentorRoutes(app, c.MentorCtrl)
+	routes.SetupFollowRoutes(app, c.FollowCtrl)
+	routes.SetupMessageRoutes(app, c.MessageCtrl, hub, c.MessageSvc, c.UserRepo, c.NotifSvc)
+	routes.SetupNotificationRoutes(app, c.NotifCtrl)
+	routes.RegisterActivityRoutes(app, c.ActivityCtrl)
 
-	// ── Background Schedulers ───────────────────────────────────────────────────
-	go scheduler.StartEventReminderScheduler(db, notifSvc)
-	go scheduler.StartEventStatusScheduler(db)
+	// ── Background Schedulers (with context for graceful shutdown) ──────────────
+	schedulerCtx, cancelSchedulers := context.WithCancel(context.Background())
+	go scheduler.StartEventReminderScheduler(schedulerCtx, db, c.NotifSvc)
+	go scheduler.StartEventStatusScheduler(schedulerCtx, db)
 
 	// ── Start server ──────────────────────────────────────────────────────────
 	port := os.Getenv("APP_PORT")
@@ -218,8 +173,35 @@ func main() {
 		port = "8080"
 	}
 
+	// ── Graceful Shutdown ─────────────────────────────────────────────────────
+	shutdownChan := make(chan os.Signal, 1)
+	signal.Notify(shutdownChan, syscall.SIGINT, syscall.SIGTERM)
+
+	go func() {
+		<-shutdownChan
+		log.Println("⏳ Shutting down gracefully...")
+
+		// 1. Stop accepting new HTTP requests (30 second drain window)
+		if err := app.ShutdownWithTimeout(30 * time.Second); err != nil {
+			log.Printf("⚠️  App shutdown error: %v", err)
+		}
+
+		// 2. Cancel context → stops schedulers
+		cancelSchedulers()
+
+		// 3. Close WebSocket hub (signals all clients to disconnect)
+		hub.Close()
+
+		// 4. Close database connection pool
+		if sqlDB, err := config.DB.DB(); err == nil {
+			_ = sqlDB.Close()
+		}
+
+		log.Println("✅ Server stopped cleanly")
+	}()
+
 	log.Printf("🚀 Server starting on port %s", port)
-	if err := app.Listen(":" + port); err != nil {
+	if err := app.Listen(":" + port); err != nil && !errors.Is(err, net.ErrClosed) {
 		log.Fatalf("❌ Failed to start server: %v", err)
 	}
 }

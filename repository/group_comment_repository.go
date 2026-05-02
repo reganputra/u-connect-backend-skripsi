@@ -26,7 +26,10 @@ func (r *groupCommentRepository) CreateGroupComment(comment *models.GroupComment
 
 func (r *groupCommentRepository) FindGroupCommentByID(id uint) (*models.GroupComment, error) {
 	var comment models.GroupComment
-	if err := r.db.First(&comment, id).Error; err != nil {
+	if err := r.db.
+		Preload("User").
+		Preload("User.Profile").
+		First(&comment, id).Error; err != nil {
 		return nil, err
 	}
 	return &comment, nil

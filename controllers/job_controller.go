@@ -75,6 +75,28 @@ func (ctrl *JobController) GetJobsHandler(c *fiber.Ctx) error {
 	})
 }
 
+func (ctrl *JobController) GetMyOwnedJobsHandler(c *fiber.Ctx) error {
+	userID, err := getUserIDFromToken(c)
+	if err != nil {
+		return utils.ErrorResponse(c, fiber.StatusUnauthorized, err.Error())
+	}
+
+	page, _ := strconv.Atoi(c.Query("page", "1"))
+	limit, _ := strconv.Atoi(c.Query("limit", "10"))
+
+	jobs, total, err := ctrl.jobSvc.GetMyOwnedJobs(userID, page, limit)
+	if err != nil {
+		return utils.ErrorResponse(c, fiber.StatusInternalServerError, "gagal mengambil lowongan milik pengguna")
+	}
+
+	return utils.SuccessResponse(c, fiber.StatusOK, fiber.Map{
+		"total": total,
+		"page":  page,
+		"limit": limit,
+		"jobs":  jobs,
+	})
+}
+
 func (ctrl *JobController) GetJobByIDHandler(c *fiber.Ctx) error {
 	jobID, err := strconv.ParseUint(c.Params("id"), 10, 64)
 	if err != nil {

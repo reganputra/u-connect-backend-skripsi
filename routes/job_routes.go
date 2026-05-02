@@ -12,6 +12,7 @@ func RegisterJobRoutes(app *fiber.App, ctrl *controllers.JobController) {
 
 	// GET /api/jobs/applications/mine — must be before /:id to avoid conflict
 	jobs.Get("/applications/mine", middleware.RequireRole("student", "alumni"), ctrl.GetMyApplicationsHandler)
+	jobs.Get("/mine/owned", middleware.RequireRole("alumni", "partner"), ctrl.GetMyOwnedJobsHandler)
 	// PUT /api/jobs/applications/:id/status
 	jobs.Put("/applications/:id/status", middleware.RequireRole("alumni", "partner"), ctrl.UpdateApplicationStatusHandler)
 

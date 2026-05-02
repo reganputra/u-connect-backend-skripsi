@@ -1,13 +1,16 @@
 package controllers
 
 import (
+	"errors"
 	"strconv"
 	"time"
 
 	"github.com/gofiber/fiber/v2"
+	"github.com/reganputra/skripsi-backend/repository"
 	"github.com/reganputra/skripsi-backend/service"
 	"github.com/reganputra/skripsi-backend/utils"
 )
+
 
 type EventController struct {
 	eventSvc service.EventService
@@ -58,6 +61,48 @@ func (ctrl *EventController) GetEvents(c *fiber.Ctx) error {
 	if err != nil {
 		return utils.ErrorResponse(c, fiber.StatusInternalServerError, "gagal mengambil data acara")
 	}
+	return utils.SuccessResponse(c, fiber.StatusOK, fiber.Map{
+		"total":  total,
+		"page":   page,
+		"limit":  limit,
+		"events": events,
+	})
+}
+
+func (ctrl *EventController) GetMyOwnedEvents(c *fiber.Ctx) error {
+	userID, err := getUserIDFromToken(c)
+	if err != nil {
+		return utils.ErrorResponse(c, fiber.StatusUnauthorized, err.Error())
+	}
+	page, _ := strconv.Atoi(c.Query("page", "1"))
+	limit, _ := strconv.Atoi(c.Query("limit", "10"))
+
+	events, total, err := ctrl.eventSvc.GetMyOwnedEvents(userID, page, limit)
+	if err != nil {
+		return utils.ErrorResponse(c, fiber.StatusInternalServerError, "gagal mengambil data acara milik pengguna")
+	}
+
+	return utils.SuccessResponse(c, fiber.StatusOK, fiber.Map{
+		"total":  total,
+		"page":   page,
+		"limit":  limit,
+		"events": events,
+	})
+}
+
+func (ctrl *EventController) GetMyRegisteredEvents(c *fiber.Ctx) error {
+	userID, err := getUserIDFromToken(c)
+	if err != nil {
+		return utils.ErrorResponse(c, fiber.StatusUnauthorized, err.Error())
+	}
+	page, _ := strconv.Atoi(c.Query("page", "1"))
+	limit, _ := strconv.Atoi(c.Query("limit", "10"))
+
+	events, total, err := ctrl.eventSvc.GetMyRegisteredEvents(userID, page, limit)
+	if err != nil {
+		return utils.ErrorResponse(c, fiber.StatusInternalServerError, "gagal mengambil data acara terdaftar pengguna")
+	}
+
 	return utils.SuccessResponse(c, fiber.StatusOK, fiber.Map{
 		"total":  total,
 		"page":   page,
@@ -144,10 +189,14 @@ func (ctrl *EventController) RegisterForEvent(c *fiber.Ctx) error {
 		return utils.ErrorResponse(c, fiber.StatusBadRequest, "ID acara tidak valid")
 	}
 	if err := ctrl.eventSvc.RegisterForEvent(userID, uint(eventID)); err != nil {
+		if errors.Is(err, repository.ErrAlreadyRegistered) {
+			return utils.ErrorResponse(c, fiber.StatusConflict, "sudah terdaftar untuk acara ini")
+		}
 		return utils.ErrorResponse(c, fiber.StatusBadRequest, err.Error())
 	}
 	return utils.SuccessResponse(c, fiber.StatusOK, fiber.Map{"message": "berhasil mendaftar"})
 }
+
 
 func (ctrl *EventController) CancelRegistration(c *fiber.Ctx) error {
 	userID, err := getUserIDFromToken(c)

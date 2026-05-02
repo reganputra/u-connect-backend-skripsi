@@ -7,11 +7,12 @@ import (
 
 // ConversationSummary is returned by GetConversationList: last message per conversation partner.
 type ConversationSummary struct {
-	PartnerID      uint   `json:"partner_id"`
-	PartnerName    string `json:"partner_name"`
-	LastMessage    string `json:"last_message"`
-	LastMessageAt  string `json:"last_message_at"`
-	UnreadCount    int64  `json:"unread_count"`
+	PartnerID      uint    `json:"partner_id"`
+	PartnerName    string  `json:"partner_name"`
+	PartnerPicture *string `json:"partner_picture"`
+	LastMessage    string  `json:"last_message"`
+	LastMessageAt  string  `json:"last_message_at"`
+	UnreadCount    int64   `json:"unread_count"`
 }
 
 type MessageRepository interface {
@@ -53,7 +54,9 @@ func (r *messageRepository) GetConversation(userA, userB uint, page, limit int) 
 	offset := (page - 1) * limit
 	err := base.
 		Preload("Sender").
+		Preload("Sender.Profile").
 		Preload("Receiver").
+		Preload("Receiver.Profile").
 		Order("created_at DESC").
 		Offset(offset).Limit(limit).
 		Find(&msgs).Error
@@ -70,6 +73,7 @@ func (r *messageRepository) GetConversationList(userID uint) ([]ConversationSumm
 		SELECT
 			partner_id,
 			u.name AS partner_name,
+			NULLIF(up.profile_picture, '') AS partner_picture,
 			last_msg.content AS last_message,
 			TO_CHAR(last_msg.created_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"') AS last_message_at,
 			COALESCE(unread.cnt, 0) AS unread_count
@@ -101,6 +105,7 @@ func (r *messageRepository) GetConversationList(userID uint) ([]ConversationSumm
 			  AND deleted_at IS NULL
 		) unread ON true
 		JOIN users u ON u.id = partners.partner_id AND u.deleted_at IS NULL
+		LEFT JOIN user_profiles up ON up.user_id = partners.partner_id AND up.deleted_at IS NULL
 		ORDER BY last_msg.created_at DESC
 	`, userID, userID, userID, userID, userID, userID).
 		Scan(&summaries).Error

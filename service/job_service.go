@@ -58,6 +58,7 @@ type JobApplicationRequest struct {
 type JobService interface {
 	CreateJob(userID uint, role string, req JobRequest) (*models.Job, error)
 	GetJobs(search, jobType, status string, page, limit int) ([]models.Job, int64, error)
+	GetMyOwnedJobs(userID uint, page, limit int) ([]models.Job, int64, error)
 	GetJobByID(id uint) (*models.Job, error)
 	UpdateJob(userID, jobID uint, req JobRequest) (*models.Job, error)
 	DeleteJob(userID, jobID uint) error
@@ -65,6 +66,7 @@ type JobService interface {
 	WithdrawApplication(userID uint, role string, jobID uint) error
 	GetApplicants(userID, jobID uint) ([]models.JobApplication, error)
 	GetMyApplications(userID uint) ([]models.JobApplication, error)
+	CountMyApplications(userID uint) (int64, error)
 	UpdateApplicationStatus(userID, applicationID uint, status string) (*models.JobApplication, error)
 }
 
@@ -77,6 +79,7 @@ type jobService struct {
 	userRepo    repository.UserRepository
 	notifSvc    NotificationService
 }
+
 
 func NewJobService(jobRepo repository.JobRepository, jobAppRepo repository.JobApplicationRepository, companyRepo repository.CompanyRepository, userRepo repository.UserRepository, notifSvc NotificationService) JobService {
 	return &jobService{
@@ -192,6 +195,18 @@ func (s *jobService) CreateJob(userID uint, role string, req JobRequest) (*model
 func (s *jobService) GetJobs(search, jobType, status string, page, limit int) ([]models.Job, int64, error) {
 	offset := (page - 1) * limit
 	return s.jobRepo.FindJobs(search, jobType, status, offset, limit)
+}
+
+func (s *jobService) GetMyOwnedJobs(userID uint, page, limit int) ([]models.Job, int64, error) {
+	if page < 1 {
+		page = 1
+	}
+	if limit < 1 || limit > 100 {
+		limit = 10
+	}
+
+	offset := (page - 1) * limit
+	return s.jobRepo.FindJobsByOwner(userID, offset, limit)
 }
 
 func (s *jobService) GetJobByID(id uint) (*models.Job, error) {
@@ -356,6 +371,7 @@ func (s *jobService) GetApplicants(userID, jobID uint) ([]models.JobApplication,
 	}
 
 	for i := range apps {
+		ApplyUserPicture(&apps[i].User)
 		resumeURL := strings.TrimSpace(apps[i].ResumeURL)
 		if resumeURL == "" || !strings.Contains(strings.ToLower(resumeURL), "cloudinary.com") {
 			continue
@@ -376,6 +392,14 @@ func (s *jobService) GetMyApplications(userID uint) ([]models.JobApplication, er
 		return nil, errors.New("gagal mengambil lamaran saya")
 	}
 	return apps, nil
+}
+
+func (s *jobService) CountMyApplications(userID uint) (int64, error) {
+	total, err := s.jobAppRepo.CountApplicationsByUserID(userID)
+	if err != nil {
+		return 0, errors.New("gagal menghitung lamaran saya")
+	}
+	return total, nil
 }
 
 func (s *jobService) UpdateApplicationStatus(userID, applicationID uint, status string) (*models.JobApplication, error) {

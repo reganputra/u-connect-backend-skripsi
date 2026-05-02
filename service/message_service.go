@@ -26,6 +26,8 @@ type messageService struct {
 	followRepo repository.FollowRepository
 }
 
+
+
 func NewMessageService(
 	msgRepo repository.MessageRepository,
 	followRepo repository.FollowRepository,
@@ -76,7 +78,15 @@ func (s *messageService) GetConversation(callerID, partnerID uint, page, limit i
 	if limit <= 0 || limit > 100 {
 		limit = 20
 	}
-	return s.msgRepo.GetConversation(callerID, partnerID, page, limit)
+	msgs, total, err := s.msgRepo.GetConversation(callerID, partnerID, page, limit)
+	if err != nil {
+		return nil, 0, err
+	}
+	for i := range msgs {
+		ApplyUserPicture(&msgs[i].Sender)
+		ApplyUserPicture(&msgs[i].Receiver)
+	}
+	return msgs, total, nil
 }
 
 func (s *messageService) GetConversationList(callerID uint) ([]repository.ConversationSummary, error) {

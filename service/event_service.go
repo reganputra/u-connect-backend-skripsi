@@ -39,6 +39,8 @@ type EventAgendaRequest struct {
 type EventService interface {
 	CreateEvent(userID uint, req EventRequest) (*models.Event, error)
 	GetEvents(page, limit int) ([]models.Event, int64, error)
+	GetMyOwnedEvents(userID uint, page, limit int) ([]models.Event, int64, error)
+	GetMyRegisteredEvents(userID uint, page, limit int) ([]models.Event, int64, error)
 	GetEventByID(id uint) (*models.Event, error)
 	UpdateEvent(userID, eventID uint, req EventRequest) (*models.Event, error)
 	DeleteEvent(userID, eventID uint) error
@@ -56,6 +58,23 @@ type eventService struct {
 	eventRepo  repository.EventRepository
 	agendaRepo repository.EventAgendaRepository
 	regRepo    repository.EventRegistrationRepository
+}
+
+
+func hydrateEventUsers(event *models.Event) {
+	if event == nil {
+		return
+	}
+	ApplyUserPicture(&event.User)
+	for i := range event.Registrations {
+		ApplyUserPicture(&event.Registrations[i].User)
+	}
+}
+
+func hydrateParticipantUsers(regs []models.EventRegistration) {
+	for i := range regs {
+		ApplyUserPicture(&regs[i].User)
+	}
 }
 
 func calculateEventSeatLeft(capacity *int, registeredCount int64) *int {
@@ -83,14 +102,29 @@ func (s *eventService) attachEventRegistrationStats(event *models.Event) error {
 }
 
 func (s *eventService) attachEventsRegistrationStats(events []models.Event) error {
+	if len(events) == 0 {
+		return nil
+	}
+
+	// Collect event IDs and fetch all counts in one query (avoids N+1).
+	eventIDs := make([]uint, 0, len(events))
 	for i := range events {
-		if err := s.attachEventRegistrationStats(&events[i]); err != nil {
-			return err
-		}
+		eventIDs = append(eventIDs, events[i].ID)
+	}
+	counts, err := s.eventRepo.CountEventRegistrationsBatch(eventIDs)
+	if err != nil {
+		return err
+	}
+
+	for i := range events {
+		count := counts[events[i].ID] // zero if not in map (no registrations)
+		events[i].AttendantCount = count
+		events[i].SeatLeft = calculateEventSeatLeft(events[i].Capacity, count)
 	}
 
 	return nil
 }
+
 
 func (s *eventService) syncPastEventStatuses() error {
 	_, err := s.eventRepo.AutoCompletePastEvents(time.Now())
@@ -164,6 +198,54 @@ func (s *eventService) GetEvents(page, limit int) ([]models.Event, int64, error)
 	return events, total, nil
 }
 
+func (s *eventService) GetMyOwnedEvents(userID uint, page, limit int) ([]models.Event, int64, error) {
+	if err := s.syncPastEventStatuses(); err != nil {
+		return nil, 0, errors.New("gagal memperbarui status acara")
+	}
+	if page < 1 {
+		page = 1
+	}
+	if limit < 1 || limit > 100 {
+		limit = 10
+	}
+
+	offset := (page - 1) * limit
+	events, total, err := s.eventRepo.FindEventsByOwner(userID, offset, limit)
+	if err != nil {
+		return nil, 0, err
+	}
+
+	if err := s.attachEventsRegistrationStats(events); err != nil {
+		return nil, 0, errors.New("gagal menghitung peserta acara")
+	}
+
+	return events, total, nil
+}
+
+func (s *eventService) GetMyRegisteredEvents(userID uint, page, limit int) ([]models.Event, int64, error) {
+	if err := s.syncPastEventStatuses(); err != nil {
+		return nil, 0, errors.New("gagal memperbarui status acara")
+	}
+	if page < 1 {
+		page = 1
+	}
+	if limit < 1 || limit > 100 {
+		limit = 10
+	}
+
+	offset := (page - 1) * limit
+	events, total, err := s.regRepo.FindRegisteredEventsByUser(userID, offset, limit)
+	if err != nil {
+		return nil, 0, err
+	}
+
+	if err := s.attachEventsRegistrationStats(events); err != nil {
+		return nil, 0, errors.New("gagal menghitung peserta acara")
+	}
+
+	return events, total, nil
+}
+
 func (s *eventService) GetEventByID(id uint) (*models.Event, error) {
 	if err := s.syncPastEventStatuses(); err != nil {
 		return nil, errors.New("gagal memperbarui status acara")
@@ -176,6 +258,7 @@ func (s *eventService) GetEventByID(id uint) (*models.Event, error) {
 	if err := s.attachEventRegistrationStats(event); err != nil {
 		return nil, errors.New("gagal menghitung peserta acara")
 	}
+	hydrateEventUsers(event)
 
 	return event, nil
 }
@@ -262,7 +345,7 @@ func (s *eventService) RegisterForEvent(userID, eventID uint) error {
 
 	existing, _ := s.regRepo.FindEventRegistration(eventID, userID)
 	if existing != nil {
-		return errors.New("sudah terdaftar untuk acara ini")
+		return repository.ErrAlreadyRegistered
 	}
 
 	if event.Capacity != nil && *event.Capacity > 0 {
@@ -280,10 +363,11 @@ func (s *eventService) RegisterForEvent(userID, eventID uint) error {
 		UserID:  userID,
 	}
 	if err := s.regRepo.CreateEventRegistration(reg); err != nil {
-		return errors.New("gagal mendaftar ke acara")
+		return err // passes ErrAlreadyRegistered through for 409 at controller
 	}
 	return nil
 }
+
 
 func (s *eventService) CancelRegistration(userID, eventID uint) error {
 	_, err := s.eventRepo.FindEventByID(eventID)
@@ -304,7 +388,12 @@ func (s *eventService) GetParticipants(eventID uint) ([]models.EventRegistration
 	if err != nil {
 		return nil, errors.New("acara tidak ditemukan")
 	}
-	return s.regRepo.FindEventParticipants(eventID)
+	regs, err := s.regRepo.FindEventParticipants(eventID)
+	if err != nil {
+		return nil, err
+	}
+	hydrateParticipantUsers(regs)
+	return regs, nil
 }
 
 // ─── Agenda ───────────────────────────────────────────────────────────────────

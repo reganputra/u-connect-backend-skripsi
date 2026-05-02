@@ -705,6 +705,12 @@ Follow System
 - View followers
 - View following
 
+Follow behavior for this iteration:
+
+- Follow is direct and immediate; no pending/request state
+- Duplicate follow pairs are blocked at the database level
+- Duplicate follow attempts return `409 Conflict`
+
 ## 13.3 Fields
 
 Each message contains the following attributes:
@@ -730,3 +736,10 @@ Each message contains the following attributes:
 - Users can view their own conversation history
 - Messages cannot be edited after sending
 - Users cannot access messages from other conversations
+
+## 13.6 Follow Improvement Plan
+
+- Keep the existing straight follow/unfollow flow
+- Enforce a unique follower/following pair in the database
+- Translate duplicate follow races into the existing `409` response
+- Validate the change manually through the API and message flow

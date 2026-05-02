@@ -34,8 +34,15 @@ func (r *followRepository) Follow(followerID, followingID uint) error {
 		FollowerID:  followerID,
 		FollowingID: followingID,
 	}
-	return r.db.Create(&follow).Error
+	if err := r.db.Create(&follow).Error; err != nil {
+		if isDuplicateKeyError(err) {
+			return ErrAlreadyFollowing
+		}
+		return err
+	}
+	return nil
 }
+
 
 func (r *followRepository) Unfollow(followerID, followingID uint) error {
 	return r.db.
