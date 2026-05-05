@@ -4,14 +4,15 @@ import (
 	"github.com/gofiber/fiber/v2"
 	"github.com/reganputra/skripsi-backend/controllers"
 	"github.com/reganputra/skripsi-backend/middleware"
+	"gorm.io/gorm"
 )
 
-func RegisterFeedRoutes(app *fiber.App, ctrl *controllers.FeedController) {
+func RegisterFeedRoutes(app *fiber.App, ctrl *controllers.FeedController, db *gorm.DB) {
 	// ── Posts (/api/feed) ──────────────────────────────────────────────────────
 	feed := app.Group("/api/feed", middleware.Protected())
 
 	feed.Get("/", ctrl.GetPosts)
-	feed.Get("/:id", ctrl.GetPostByID)
+	feed.Get("/:id", middleware.TrackView("post", db), ctrl.GetPostByID)
 	feed.Post("/", middleware.RequireRole("alumni", "student"), ctrl.CreatePost)
 	feed.Put("/:id", middleware.RequireRole("alumni", "student"), ctrl.UpdatePost)
 	feed.Delete("/:id", middleware.RequireRole("alumni", "student"), ctrl.DeletePost)

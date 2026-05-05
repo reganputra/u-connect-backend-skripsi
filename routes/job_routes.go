@@ -4,9 +4,10 @@ import (
 	"github.com/gofiber/fiber/v2"
 	"github.com/reganputra/skripsi-backend/controllers"
 	"github.com/reganputra/skripsi-backend/middleware"
+	"gorm.io/gorm"
 )
 
-func RegisterJobRoutes(app *fiber.App, ctrl *controllers.JobController) {
+func RegisterJobRoutes(app *fiber.App, ctrl *controllers.JobController, db *gorm.DB) {
 	// ── Jobs (/api/jobs) ──────────────────────────────────────────────────────
 	jobs := app.Group("/api/jobs", middleware.Protected())
 
@@ -18,7 +19,7 @@ func RegisterJobRoutes(app *fiber.App, ctrl *controllers.JobController) {
 
 	jobs.Get("/", ctrl.GetJobsHandler)
 	jobs.Post("/", middleware.RequireRole("alumni", "partner"), ctrl.CreateJobHandler)
-	jobs.Get("/:id", ctrl.GetJobByIDHandler)
+	jobs.Get("/:id", middleware.TrackView("job", db), ctrl.GetJobByIDHandler)
 	jobs.Put("/:id", middleware.RequireRole("alumni", "partner"), ctrl.UpdateJobHandler)
 	jobs.Delete("/:id", middleware.RequireRole("alumni", "partner"), ctrl.DeleteJobHandler)
 

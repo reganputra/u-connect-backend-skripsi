@@ -4,9 +4,10 @@ import (
 	"github.com/gofiber/fiber/v2"
 	"github.com/reganputra/skripsi-backend/controllers"
 	"github.com/reganputra/skripsi-backend/middleware"
+	"gorm.io/gorm"
 )
 
-func RegisterEventRoutes(app *fiber.App, ctrl *controllers.EventController) {
+func RegisterEventRoutes(app *fiber.App, ctrl *controllers.EventController, db *gorm.DB) {
 	// ── Events (/api/events) ──────────────────────────────────────────────────
 	events := app.Group("/api/events", middleware.Protected())
 
@@ -14,7 +15,7 @@ func RegisterEventRoutes(app *fiber.App, ctrl *controllers.EventController) {
 	events.Get("/mine/owned", middleware.RequireRole("alumni", "student"), ctrl.GetMyOwnedEvents)
 	events.Get("/mine/registered", middleware.RequireRole("alumni", "student"), ctrl.GetMyRegisteredEvents)
 	events.Post("/", middleware.RequireRole("alumni", "student"), ctrl.CreateEvent)
-	events.Get("/:id", ctrl.GetEventByID)
+	events.Get("/:id", middleware.TrackView("event", db), ctrl.GetEventByID)
 	events.Put("/:id", middleware.RequireRole("alumni", "student"), ctrl.UpdateEvent)
 	events.Delete("/:id", middleware.RequireRole("alumni", "student"), ctrl.DeleteEvent)
 

@@ -26,8 +26,6 @@ import (
 	"gorm.io/gorm"
 )
 
-
-
 func main() {
 
 	log.SetOutput(os.Stdout)
@@ -43,9 +41,6 @@ func main() {
 
 	// Connect to the database
 	config.ConnectDB()
-	if err := cleanupDuplicateFollows(config.DB); err != nil {
-		log.Fatalf("❌ Failed to clean duplicate follows: %v", err)
-	}
 
 	// Initialize Cloudinary
 	config.ConnectCloudinary()
@@ -79,10 +74,16 @@ func main() {
 		&models.Follow{},
 		&models.Message{},
 		&models.Notification{},
+		&models.PageView{},
+		&models.DailyAnalyticsSnapshot{},
 	); err != nil {
 		log.Fatalf("❌ AutoMigrate failed: %v", err)
 	}
 	log.Println("✅ Database migrated successfully!")
+
+	if err := cleanupDuplicateFollows(config.DB); err != nil {
+		log.Fatalf("❌ Failed to clean duplicate follows: %v", err)
+	}
 
 	seedGeneralCategory(config.DB)
 
@@ -150,10 +151,10 @@ func main() {
 	routes.SetupDirectoryRoutes(app, c.DirectoryCtrl)
 	routes.RegisterCompanyRoutes(app, c.CompanyCtrl)
 	routes.RegisterPortfolioRoutes(app, c.PortfolioCtrl)
-	routes.RegisterFeedRoutes(app, c.FeedCtrl)
-	routes.RegisterGroupRoutes(app, c.GroupCtrl)
-	routes.RegisterEventRoutes(app, c.EventCtrl)
-	routes.RegisterJobRoutes(app, c.JobCtrl)
+	routes.RegisterFeedRoutes(app, c.FeedCtrl, db)
+	routes.RegisterGroupRoutes(app, c.GroupCtrl, db)
+	routes.RegisterEventRoutes(app, c.EventCtrl, db)
+	routes.RegisterJobRoutes(app, c.JobCtrl, db)
 	routes.RegisterReportRoutes(app, c.ReportCtrl)
 	routes.RegisterAdminRoutes(app, c.AdminCtrl)
 	routes.RegisterMentorRoutes(app, c.MentorCtrl)
@@ -161,11 +162,19 @@ func main() {
 	routes.SetupMessageRoutes(app, c.MessageCtrl, hub, c.MessageSvc, c.UserRepo, c.NotifSvc)
 	routes.SetupNotificationRoutes(app, c.NotifCtrl)
 	routes.RegisterActivityRoutes(app, c.ActivityCtrl)
+	routes.RegisterAnalyticsRoutes(app, c.AnalyticsCtrl)
 
 	// ── Background Schedulers (with context for graceful shutdown) ──────────────
 	schedulerCtx, cancelSchedulers := context.WithCancel(context.Background())
 	go scheduler.StartEventReminderScheduler(schedulerCtx, db, c.NotifSvc)
 	go scheduler.StartEventStatusScheduler(schedulerCtx, db)
+	go scheduler.StartAnalyticsSnapshotScheduler(schedulerCtx, c.AnalyticsCtrl.Svc())
+	// Backfill: compute snapshots for last 90 days on first boot
+	go func() {
+		if err := c.AnalyticsCtrl.Svc().BackfillSnapshots(90); err != nil {
+			log.Printf("[analytics] backfill error: %v", err)
+		}
+	}()
 
 	// ── Start server ──────────────────────────────────────────────────────────
 	port := os.Getenv("APP_PORT")

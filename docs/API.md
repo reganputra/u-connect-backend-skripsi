@@ -2007,6 +2007,93 @@ Each successful direct deletion sends `content_deleted_by_admin` to the deleted 
 
 ---
 
+### Engagement Analytics
+
+Analytics provide a compact admin dashboard for core engagement metrics only.
+
+| Method | Endpoint                           | Auth  | Description                           |
+| ------ | ---------------------------------- | ----- | ------------------------------------- |
+| GET    | `/api/admin/analytics/overview`    | admin | KPI summary + latest snapshot values  |
+| GET    | `/api/admin/analytics/trends`      | admin | Daily trend series (default 30 days)  |
+| GET    | `/api/admin/analytics/top-content` | admin | Top N items by views (default 7 days) |
+
+**GET `/api/admin/analytics/overview` response `200`:**
+
+```json
+{
+  "success": true,
+  "data": {
+    "total_reactions": 9800,
+    "total_comments": 4300,
+    "new_users_last_7d": 48,
+    "yesterday": {
+      "active_users": 142,
+      "post_views": 320,
+      "group_views": 210
+    }
+  }
+}
+```
+
+Notes:
+
+- `total_reactions` and `total_comments` are lifetime totals.
+- `new_users_last_7d` is a rolling 7-day count.
+- `yesterday.active_users`, `yesterday.post_views`, and `yesterday.group_views` come from the latest completed daily snapshot.
+
+**GET `/api/admin/analytics/trends` query params:** `?days=30`
+
+**Response `200`:**
+
+```json
+{
+  "success": true,
+  "data": {
+    "days": 30,
+    "data": [
+      {
+        "date": "2026-04-05",
+        "active_users": 98,
+        "new_users": 5,
+        "post_views": 280,
+        "group_views": 210
+      }
+    ]
+  }
+}
+```
+
+**GET `/api/admin/analytics/top-content` query params:** `?type=post&days=7&limit=10`
+
+`type` must be one of: `post`, `group`.
+
+**Response `200`:**
+
+```json
+{
+  "success": true,
+  "data": {
+    "type": "post",
+    "days": 7,
+    "limit": 10,
+    "data": [
+      {
+        "target_id": 42,
+        "view_count": 180
+      }
+    ]
+  }
+}
+```
+
+#### Frontend Notes
+
+- `Total Views` is not returned as a separate backend field; derive it in FE as `post_views + group_views` if needed.
+- The trend chart can use `date` for the x-axis and `active_users`, `new_users`, `post_views`, `group_views` for the y-series.
+- For top content, only `Posts` and `Groups` are supported in this simplified contract.
+
+---
+
 ## Categories
 
 Categories are readable by any authenticated user, but writes are admin-only.
