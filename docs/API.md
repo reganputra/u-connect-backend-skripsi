@@ -2009,14 +2009,13 @@ Each successful direct deletion sends `content_deleted_by_admin` to the deleted 
 
 ### Engagement Analytics
 
-Analytics provide lifetime counts, daily aggregated trends, and top content view metrics.
+Analytics provide a compact admin dashboard for core engagement metrics only.
 
-| Method | Endpoint | Auth | Description |
-|---|---|---|---|
-| GET | `/api/admin/analytics/overview` | admin | Lifetime stats + yesterday's snapshot |
-| GET | `/api/admin/analytics/trends` | admin | Array of daily snapshots (default 30 days) |
-| GET | `/api/admin/analytics/top-content` | admin | Top N items by views (default 7 days) |
-| GET | `/api/admin/analytics/users` | admin | Active & new users over time (default 30 days) |
+| Method | Endpoint                           | Auth  | Description                           |
+| ------ | ---------------------------------- | ----- | ------------------------------------- |
+| GET    | `/api/admin/analytics/overview`    | admin | KPI summary + latest snapshot values  |
+| GET    | `/api/admin/analytics/trends`      | admin | Daily trend series (default 30 days)  |
+| GET    | `/api/admin/analytics/top-content` | admin | Top N items by views (default 7 days) |
 
 **GET `/api/admin/analytics/overview` response `200`:**
 
@@ -2024,56 +2023,23 @@ Analytics provide lifetime counts, daily aggregated trends, and top content view
 {
   "success": true,
   "data": {
-    "lifetime": {
-      "total_users": 1240,
-      "active_users": 1100,
-      "total_posts": 3200,
-      "total_groups": 45,
-      "total_events": 120,
-      "total_jobs": 87,
-      "total_reactions": 9800,
-      "total_comments": 4300,
-      "total_votes": 2100,
-      "total_event_registrations": 560,
-      "total_job_applications": 310,
-      "total_follows": 2800,
-      "total_messages": 15400,
-      "reports_pending": 12,
-      "users_by_role": {
-        "alumni": 800,
-        "student": 400,
-        "partner": 30,
-        "admin": 10
-      },
-      "new_users_last_7d": 48,
-      "new_users_last_30d": 190
-    },
-    "yesterday": {
-      "ID": 14,
-      "Date": "2026-05-03T00:00:00Z",
-      "ActiveUsers": 142,
-      "NewUsers": 8,
-      "NewPosts": 12,
-      "NewEvents": 2,
-      "NewJobs": 3,
-      "NewArticles": 5,
-      "NewRegistrations": 20,
-      "NewApplications": 15,
-      "NewFollows": 35,
-      "NewMessages": 150,
-      "TotalReactions": 198,
-      "TotalComments": 76,
-      "TotalVotes": 41,
-      "PostViews": 320,
-      "EventViews": 88,
-      "JobViews": 55,
-      "GroupViews": 210
-    },
+    "total_reactions": 9800,
+    "total_comments": 4300,
     "new_users_last_7d": 48,
-    "new_users_last_30d": 190
+    "yesterday": {
+      "active_users": 142,
+      "post_views": 320,
+      "group_views": 210
+    }
   }
 }
 ```
+
+Notes:
+
+- `total_reactions` and `total_comments` are lifetime totals.
+- `new_users_last_7d` is a rolling 7-day count.
+- `yesterday.active_users`, `yesterday.post_views`, and `yesterday.group_views` come from the latest completed daily snapshot.
 
 **GET `/api/admin/analytics/trends` query params:** `?days=30`
 
@@ -2086,12 +2052,11 @@ Analytics provide lifetime counts, daily aggregated trends, and top content view
     "days": 30,
     "data": [
       {
-        "ID": 1,
-        "Date": "2026-04-05T00:00:00Z",
-        "ActiveUsers": 98,
-        "NewUsers": 5,
-        "PostViews": 280
-        // ... (other DailyAnalyticsSnapshot fields)
+        "date": "2026-04-05",
+        "active_users": 98,
+        "new_users": 5,
+        "post_views": 280,
+        "group_views": 210
       }
     ]
   }
@@ -2099,7 +2064,8 @@ Analytics provide lifetime counts, daily aggregated trends, and top content view
 ```
 
 **GET `/api/admin/analytics/top-content` query params:** `?type=post&days=7&limit=10`
-* `type` must be one of: `post`, `event`, `job`, `group`.
+
+`type` must be one of: `post`, `group`.
 
 **Response `200`:**
 
@@ -2120,25 +2086,11 @@ Analytics provide lifetime counts, daily aggregated trends, and top content view
 }
 ```
 
-**GET `/api/admin/analytics/users` query params:** `?days=30`
+#### Frontend Notes
 
-**Response `200`:**
-
-```json
-{
-  "success": true,
-  "data": {
-    "days": 30,
-    "data": [
-      {
-        "date": "2026-04-05",
-        "active_users": 98,
-        "new_users": 5
-      }
-    ]
-  }
-}
-```
+- `Total Views` is not returned as a separate backend field; derive it in FE as `post_views + group_views` if needed.
+- The trend chart can use `date` for the x-axis and `active_users`, `new_users`, `post_views`, `group_views` for the y-series.
+- For top content, only `Posts` and `Groups` are supported in this simplified contract.
 
 ---
 

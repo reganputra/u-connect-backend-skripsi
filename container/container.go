@@ -33,6 +33,7 @@ type AppContainer struct {
 	MessageCtrl   *controllers.MessageController
 	NotifCtrl     *controllers.NotificationController
 	ActivityCtrl  *controllers.ActivityController
+	AnalyticsCtrl *controllers.AnalyticsController
 }
 
 // Build wires up all dependencies and returns the container.
@@ -65,6 +66,7 @@ func Build(db *gorm.DB, hub *ws.Hub) *AppContainer {
 	followRepo := repository.NewFollowRepository(db)
 	messageRepo := repository.NewMessageRepository(db)
 	notifRepo := repository.NewNotificationRepository(db)
+	analyticsRepo := repository.NewAnalyticsRepository(db)
 
 	if err := profileRepo.BackfillMissingPartnerProfiles(); err != nil {
 		log.Fatalf("❌ Failed to backfill partner profiles: %v", err)
@@ -86,6 +88,7 @@ func Build(db *gorm.DB, hub *ws.Hub) *AppContainer {
 	mentorSvc := service.NewMentorService(profileRepo, mentorRepo, mentorRequestRepo, mentoringSessionRepo, recommendSvc, userRepo, notifSvc)
 	followSvc := service.NewFollowService(followRepo, userRepo, notifSvc)
 	messageSvc := service.NewMessageService(messageRepo, followRepo)
+	analyticsSvc := service.NewAnalyticsService(analyticsRepo)
 
 	// ── Controllers ───────────────────────────────────────────────────────────
 	return &AppContainer{
@@ -108,5 +111,6 @@ func Build(db *gorm.DB, hub *ws.Hub) *AppContainer {
 		MessageCtrl:   controllers.NewMessageController(messageSvc),
 		NotifCtrl:     controllers.NewNotificationController(notifSvc),
 		ActivityCtrl:  controllers.NewActivityController(eventSvc, jobSvc, groupSvc),
+		AnalyticsCtrl: controllers.NewAnalyticsController(analyticsSvc),
 	}
 }

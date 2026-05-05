@@ -4,9 +4,10 @@ import (
 	"github.com/gofiber/fiber/v2"
 	"github.com/reganputra/skripsi-backend/controllers"
 	"github.com/reganputra/skripsi-backend/middleware"
+	"gorm.io/gorm"
 )
 
-func RegisterGroupRoutes(app *fiber.App, ctrl *controllers.GroupController) {
+func RegisterGroupRoutes(app *fiber.App, ctrl *controllers.GroupController, db *gorm.DB) {
 	// ── Groups (/api/groups) ───────────────────────────────────────────────────
 	groups := app.Group("/api/groups", middleware.Protected())
 
@@ -14,7 +15,7 @@ func RegisterGroupRoutes(app *fiber.App, ctrl *controllers.GroupController) {
 	groups.Get("/joined", middleware.RequireRole("alumni", "student"), ctrl.GetJoinedGroups)
 	groups.Get("/owned", middleware.RequireRole("alumni", "student"), ctrl.GetOwnedGroups)
 	groups.Post("/", middleware.RequireRole("alumni", "student"), ctrl.CreateGroup)
-	groups.Get("/:id", ctrl.GetGroupByID)
+	groups.Get("/:id", middleware.TrackView("group", db), ctrl.GetGroupByID)
 	groups.Put("/:id", middleware.RequireRole("alumni", "student"), ctrl.UpdateGroup)
 	groups.Delete("/:id", middleware.RequireRole("alumni", "student"), ctrl.DeleteGroup)
 
