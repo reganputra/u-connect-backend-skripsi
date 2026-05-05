@@ -2007,6 +2007,141 @@ Each successful direct deletion sends `content_deleted_by_admin` to the deleted 
 
 ---
 
+### Engagement Analytics
+
+Analytics provide lifetime counts, daily aggregated trends, and top content view metrics.
+
+| Method | Endpoint | Auth | Description |
+|---|---|---|---|
+| GET | `/api/admin/analytics/overview` | admin | Lifetime stats + yesterday's snapshot |
+| GET | `/api/admin/analytics/trends` | admin | Array of daily snapshots (default 30 days) |
+| GET | `/api/admin/analytics/top-content` | admin | Top N items by views (default 7 days) |
+| GET | `/api/admin/analytics/users` | admin | Active & new users over time (default 30 days) |
+
+**GET `/api/admin/analytics/overview` response `200`:**
+
+```json
+{
+  "success": true,
+  "data": {
+    "lifetime": {
+      "total_users": 1240,
+      "active_users": 1100,
+      "total_posts": 3200,
+      "total_groups": 45,
+      "total_events": 120,
+      "total_jobs": 87,
+      "total_reactions": 9800,
+      "total_comments": 4300,
+      "total_votes": 2100,
+      "total_event_registrations": 560,
+      "total_job_applications": 310,
+      "total_follows": 2800,
+      "total_messages": 15400,
+      "reports_pending": 12,
+      "users_by_role": {
+        "alumni": 800,
+        "student": 400,
+        "partner": 30,
+        "admin": 10
+      },
+      "new_users_last_7d": 48,
+      "new_users_last_30d": 190
+    },
+    "yesterday": {
+      "ID": 14,
+      "Date": "2026-05-03T00:00:00Z",
+      "ActiveUsers": 142,
+      "NewUsers": 8,
+      "NewPosts": 12,
+      "NewEvents": 2,
+      "NewJobs": 3,
+      "NewArticles": 5,
+      "NewRegistrations": 20,
+      "NewApplications": 15,
+      "NewFollows": 35,
+      "NewMessages": 150,
+      "TotalReactions": 198,
+      "TotalComments": 76,
+      "TotalVotes": 41,
+      "PostViews": 320,
+      "EventViews": 88,
+      "JobViews": 55,
+      "GroupViews": 210
+    },
+    "new_users_last_7d": 48,
+    "new_users_last_30d": 190
+  }
+}
+```
+
+**GET `/api/admin/analytics/trends` query params:** `?days=30`
+
+**Response `200`:**
+
+```json
+{
+  "success": true,
+  "data": {
+    "days": 30,
+    "data": [
+      {
+        "ID": 1,
+        "Date": "2026-04-05T00:00:00Z",
+        "ActiveUsers": 98,
+        "NewUsers": 5,
+        "PostViews": 280
+        // ... (other DailyAnalyticsSnapshot fields)
+      }
+    ]
+  }
+}
+```
+
+**GET `/api/admin/analytics/top-content` query params:** `?type=post&days=7&limit=10`
+* `type` must be one of: `post`, `event`, `job`, `group`.
+
+**Response `200`:**
+
+```json
+{
+  "success": true,
+  "data": {
+    "type": "post",
+    "days": 7,
+    "limit": 10,
+    "data": [
+      {
+        "target_id": 42,
+        "view_count": 180
+      }
+    ]
+  }
+}
+```
+
+**GET `/api/admin/analytics/users` query params:** `?days=30`
+
+**Response `200`:**
+
+```json
+{
+  "success": true,
+  "data": {
+    "days": 30,
+    "data": [
+      {
+        "date": "2026-04-05",
+        "active_users": 98,
+        "new_users": 5
+      }
+    ]
+  }
+}
+```
+
+---
+
 ## Categories
 
 Categories are readable by any authenticated user, but writes are admin-only.
