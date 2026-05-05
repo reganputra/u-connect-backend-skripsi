@@ -41,9 +41,6 @@ func main() {
 
 	// Connect to the database
 	config.ConnectDB()
-	if err := cleanupDuplicateFollows(config.DB); err != nil {
-		log.Fatalf("❌ Failed to clean duplicate follows: %v", err)
-	}
 
 	// Initialize Cloudinary
 	config.ConnectCloudinary()
@@ -83,6 +80,10 @@ func main() {
 		log.Fatalf("❌ AutoMigrate failed: %v", err)
 	}
 	log.Println("✅ Database migrated successfully!")
+
+	if err := cleanupDuplicateFollows(config.DB); err != nil {
+		log.Fatalf("❌ Failed to clean duplicate follows: %v", err)
+	}
 
 	seedGeneralCategory(config.DB)
 
