@@ -1,0 +1,8 @@
+/.git
+/.kilo
+/bin
+/vendor
+*.log
+*.tmp
+.env
+node_modules
