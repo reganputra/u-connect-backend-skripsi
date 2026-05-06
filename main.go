@@ -44,51 +44,55 @@ func main() {
 
 	// Initialize Cloudinary
 	config.ConnectCloudinary()
-	// Auto-migrate models
-	if err := config.DB.AutoMigrate(
-		&models.User{},
-		&models.UserProfile{},
-		&models.UserExperience{},
-		&models.CompanyProfile{},
-		&models.PortfolioItem{},
-		&models.Post{},
-		&models.PostImage{},
-		&models.Comment{},
-		&models.Reaction{},
-		&models.Vote{},
-		&models.Group{},
-		&models.GroupMember{},
-		&models.GroupArticle{},
-		&models.GroupArticleImage{},
-		&models.GroupComment{},
-		&models.GroupReaction{},
-		&models.Event{},
-		&models.EventAgenda{},
-		&models.EventRegistration{},
-		&models.Job{},
-		&models.JobApplication{},
-		&models.Report{},
-		&models.Category{},
-		&models.MentorRequest{},
-		&models.MentoringSession{},
-		&models.Follow{},
-		&models.Message{},
-		&models.Notification{},
-		&models.PageView{},
-		&models.DailyAnalyticsSnapshot{},
-	); err != nil {
-		log.Fatalf("❌ AutoMigrate failed: %v", err)
-	}
-	log.Println("✅ Database migrated successfully!")
 
-	if err := cleanupDuplicateFollows(config.DB); err != nil {
-		log.Fatalf("❌ Failed to clean duplicate follows: %v", err)
-	}
+	// ── Background: migrate + seed (runs after HTTP server is already listening) ──
+	// This ensures the server responds to Back4App's health-check immediately
+	// instead of timing out while AutoMigrate runs 20+ slow SQL queries.
+	go func() {
+		if err := config.DB.AutoMigrate(
+			&models.User{},
+			&models.UserProfile{},
+			&models.UserExperience{},
+			&models.CompanyProfile{},
+			&models.PortfolioItem{},
+			&models.Post{},
+			&models.PostImage{},
+			&models.Comment{},
+			&models.Reaction{},
+			&models.Vote{},
+			&models.Group{},
+			&models.GroupMember{},
+			&models.GroupArticle{},
+			&models.GroupArticleImage{},
+			&models.GroupComment{},
+			&models.GroupReaction{},
+			&models.Event{},
+			&models.EventAgenda{},
+			&models.EventRegistration{},
+			&models.Job{},
+			&models.JobApplication{},
+			&models.Report{},
+			&models.Category{},
+			&models.MentorRequest{},
+			&models.MentoringSession{},
+			&models.Follow{},
+			&models.Message{},
+			&models.Notification{},
+			&models.PageView{},
+			&models.DailyAnalyticsSnapshot{},
+		); err != nil {
+			log.Printf("❌ AutoMigrate failed: %v", err)
+			return
+		}
+		log.Println("✅ Database migrated successfully!")
 
-	seedGeneralCategory(config.DB)
+		if err := cleanupDuplicateFollows(config.DB); err != nil {
+			log.Printf("❌ Failed to clean duplicate follows: %v", err)
+		}
 
-	// ── Admin Seeder ──────────────────────────────────────────────────────────
-	seedAdmin(config.DB)
+		seedGeneralCategory(config.DB)
+		seedAdmin(config.DB)
+	}()
 
 	db := config.DB
 
