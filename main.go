@@ -177,7 +177,12 @@ func main() {
 	}()
 
 	// ── Start server ──────────────────────────────────────────────────────────
-	port := os.Getenv("APP_PORT")
+	// Prefer the `PORT` env var (platforms like Vercel provide this),
+	// fall back to `APP_PORT`, then to `8080` for local dev.
+	port := os.Getenv("PORT")
+	if port == "" {
+		port = os.Getenv("APP_PORT")
+	}
 	if port == "" {
 		port = "8080"
 	}
