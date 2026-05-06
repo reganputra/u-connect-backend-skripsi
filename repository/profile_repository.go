@@ -116,6 +116,7 @@ func (r *profileRepository) DeleteExperience(id uint) error {
 }
 
 // GetAllProfiles returns paginated list of all user profiles (newest first).
+// Uses LEFT JOIN so users who haven't completed their profile still appear.
 func (r *profileRepository) GetAllProfiles(page, limit int) ([]DirectorySummary, int64, error) {
 	if page <= 0 {
 		page = 1
@@ -128,14 +129,16 @@ func (r *profileRepository) GetAllProfiles(page, limit int) ([]DirectorySummary,
 	var total int64
 
 	base := r.db.
-		Table("user_profiles as up").
+		Table("users as u").
 		Select(
-			"up.user_id, u.name, u.role, up.profile_picture, up.bio, up.location, "+
-				"up.job_status, up.position, up.company_name, up.skills, up.interests, up.mentor_description",
+			"u.id AS user_id, u.name, u.role, "+
+				"COALESCE(up.profile_picture, '') AS profile_picture, "+
+				"up.bio, up.location, up.job_status, up.position, up.company_name, "+
+				"up.skills, up.interests, up.mentor_description",
 		).
-		Joins("JOIN users u ON u.id = up.user_id").
+		Joins("LEFT JOIN user_profiles up ON up.user_id = u.id").
 		Where("u.role IN (?, ?, ?) AND u.is_active = true", "student", "alumni", "partner").
-		Order("up.created_at DESC")
+		Order("u.created_at DESC")
 
 	base.Count(&total)
 
@@ -160,18 +163,20 @@ func (r *profileRepository) SearchProfiles(query string, page, limit int) ([]Dir
 	searchPattern := "%" + query + "%"
 
 	base := r.db.
-		Table("user_profiles as up").
+		Table("users as u").
 		Select(
-			"up.user_id, u.name, u.role, up.profile_picture, up.bio, up.location, "+
-				"up.job_status, up.position, up.company_name, up.skills, up.interests, up.mentor_description",
+			"u.id AS user_id, u.name, u.role, "+
+				"COALESCE(up.profile_picture, '') AS profile_picture, "+
+				"up.bio, up.location, up.job_status, up.position, up.company_name, "+
+				"up.skills, up.interests, up.mentor_description",
 		).
-		Joins("JOIN users u ON u.id = up.user_id").
+		Joins("LEFT JOIN user_profiles up ON up.user_id = u.id").
 		Where("u.role IN (?, ?, ?) AND u.is_active = true", "student", "alumni", "partner").
 		Where(
 			"u.name ILIKE ? OR up.skills ILIKE ? OR up.company_name ILIKE ? OR up.interests ILIKE ?",
 			searchPattern, searchPattern, searchPattern, searchPattern,
 		).
-		Order("up.created_at DESC")
+		Order("u.created_at DESC")
 
 	base.Count(&total)
 
@@ -199,14 +204,16 @@ func (r *profileRepository) GetProfilesByRole(role string, page, limit int) ([]D
 	var total int64
 
 	base := r.db.
-		Table("user_profiles as up").
+		Table("users as u").
 		Select(
-			"up.user_id, u.name, u.role, up.profile_picture, up.bio, up.location, "+
-				"up.job_status, up.position, up.company_name, up.skills, up.interests, up.mentor_description",
+			"u.id AS user_id, u.name, u.role, "+
+				"COALESCE(up.profile_picture, '') AS profile_picture, "+
+				"up.bio, up.location, up.job_status, up.position, up.company_name, "+
+				"up.skills, up.interests, up.mentor_description",
 		).
-		Joins("JOIN users u ON u.id = up.user_id").
+		Joins("LEFT JOIN user_profiles up ON up.user_id = u.id").
 		Where("u.role = ? AND u.is_active = true", role).
-		Order("up.created_at DESC")
+		Order("u.created_at DESC")
 
 	base.Count(&total)
 
