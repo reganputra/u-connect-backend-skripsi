@@ -1,6 +1,8 @@
 package controllers
 
 import (
+	"strconv"
+
 	"github.com/gofiber/fiber/v2"
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/reganputra/skripsi-backend/service"
@@ -76,5 +78,55 @@ func (ctrl *AuthController) Me(c *fiber.Ctx) error {
 		"user_id": user.ID,
 		"email":   user.Email,
 		"role":    user.Role,
+	})
+}
+
+func (ctrl *AuthController) ChangePassword(c *fiber.Ctx) error {
+	userID, err := getUserIDFromToken(c)
+	if err != nil {
+		return utils.ErrorResponse(c, fiber.StatusUnauthorized, err.Error())
+	}
+
+	var req service.ChangePasswordRequest
+	if err := c.BodyParser(&req); err != nil {
+		return utils.ErrorResponse(c, fiber.StatusBadRequest, "isi permintaan tidak valid")
+	}
+
+	if err := ctrl.authSvc.ChangePassword(userID, req); err != nil {
+		return utils.ErrorResponse(c, fiber.StatusBadRequest, err.Error())
+	}
+
+	return utils.SuccessResponse(c, fiber.StatusOK, fiber.Map{
+		"message": "password berhasil diperbarui",
+	})
+}
+
+func (ctrl *AuthController) ForgotPassword(c *fiber.Ctx) error {
+	var req service.ForgotPasswordRequest
+	if err := c.BodyParser(&req); err != nil {
+		return utils.ErrorResponse(c, fiber.StatusBadRequest, "isi permintaan tidak valid")
+	}
+
+	if err := ctrl.authSvc.ForgotPassword(req); err != nil {
+		return utils.ErrorResponse(c, fiber.StatusBadRequest, err.Error())
+	}
+
+	return utils.SuccessResponse(c, fiber.StatusOK, fiber.Map{
+		"message": "password berhasil direset, silakan login dengan password baru",
+	})
+}
+
+func (ctrl *AuthController) UnlockUserReset(c *fiber.Ctx) error {
+	id, err := strconv.ParseUint(c.Params("id"), 10, 64)
+	if err != nil {
+		return utils.ErrorResponse(c, fiber.StatusBadRequest, "id tidak valid")
+	}
+
+	if err := ctrl.authSvc.UnlockUserReset(uint(id)); err != nil {
+		return utils.ErrorResponse(c, fiber.StatusBadRequest, err.Error())
+	}
+
+	return utils.SuccessResponse(c, fiber.StatusOK, fiber.Map{
+		"message": "akun berhasil dibuka kuncinya",
 	})
 }

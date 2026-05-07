@@ -2,6 +2,7 @@ package service
 
 import (
 	"errors"
+	"fmt"
 	"os"
 	"strings"
 	"time"
@@ -38,6 +39,21 @@ type LoginRequest struct {
 	Password string `json:"password"`
 }
 
+type ChangePasswordRequest struct {
+	OldPassword     string `json:"old_password"`
+	NewPassword     string `json:"new_password"`
+	ConfirmPassword string `json:"confirm_password"`
+}
+
+type ForgotPasswordRequest struct {
+	Email           string `json:"email"`
+	Faculty         string `json:"faculty"`
+	Major           string `json:"major"`
+	YearEnroll      int    `json:"year_enroll"`
+	NewPassword     string `json:"new_password"`
+	ConfirmPassword string `json:"confirm_password"`
+}
+
 type AuthUserPayload struct {
 	ID          uint    `json:"id"`
 	Name        string  `json:"name"`
@@ -69,6 +85,9 @@ type AuthService interface {
 	Register(req RegisterRequest) (*models.User, error)
 	Login(req LoginRequest) (*LoginResponse, error)
 	Me(userID uint) (*AuthUserPayload, error)
+	ChangePassword(userID uint, req ChangePasswordRequest) error
+	ForgotPassword(req ForgotPasswordRequest) error
+	UnlockUserReset(userID uint) error
 }
 
 // ─── Implementation ───────────────────────────────────────────────────────────
@@ -210,4 +229,100 @@ func (s *authService) buildAuthUser(user *models.User) (*AuthUserPayload, error)
 		YearEnroll:  user.YearEnroll,
 		CompanyName: user.CompanyName,
 	}, nil
+}
+
+func (s *authService) ChangePassword(userID uint, req ChangePasswordRequest) error {
+	if req.OldPassword == "" || req.NewPassword == "" || req.ConfirmPassword == "" {
+		return errors.New("semua field wajib diisi")
+	}
+	if len(req.NewPassword) < 8 {
+		return errors.New("password baru minimal 8 karakter")
+	}
+	if req.NewPassword != req.ConfirmPassword {
+		return errors.New("konfirmasi password tidak cocok")
+	}
+
+	user, err := s.userRepo.FindUserByID(userID)
+	if err != nil {
+		return errors.New("pengguna tidak ditemukan")
+	}
+
+	if err := bcrypt.CompareHashAndPassword([]byte(user.Password), []byte(req.OldPassword)); err != nil {
+		return errors.New("password lama tidak sesuai")
+	}
+
+	hashed, err := bcrypt.GenerateFromPassword([]byte(req.NewPassword), bcrypt.DefaultCost)
+	if err != nil {
+		return errors.New("gagal mengenkripsi password baru")
+	}
+
+	return s.userRepo.UpdateUserPassword(userID, string(hashed))
+}
+
+const maxResetAttempts = 3
+
+func (s *authService) ForgotPassword(req ForgotPasswordRequest) error {
+	if req.Email == "" || req.Faculty == "" || req.Major == "" || req.YearEnroll == 0 {
+		return errors.New("email, fakultas, jurusan, dan tahun masuk wajib diisi")
+	}
+	if req.NewPassword == "" || req.ConfirmPassword == "" {
+		return errors.New("password baru dan konfirmasi wajib diisi")
+	}
+	if len(req.NewPassword) < 8 {
+		return errors.New("password baru minimal 8 karakter")
+	}
+	if req.NewPassword != req.ConfirmPassword {
+		return errors.New("konfirmasi password tidak cocok")
+	}
+
+	user, err := s.userRepo.FindUserByEmail(strings.ToLower(strings.TrimSpace(req.Email)))
+	if err != nil {
+		// Generic message — don't reveal whether email exists
+		return errors.New("data yang dimasukkan tidak cocok")
+	}
+
+	// Check if locked
+	if user.ResetAttempts >= maxResetAttempts {
+		return errors.New("akun terkunci karena terlalu banyak percobaan reset, hubungi admin")
+	}
+
+	// Verify identity: faculty + major + year_enroll must match
+	userFaculty := ""
+	if user.Faculty != nil {
+		userFaculty = strings.TrimSpace(*user.Faculty)
+	}
+	userMajor := ""
+	if user.Major != nil {
+		userMajor = strings.TrimSpace(*user.Major)
+	}
+	userYear := 0
+	if user.YearEnroll != nil {
+		userYear = *user.YearEnroll
+	}
+
+	if !strings.EqualFold(userFaculty, strings.TrimSpace(req.Faculty)) ||
+		!strings.EqualFold(userMajor, strings.TrimSpace(req.Major)) ||
+		userYear != req.YearEnroll {
+		// Increment attempts; lock if limit reached
+		_ = s.userRepo.IncrementResetAttempts(user.ID)
+		remaining := maxResetAttempts - user.ResetAttempts - 1
+		if remaining <= 0 {
+			return errors.New("data tidak cocok — akun terkunci karena terlalu banyak percobaan, hubungi admin")
+		}
+		return errors.New(fmt.Sprintf("data yang dimasukkan tidak cocok (%d percobaan tersisa)", remaining))
+	}
+
+	hashed, err := bcrypt.GenerateFromPassword([]byte(req.NewPassword), bcrypt.DefaultCost)
+	if err != nil {
+		return errors.New("gagal mengenkripsi password")
+	}
+
+	return s.userRepo.ResetPasswordAndClearAttempts(user.ID, string(hashed))
+}
+
+func (s *authService) UnlockUserReset(userID uint) error {
+	if _, err := s.userRepo.FindUserByID(userID); err != nil {
+		return errors.New("pengguna tidak ditemukan")
+	}
+	return s.userRepo.UnlockResetAttempts(userID)
 }

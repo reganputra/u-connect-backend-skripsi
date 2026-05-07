@@ -21,10 +21,10 @@ Request body must include `Content-Type: application/json` for JSON endpoints or
 - [Jobs](#jobs)
 - [Content Reporting](#content-reporting)
 - [Notifications](#notifications)
-- [Admin Module](#admin-module)
 - [Categories](#categories)
 - [Mentoring Module](#mentoring-module)
 - [Message Module](#message-module)
+- [Follow Module](#follow-module)
 - [Cloudinary Upload Reference](#cloudinary-upload-reference)
 
 ---
@@ -286,6 +286,101 @@ Notes:
 > For backward compatibility, `user_id`, `email`, and `role` are still included at the top level of `data`.
 > For `partner` accounts, the nested `user` object also includes `company_name` so the frontend can detect company onboarding without an extra `/api/company` call.
 
+---
+
+### POST `/api/auth/change-password` — Change Password
+
+**Auth required.**
+
+Allows a logged-in user to change their account password. Requires the current (old) password for verification before setting a new one.
+
+**Body (JSON):**
+
+```json
+{
+  "old_password": "OldPassword123!",
+  "new_password": "NewPassword456!",
+  "confirm_password": "NewPassword456!"
+}
+```
+
+| Field              | Required | Notes                                     |
+| ------------------ | -------- | ----------------------------------------- |
+| `old_password`     | ✅       | Must match the account's current password |
+| `new_password`     | ✅       | Minimum 8 characters                      |
+| `confirm_password` | ✅       | Must exactly match `new_password`         |
+
+**Response `200`:**
+
+```json
+{
+  "success": true,
+  "data": {
+    "message": "password berhasil diperbarui"
+  }
+}
+```
+
+**Error cases:**
+
+| Status | Reason                                                       |
+| ------ | ------------------------------------------------------------ |
+| `400`  | Any field is empty                                           |
+| `400`  | `new_password` is less than 8 characters                     |
+| `400`  | `new_password` and `confirm_password` do not match           |
+| `400`  | `old_password` does not match the account's current password |
+| `401`  | Not authenticated                                            |
+
+### POST `/api/auth/forgot-password` — Forgot Password (Rate Limited)
+
+**No auth required.**
+
+Allows a user to reset their password without knowing the old password, verified using their registration data (`faculty`, `major`, `year_enroll`).
+If the data does not match, it counts as a failed attempt. The account is locked after 3 failed attempts, requiring an admin to unlock it.
+
+**Body (JSON):**
+
+```json
+{
+  "email": "regan@test.com",
+  "faculty": "Engineering",
+  "major": "Informatics",
+  "year_enroll": 2020,
+  "new_password": "NewPassword123!",
+  "confirm_password": "NewPassword123!"
+}
+```
+
+| Field              | Required | Notes                             |
+| ------------------ | -------- | --------------------------------- |
+| `email`            | ✅       | Case-insensitive                  |
+| `faculty`          | ✅       | Case-insensitive                  |
+| `major`            | ✅       | Case-insensitive                  |
+| `year_enroll`      | ✅       | Must match registration data      |
+| `new_password`     | ✅       | Minimum 8 characters              |
+| `confirm_password` | ✅       | Must exactly match `new_password` |
+
+**Response `200`:**
+
+```json
+{
+  "success": true,
+  "data": {
+    "message": "password berhasil direset, silakan login dengan password baru"
+  }
+}
+```
+
+**Error cases:**
+
+| Status | Reason                                                                                                              |
+| ------ | ------------------------------------------------------------------------------------------------------------------- |
+| `400`  | Any field is missing                                                                                                |
+| `400`  | `new_password` is less than 8 characters                                                                            |
+| `400`  | `new_password` and `confirm_password` do not match                                                                  |
+| `400`  | Registration data does not match (returns generic error message to prevent enumeration, increments attempt counter) |
+| `403`  | Account is locked due to too many failed reset attempts                                                             |
+
 ### GET `/api/me/activity/summary` — My Activity Summary
 
 **Auth required.**
@@ -339,6 +434,7 @@ Notes:
 
 | Field                      | Required                    | Notes                                                 |
 | -------------------------- | --------------------------- | ----------------------------------------------------- |
+| `name`                     | ❌                          | Update display name (also updates `users.name`)       |
 | `job_status`               | ✅                          | See status matrix below                               |
 | `bio`                      | ❌                          | Short profile bio                                     |
 | `location`                 | ❌                          | Free-text location                                    |
@@ -1818,12 +1914,13 @@ Returns summary counts for core platform objects and pending moderation workload
 
 Admins can inspect users, toggle account status, and change roles.
 
-| Method | Endpoint                      | Auth  | Description                                |
-| ------ | ----------------------------- | ----- | ------------------------------------------ |
-| GET    | `/api/admin/users`            | admin | List all users (paginated, filter by role) |
-| GET    | `/api/admin/users/:id`        | admin | User detail                                |
-| PATCH  | `/api/admin/users/:id/status` | admin | Activate or deactivate user                |
-| PATCH  | `/api/admin/users/:id/role`   | admin | Change user role                           |
+| Method | Endpoint                            | Auth  | Description                                   |
+| ------ | ----------------------------------- | ----- | --------------------------------------------- |
+| GET    | `/api/admin/users`                  | admin | List all users (paginated, filter by role)    |
+| GET    | `/api/admin/users/:id`              | admin | User detail                                   |
+| PATCH  | `/api/admin/users/:id/status`       | admin | Activate or deactivate user                   |
+| PATCH  | `/api/admin/users/:id/role`         | ✅    | Change a user's role                          |
+| PATCH  | `/api/admin/users/:id/unlock-reset` | ✅    | Unlock an account locked from forgot-password |
 
 **GET `/api/admin/users` query params:** `?page=1&limit=20&role=alumni`
 
@@ -1879,6 +1976,21 @@ Admins can inspect users, toggle account status, and change roles.
     "Email": "siti@test.com",
     "Role": "alumni",
     "IsActive": false
+  }
+}
+```
+
+#### PATCH `/api/admin/users/:id/unlock-reset` — Unlock Reset Password
+
+Unlocks an account that was locked out from too many failed forgot-password attempts, resetting the counter to 0.
+
+**Response `200`:**
+
+```json
+{
+  "success": true,
+  "data": {
+    "message": "akun berhasil dibuka kuncinya"
   }
 }
 ```
@@ -3207,6 +3319,101 @@ VITE_WS_URL=wss://api.yourapp.com
 | Message immutability       | Messages **cannot be edited or deleted**                                    |
 | Privacy                    | Users can only view their own conversation history                          |
 | Offline delivery           | Messages persisted to DB; fetched via REST when recipient comes back online |
+
+---
+
+## Follow Module
+
+> Allows `alumni` and `student` roles to follow and unfollow other users. Any authenticated user can view the followers and following lists.
+
+| Method | Endpoint                   | Auth | Description                          |
+| ------ | -------------------------- | ---- | ------------------------------------ |
+| POST   | `/api/users/:id/follow`    | ✅   | Follow a user                        |
+| DELETE | `/api/users/:id/follow`    | ✅   | Unfollow a user                      |
+| GET    | `/api/users/:id/followers` | ✅   | List users following the target user |
+| GET    | `/api/users/:id/following` | ✅   | List users the target user follows   |
+
+### POST `/api/users/:id/follow` — Follow User
+
+Starts following the user with the specified `id`.
+Only `student` and `alumni` roles are permitted to follow others.
+
+**Response `201`:**
+
+```json
+{
+  "success": true,
+  "data": {
+    "message": "berhasil mengikuti pengguna"
+  }
+}
+```
+
+**Error cases:**
+| Status | Reason |
+|---|---|
+| `400` | Target ID is invalid or trying to follow yourself |
+| `401` | Not authenticated |
+| `403` | User role is not `alumni` or `student` |
+| `409` | Already following this user |
+
+### DELETE `/api/users/:id/follow` — Unfollow User
+
+Stops following the user with the specified `id`.
+
+**Response `200`:**
+
+```json
+{
+  "success": true,
+  "data": {
+    "message": "berhasil berhenti mengikuti pengguna"
+  }
+}
+```
+
+**Error cases:**
+| Status | Reason |
+|---|---|
+| `400` | Not currently following this user |
+
+### GET `/api/users/:id/followers` — Get Followers List
+
+Returns a list of users who are following the specified user `id`.
+
+**Response `200`:**
+
+```json
+{
+  "success": true,
+  "data": [
+    {
+      "ID": 2,
+      "Name": "Student Budi",
+      "Email": "budi@test.com",
+      "Role": "student",
+      "IsActive": true,
+      "picture_url": "https://res.cloudinary.com/...",
+      "Faculty": "Engineering",
+      "Major": "Informatics",
+      "YearEnroll": 2020,
+      "CompanyName": null,
+      "Profile": {
+        "ID": 5,
+        "Bio": "Interested in backend",
+        "Position": null,
+        "CompanyName": null
+      }
+    }
+  ]
+}
+```
+
+### GET `/api/users/:id/following` — Get Following List
+
+Returns a list of users that the specified user `id` is currently following.
+
+**Response `200`:** (Same structure as `GET /api/users/:id/followers`)
 
 ---
 

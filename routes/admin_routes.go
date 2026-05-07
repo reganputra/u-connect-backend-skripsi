@@ -6,7 +6,7 @@ import (
 	"github.com/reganputra/skripsi-backend/middleware"
 )
 
-func RegisterAdminRoutes(app *fiber.App, ctrl *controllers.AdminController) {
+func RegisterAdminRoutes(app *fiber.App, ctrl *controllers.AdminController, authCtrl *controllers.AuthController) {
 	// Public: category list (any authenticated user can read categories)
 	app.Get("/api/categories", middleware.Protected(), ctrl.GetCategories)
 
@@ -21,6 +21,7 @@ func RegisterAdminRoutes(app *fiber.App, ctrl *controllers.AdminController) {
 	admin.Get("/users/:id", ctrl.GetUserByID)
 	admin.Patch("/users/:id/status", ctrl.SetUserStatus)
 	admin.Patch("/users/:id/role", ctrl.SetUserRole)
+	admin.Patch("/users/:id/unlock-reset", authCtrl.UnlockUserReset)
 
 	// Report moderation
 	admin.Get("/reports", ctrl.GetReports)

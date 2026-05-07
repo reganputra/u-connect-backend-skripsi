@@ -73,17 +73,35 @@ func (r *followRepository) AreConnected(userA, userB uint) (bool, error) {
 func (r *followRepository) GetFollowers(userID uint) ([]models.User, error) {
 	var users []models.User
 	err := r.db.
+		Preload("Profile").
 		Joins("JOIN follows f ON f.follower_id = users.id AND f.deleted_at IS NULL").
 		Where("f.following_id = ? AND users.deleted_at IS NULL", userID).
 		Find(&users).Error
+
+	if err == nil {
+		for i := range users {
+			if users[i].Profile != nil && users[i].Profile.ProfilePicture != "" {
+				users[i].PictureURL = &users[i].Profile.ProfilePicture
+			}
+		}
+	}
 	return users, err
 }
 
 func (r *followRepository) GetFollowing(userID uint) ([]models.User, error) {
 	var users []models.User
 	err := r.db.
+		Preload("Profile").
 		Joins("JOIN follows f ON f.following_id = users.id AND f.deleted_at IS NULL").
 		Where("f.follower_id = ? AND users.deleted_at IS NULL", userID).
 		Find(&users).Error
+
+	if err == nil {
+		for i := range users {
+			if users[i].Profile != nil && users[i].Profile.ProfilePicture != "" {
+				users[i].PictureURL = &users[i].Profile.ProfilePicture
+			}
+		}
+	}
 	return users, err
 }

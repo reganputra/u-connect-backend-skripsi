@@ -10,6 +10,11 @@ type UserRepository interface {
 	FindUserByID(id uint) (*models.User, error)
 	CreateUser(user *models.User) error
 	UpdateUserCompanyName(userID uint, companyName string) error
+	UpdateUserName(userID uint, name string) error
+	UpdateUserPassword(userID uint, hashedPassword string) error
+	IncrementResetAttempts(userID uint) error
+	UnlockResetAttempts(userID uint) error
+	ResetPasswordAndClearAttempts(userID uint, hashedPassword string) error
 }
 
 type userRepository struct {
@@ -43,4 +48,27 @@ func (r *userRepository) CreateUser(user *models.User) error {
 
 func (r *userRepository) UpdateUserCompanyName(userID uint, companyName string) error {
 	return r.db.Model(&models.User{}).Where("id = ?", userID).Update("company_name", companyName).Error
+}
+
+func (r *userRepository) UpdateUserName(userID uint, name string) error {
+	return r.db.Model(&models.User{}).Where("id = ?", userID).Update("name", name).Error
+}
+
+func (r *userRepository) UpdateUserPassword(userID uint, hashedPassword string) error {
+	return r.db.Model(&models.User{}).Where("id = ?", userID).Update("password", hashedPassword).Error
+}
+
+func (r *userRepository) IncrementResetAttempts(userID uint) error {
+	return r.db.Model(&models.User{}).Where("id = ?", userID).
+		UpdateColumn("reset_attempts", gorm.Expr("reset_attempts + 1")).Error
+}
+
+func (r *userRepository) UnlockResetAttempts(userID uint) error {
+	return r.db.Model(&models.User{}).Where("id = ?", userID).
+		Updates(map[string]interface{}{"reset_attempts": 0, "reset_locked_at": nil}).Error
+}
+
+func (r *userRepository) ResetPasswordAndClearAttempts(userID uint, hashedPassword string) error {
+	return r.db.Model(&models.User{}).Where("id = ?", userID).
+		Updates(map[string]interface{}{"password": hashedPassword, "reset_attempts": 0, "reset_locked_at": nil}).Error
 }

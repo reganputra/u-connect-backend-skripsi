@@ -75,7 +75,7 @@ func Build(db *gorm.DB, hub *ws.Hub) *AppContainer {
 	// ── Services ──────────────────────────────────────────────────────────────
 	notifSvc := service.NewNotificationService(notifRepo, hub, db)
 	authSvc := service.NewAuthService(userRepo, profileRepo)
-	profileSvc := service.NewProfileService(profileRepo)
+	profileSvc := service.NewProfileService(profileRepo, userRepo)
 	companySvc := service.NewCompanyService(companyRepo, userRepo, profileRepo)
 	portfolioSvc := service.NewPortfolioService(portfolioRepo)
 	feedSvc := service.NewFeedService(postRepo, commentRepo, reactionRepo, voteRepo, userRepo, notifSvc)

@@ -19,6 +19,7 @@ var validProfileJobStatuses = map[string]bool{
 // ─── DTOs ─────────────────────────────────────────────────────────────────────
 
 type ProfileRequest struct {
+	Name           *string `json:"name"`
 	ProfilePicture *string `json:"profile_picture"`
 	Bio            *string `json:"bio"`
 	Location       *string `json:"location"`
@@ -84,10 +85,11 @@ type ProfileService interface {
 
 type profileService struct {
 	profileRepo repository.ProfileRepository
+	userRepo    repository.UserRepository
 }
 
-func NewProfileService(profileRepo repository.ProfileRepository) ProfileService {
-	return &profileService{profileRepo: profileRepo}
+func NewProfileService(profileRepo repository.ProfileRepository, userRepo repository.UserRepository) ProfileService {
+	return &profileService{profileRepo: profileRepo, userRepo: userRepo}
 }
 
 // ─── Validation helpers ───────────────────────────────────────────────────────
@@ -231,6 +233,12 @@ func (s *profileService) UpdateProfile(userID uint, req ProfileRequest) (*models
 
 	if req.Bio != nil {
 		profile.Bio = req.Bio
+	}
+	// Update name in users table if provided
+	if req.Name != nil && *req.Name != "" {
+		if err := s.userRepo.UpdateUserName(userID, *req.Name); err != nil {
+			return nil, errors.New("gagal memperbarui nama")
+		}
 	}
 	if req.Location != nil {
 		profile.Location = req.Location
