@@ -189,6 +189,7 @@ func (ctrl *ProfileController) UpdateProfile(c *fiber.Ctx) error {
 	expectedGradYear := parseOptionalInt(c.FormValue("expected_graduation_year"))
 
 	req := service.ProfileRequest{
+		Name:                   parseOptionalString(c.FormValue("name")),
 		ProfilePicture:         parseOptionalString(pictureURL),
 		Bio:                    parseOptionalString(c.FormValue("bio")),
 		Location:               parseOptionalString(c.FormValue("location")),

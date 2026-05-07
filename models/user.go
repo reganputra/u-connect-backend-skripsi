@@ -1,6 +1,10 @@
 package models
 
-import "gorm.io/gorm"
+import (
+	"time"
+
+	"gorm.io/gorm"
+)
 
 type User struct {
 	gorm.Model
@@ -18,6 +22,10 @@ type User struct {
 
 	// partner only
 	CompanyName *string `gorm:"default:null"`
+
+	// Forgot password rate limiting
+	ResetAttempts  int        `gorm:"default:0"`
+	ResetLockedAt  *time.Time `gorm:"default:null"`
 
 	// Association — populated only when explicitly Preloaded
 	Profile *UserProfile `gorm:"foreignKey:UserID"`

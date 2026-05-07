@@ -125,7 +125,7 @@ func main() {
 	// ── CORS ──────────────────────────────────────────────────────────────────
 	allowedOrigins := os.Getenv("CORS_ALLOWED_ORIGINS")
 	if allowedOrigins == "" {
-		allowedOrigins = "https://frontend-skripsi-six.vercel.app/" // dev default — restrict in production
+		allowedOrigins = "http://localhost:5173,https://frontend-skripsi-six.vercel.app" // dev & prod default
 	}
 	app.Use(cors.New(cors.Config{
 		Next: func(c *fiber.Ctx) bool {
@@ -160,7 +160,7 @@ func main() {
 	routes.RegisterEventRoutes(app, c.EventCtrl, db)
 	routes.RegisterJobRoutes(app, c.JobCtrl, db)
 	routes.RegisterReportRoutes(app, c.ReportCtrl)
-	routes.RegisterAdminRoutes(app, c.AdminCtrl)
+	routes.RegisterAdminRoutes(app, c.AdminCtrl, c.AuthCtrl)
 	routes.RegisterMentorRoutes(app, c.MentorCtrl)
 	routes.SetupFollowRoutes(app, c.FollowCtrl)
 	routes.SetupMessageRoutes(app, c.MessageCtrl, hub, c.MessageSvc, c.UserRepo, c.NotifSvc)
