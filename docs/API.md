@@ -1921,10 +1921,23 @@ Admins can inspect users, toggle account status, and change roles.
 | PATCH  | `/api/admin/users/:id/status`       | admin | Activate or deactivate user                   |
 | PATCH  | `/api/admin/users/:id/role`         | ✅    | Change a user's role                          |
 | PATCH  | `/api/admin/users/:id/unlock-reset` | ✅    | Unlock an account locked from forgot-password |
+| PATCH  | `/api/admin/users/:id/profile`      | ✅    | Partially update any user's profile fields    |
+| POST   | `/api/admin/users/:id/experience`   | ✅    | Add a new professional experience for a user  |
+| PUT    | `/api/admin/users/:id/experience/:expId` | ✅    | Update a user's professional experience       |
+| DELETE | `/api/admin/users/:id/experience/:expId` | ✅    | Delete a user's professional experience       |
 
-**GET `/api/admin/users` query params:** `?page=1&limit=20&role=alumni`
+**GET `/api/admin/users` query params:**
 
-**Response `200`:**
+| Param | Type | Keterangan |
+|---|---|---|
+| `page` | int | Halaman (default: 1) |
+| `limit` | int | Jumlah per halaman (default: 20, max: 100) |
+| `role` | string | Filter by role: `alumni`, `student`, `partner` |
+| `search` | string | Cari by nama atau email (case-insensitive) |
+
+Contoh: `?page=1&limit=20&role=alumni&search=andry`
+
+**Response `200`** — setiap item sudah mengandung data profil sehingga frontend bisa menampilkan dan mengedit inline:
 
 ```json
 {
@@ -1935,16 +1948,27 @@ Admins can inspect users, toggle account status, and change roles.
     "limit": 20,
     "data": [
       {
-        "ID": 5,
-        "Name": "Siti Rahma",
-        "Email": "siti@test.com",
-        "Role": "alumni",
-        "IsActive": true
+        "id": 6,
+        "email": "andry@example.com",
+        "role": "alumni",
+        "is_active": true,
+        "created_at": "2025-01-15T08:00:00Z",
+        "name": "Andry Syva Maldini",
+        "profile_picture": "https://res.cloudinary.com/...",
+        "bio": "Data Science graduate...",
+        "skills": "Python, SQL, Machine Learning",
+        "interests": "Data Science, AI Research, Mentoring",
+        "position": "Data Analyst",
+        "industry_name": "Banking",
+        "mentor_quota": 3,
+        "mentor_description": "Ready to guide students"
       }
     ]
   }
 }
 ```
+
+> **Note:** Field profil (`skills`, `interests`, `bio`, dll) akan `null` jika pengguna belum membuat profil. Gunakan `PATCH /api/admin/users/:id/profile` untuk meng-update field tersebut secara langsung dari halaman daftar pengguna.
 
 **PATCH `/api/admin/users/:id/status`:**
 
@@ -1994,6 +2018,189 @@ Unlocks an account that was locked out from too many failed forgot-password atte
   }
 }
 ```
+
+#### PATCH `/api/admin/users/:id/profile` — Patch User Profile
+
+Allows an admin to partially update any user's profile. Only the fields included in the request body will be updated; all other profile fields remain unchanged.
+
+**Request Body** (all fields optional, `Content-Type: application/json`):
+
+```json
+{
+  "bio":               "Updated bio text",
+  "skills":            "Python, SQL, Machine Learning",
+  "interests":         "Data Science, AI Research, Mentoring",
+  "position":          "Data Analyst",
+  "industry_name":     "Banking",
+  "mentor_quota":      3,
+  "mentor_description": "Ready to guide students in data and analytics"
+}
+```
+
+**Response `200`:**
+
+```json
+{
+  "success": true,
+  "data": {
+    "message": "profil pengguna berhasil diperbarui"
+  }
+}
+```
+
+**Error cases:**
+| Status | Reason |
+|---|---|
+| `400` | Request body is empty or no fields provided |
+| `500` | Database error |
+
+#### POST `/api/admin/users/:id/experience` — Add User Experience
+
+Allows an admin to add a new professional experience for a user.
+
+**Request Body** (`Content-Type: application/json`):
+
+```json
+{
+  "company_name": "Google",
+  "position": "Software Engineer",
+  "start_year": 2020,
+  "end_year": 2023, 
+  "description": "Developed backend systems in Go."
+}
+```
+*Note: `end_year` and `description` are optional. Omit `end_year` or set to `null` if the user is currently working there.*
+
+**Response `201` Created:**
+
+```json
+{
+  "success": true,
+  "data": {
+    "ID": 10,
+    "UserProfileID": 5,
+    "CompanyName": "Google",
+    "Position": "Software Engineer",
+    "StartYear": 2020,
+    "EndYear": 2023,
+    "Description": "Developed backend systems in Go."
+  }
+}
+```
+
+#### PUT `/api/admin/users/:id/experience/:expId` — Update User Experience
+
+Allows an admin to update an existing user experience.
+
+**Request Body** (`Content-Type: application/json`):
+
+```json
+{
+  "company_name": "Google Indonesia",
+  "position": "Senior Software Engineer",
+  "start_year": 2020,
+  "end_year": 2024,
+  "description": "Lead the backend systems team."
+}
+```
+
+**Response `200`:** Returns the updated experience object.
+
+#### DELETE `/api/admin/users/:id/experience/:expId` — Delete User Experience
+
+Allows an admin to delete a specific user experience.
+
+**Response `200`:**
+
+```json
+{
+  "success": true,
+  "data": {
+    "message": "pengalaman berhasil dihapus"
+  }
+}
+```
+
+---
+
+### CBF Evaluation (MAP)
+
+Endpoint khusus admin untuk mengevaluasi performa sistem rekomendasi Content-Based Filtering menggunakan metrik **MAP (Mean Average Precision)**. Ground truth diambil dari data `mentor_requests` aktual — setiap mentor yang pernah di-request oleh mahasiswa dianggap sebagai mentor yang relevan.
+
+| Method | Endpoint                      | Auth  | Description                              |
+| ------ | ----------------------------- | ----- | ---------------------------------------- |
+| GET    | `/api/admin/evaluation/cbf`   | admin | Hitung MAP untuk sistem rekomendasi CBF  |
+
+**Query Params:**
+
+| Param | Type | Default | Keterangan |
+|---|---|---|---|
+| `top_n` | int | `10` | Evaluasi top-N rekomendasi (maks 50) |
+| `student_ids` | string | *(kosong = semua)* | Filter mahasiswa tertentu, contoh: `5,12,18` |
+
+Contoh: `?top_n=10&student_ids=5,12,18`
+
+**Response `200`:**
+
+```json
+{
+  "success": true,
+  "data": {
+    "top_n": 10,
+    "total_students": 3,
+    "valid_test_cases": 3,
+    "map": 0.7222,
+    "precision_at_1": 0.6667,
+    "precision_at_3": 0.5556,
+    "precision_at_5": 0.4000,
+    "per_student": [
+      {
+        "student_id": 5,
+        "student_name": "Budi Santoso",
+        "relevant_count": 1,
+        "relevant_in_pool": 1,
+        "found_in_top_n": 1,
+        "ap": 1.0,
+        "precision_at_1": 1.0,
+        "precision_at_3": 0.333,
+        "precision_at_5": 0.2,
+        "ranked_mentors": [
+          {
+            "rank": 1,
+            "mentor_id": 8,
+            "mentor_name": "Dr. Andry Syva",
+            "similarity_score": 0.4921,
+            "is_relevant": true
+          },
+          {
+            "rank": 2,
+            "mentor_id": 11,
+            "mentor_name": "Rizki Maulana",
+            "similarity_score": 0.3847,
+            "is_relevant": false
+          }
+        ]
+      }
+    ]
+  }
+}
+```
+
+**Penjelasan Field:**
+
+| Field | Keterangan |
+|---|---|
+| `map` | Mean Average Precision keseluruhan sistem |
+| `precision_at_1/3/5` | Rata-rata presisi di posisi 1, 3, dan 5 |
+| `total_students` | Jumlah mahasiswa yang punya riwayat request |
+| `valid_test_cases` | Mahasiswa yang diikutkan evaluasi (mentor relevannya ada di pool rekomendasi) |
+| `relevant_count` | Jumlah mentor relevan di ground truth mahasiswa ini |
+| `relevant_in_pool` | Dari `relevant_count`, berapa yang terdaftar sebagai mentor aktif |
+| `found_in_top_n` | Berapa mentor relevan yang muncul di top-N |
+| `similarity_score` | Skor cosine similarity CBF untuk mentor tersebut |
+| `is_relevant` | `true` jika mentor ini ada di ground truth mahasiswa |
+
+> **Catatan Akademis:** Ground truth diambil dari semua `mentor_requests` yang pernah dibuat mahasiswa (semua status). Mahasiswa yang mentor relevannya sudah tidak terdaftar aktif sebagai mentor akan dilewati (`valid_test_cases < total_students`).
 
 ---
 
