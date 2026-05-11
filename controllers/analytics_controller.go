@@ -16,13 +16,12 @@ func NewAnalyticsController(svc service.AnalyticsService) *AnalyticsController {
 	return &AnalyticsController{svc: svc}
 }
 
-// Svc exposes the underlying AnalyticsService for use by the scheduler.
+// Svc mengekspos service AnalyticsService yang mendasarinya agar dapat digunakan oleh scheduler.
 func (ctrl *AnalyticsController) Svc() service.AnalyticsService {
 	return ctrl.svc
 }
 
-// GET /api/admin/analytics/overview
-// Returns lifetime enhanced stats + yesterday's daily snapshot.
+// Mengembalikan statistik lengkap + snapshot harian kemarin.
 func (ctrl *AnalyticsController) GetOverview(c *fiber.Ctx) error {
 	overview, err := ctrl.svc.GetOverview()
 	if err != nil {
@@ -31,8 +30,7 @@ func (ctrl *AnalyticsController) GetOverview(c *fiber.Ctx) error {
 	return utils.SuccessResponse(c, fiber.StatusOK, overview)
 }
 
-// GET /api/admin/analytics/trends?days=30
-// Returns an array of daily snapshots for the last `days` days (max 365).
+// Mengembalikan array snapshot harian untuk `days` hari terakhir (maks 365).
 func (ctrl *AnalyticsController) GetTrends(c *fiber.Ctx) error {
 	days, _ := strconv.Atoi(c.Query("days", "30"))
 	if days < 1 || days > 365 {
@@ -49,9 +47,8 @@ func (ctrl *AnalyticsController) GetTrends(c *fiber.Ctx) error {
 	})
 }
 
-// GET /api/admin/analytics/top-content?type=post&days=7&limit=10
-// Returns the top N content items by view count in the last `days` days.
-// `type` must be one of: post | group.
+// Mengembalikan item konten teratas berdasarkan jumlah tayangan dalam `days` hari terakhir.
+// `type` harus salah satu dari: post | group.
 func (ctrl *AnalyticsController) GetTopContent(c *fiber.Ctx) error {
 	targetType := c.Query("type", "post")
 	validTypes := map[string]bool{"post": true, "group": true}

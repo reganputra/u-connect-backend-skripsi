@@ -16,7 +16,6 @@ func NewFollowController(followSvc service.FollowService) *FollowController {
 	return &FollowController{followSvc: followSvc}
 }
 
-// POST /api/users/:id/follow
 func (ctrl *FollowController) Follow(c *fiber.Ctx) error {
 	callerID, err := getUserIDFromToken(c)
 	if err != nil {
@@ -47,7 +46,6 @@ func (ctrl *FollowController) Follow(c *fiber.Ctx) error {
 	return utils.SuccessResponse(c, fiber.StatusCreated, fiber.Map{"message": "berhasil mengikuti pengguna"})
 }
 
-// DELETE /api/users/:id/follow
 func (ctrl *FollowController) Unfollow(c *fiber.Ctx) error {
 	callerID, err := getUserIDFromToken(c)
 	if err != nil {
@@ -65,7 +63,6 @@ func (ctrl *FollowController) Unfollow(c *fiber.Ctx) error {
 	return utils.SuccessResponse(c, fiber.StatusOK, fiber.Map{"message": "berhasil berhenti mengikuti pengguna"})
 }
 
-// GET /api/users/:id/followers
 func (ctrl *FollowController) GetFollowers(c *fiber.Ctx) error {
 	targetID, err := strconv.ParseUint(c.Params("id"), 10, 64)
 	if err != nil {
@@ -79,7 +76,6 @@ func (ctrl *FollowController) GetFollowers(c *fiber.Ctx) error {
 	return utils.SuccessResponse(c, fiber.StatusOK, users)
 }
 
-// GET /api/users/:id/following
 func (ctrl *FollowController) GetFollowing(c *fiber.Ctx) error {
 	targetID, err := strconv.ParseUint(c.Params("id"), 10, 64)
 	if err != nil {

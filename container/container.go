@@ -34,6 +34,7 @@ type AppContainer struct {
 	NotifCtrl     *controllers.NotificationController
 	ActivityCtrl  *controllers.ActivityController
 	AnalyticsCtrl *controllers.AnalyticsController
+	EvalCtrl      *controllers.EvaluationController
 }
 
 // Build wires up all dependencies and returns the container.
@@ -89,6 +90,7 @@ func Build(db *gorm.DB, hub *ws.Hub) *AppContainer {
 	followSvc := service.NewFollowService(followRepo, userRepo, notifSvc)
 	messageSvc := service.NewMessageService(messageRepo, followRepo)
 	analyticsSvc := service.NewAnalyticsService(analyticsRepo)
+	evalSvc := service.NewEvaluationService(mentorRequestRepo, mentorSvc, db)
 
 	// ── Controllers ───────────────────────────────────────────────────────────
 	return &AppContainer{
@@ -105,12 +107,13 @@ func Build(db *gorm.DB, hub *ws.Hub) *AppContainer {
 		EventCtrl:     controllers.NewEventController(eventSvc),
 		JobCtrl:       controllers.NewJobController(jobSvc),
 		ReportCtrl:    controllers.NewReportController(reportSvc),
-		AdminCtrl:     controllers.NewAdminController(adminSvc),
+		AdminCtrl:     controllers.NewAdminController(adminSvc, profileSvc),
 		MentorCtrl:    controllers.NewMentorController(mentorSvc),
 		FollowCtrl:    controllers.NewFollowController(followSvc),
 		MessageCtrl:   controllers.NewMessageController(messageSvc),
 		NotifCtrl:     controllers.NewNotificationController(notifSvc),
 		ActivityCtrl:  controllers.NewActivityController(eventSvc, jobSvc, groupSvc),
 		AnalyticsCtrl: controllers.NewAnalyticsController(analyticsSvc),
+		EvalCtrl:      controllers.NewEvaluationController(evalSvc),
 	}
 }
