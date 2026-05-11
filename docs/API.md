@@ -441,11 +441,12 @@ Notes:
 | `picture`                  | ❌                          | Image file → Cloudinary                               |
 | `skills`                   | ❌                          | Comma-separated text (used by mentor recommendation)  |
 | `interests`                | ❌                          | Comma-separated text (used by mentor recommendation)  |
+| `career_interests`         | ❌                          | Comma-separated text (used by mentor recommendation)  |
 | `position`                 | if `employed`               | Current job title                                     |
 | `company_name`             | if `employed`               | Current company name                                  |
 | `company_location`         | ❌                          | Company/work location (relevant for `employed`)       |
 | `company_size`             | ❌                          | Integer (relevant for `entrepreneur` / self-employed) |
-| `industry_name`            | if `entrepreneur`           | Industry/business domain                              |
+| `industry_name`            | if `entrepreneur`           | Industry domain (also supported for `employed`)       |
 | `industry_type`            | ❌                          | Example: B2B, B2C, SaaS                               |
 | `year_founding`            | ❌                          | Integer year                                          |
 | `salary`                   | ❌                          | Integer                                               |
@@ -2030,8 +2031,10 @@ Allows an admin to partially update any user's profile. Only the fields included
   "bio":               "Updated bio text",
   "skills":            "Python, SQL, Machine Learning",
   "interests":         "Data Science, AI Research, Mentoring",
+  "career_interests":  "Data Scientist, AI Engineer",
   "position":          "Data Analyst",
   "industry_name":     "Banking",
+  "industry_type":     "B2B",
   "mentor_quota":      3,
   "mentor_description": "Ready to guide students in data and analytics"
 }
@@ -2741,15 +2744,9 @@ Returns the mentor's full profile including `User` and `Experiences`. Returns `4
 
 **How it works:**
 
-1. Reads each mentor's `skills + interests + mentor_bio + position + company + industry + experiences`
-2. Parses lightweight constraints from free-text query, including:
-
-- `N years/tahun` minimum experience intent
-- `<keyword> industry` intent
-
-3. Applies matching filters (when detected) before scoring
-4. Builds TF-IDF corpus (mentors + student query)
-5. Computes hybrid score from text similarity + keyword overlap + experience/industry fit
+1. Reads each mentor's `skills + interests + career_interests + mentor_bio + position + company + industry + experiences`
+2. Builds TF-IDF corpus (mentors + student query)
+3. Computes Cosine Similarity based purely on text token vectors (Bag of Words)
 
 **NLP Pipeline:** case folding → special character removal → tokenization → Indonesian + English stopword removal → Indonesian suffix/prefix stemming
 
@@ -2766,19 +2763,17 @@ Returns the mentor's full profile including `User` and `Experiences`. Returns `4
       "mentor_bio": "5+ years in Python and ML.",
       "skills": "Python, Machine Learning, Docker",
       "interests": "AI, Data Science",
+      "career_interests": "Data Scientist",
       "position": "Senior Software Engineer",
       "company_name": "PT Tech Indonesia",
-      "industry_name": "",
+      "industry_name": "Tech",
+      "industry_type": "B2B",
       "years_experience": 5,
-      "matched_keywords": ["python", "cloud", "machine"],
       "score_breakdown": {
-        "text_similarity": 0.61,
-        "keyword_overlap": 0.5,
-        "experience_fit": 1,
-        "industry_fit": 0
+        "text_similarity": 0.61
       },
       "mentor_quota": 3,
-      "similarity_score": 0.5263
+      "similarity_score": 0.6100
     }
   ]
 }
