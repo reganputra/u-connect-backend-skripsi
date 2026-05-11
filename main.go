@@ -124,8 +124,8 @@ func main() {
 
 	// ── CORS ──────────────────────────────────────────────────────────────────
 	allowedOrigins := os.Getenv("CORS_ALLOWED_ORIGINS")
-	if allowedOrigins == "" {
-		allowedOrigins = "http://localhost:5173,https://frontend-skripsi-six.vercel.app" // dev & prod default
+	if allowedOrigins == "" { // prod
+		allowedOrigins = "http://localhost:5173" // dev
 	}
 	app.Use(cors.New(cors.Config{
 		Next: func(c *fiber.Ctx) bool {
