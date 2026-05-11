@@ -10,22 +10,22 @@ import (
 	"gorm.io/gorm"
 )
 
-// TrackView returns a Fiber middleware that appends a PageView row asynchronously
-// after the handler responds.
+// TrackView mengembalikan middleware Fiber yang menambahkan baris PageView secara asinkron
+// setelah handler merespons.
 //
-// Rules:
-//   - Only records views for GET requests that return HTTP 200.
-//   - Extracts the resource ID from the ":id" route parameter.
-//   - Captures the authenticated user's ID from the JWT in c.Locals("user").
-//     If no JWT is present (future public routes), user_id is stored as nil.
-//   - The database insert happens in a fire-and-forget goroutine so it never
-//     adds latency to the handler's response time.
+// Aturan:
+//   - Hanya mencatat tampilan untuk permintaan GET yang mengembalikan HTTP 200.
+//   - Mengekstrak ID sumber daya dari parameter rute ":id".
+//   - Menangkap ID pengguna terautentikasi dari JWT dalam c.Locals("user").
+//     Jika tidak ada JWT yang hadir (rute publik di masa mendatang), user_id disimpan sebagai nil.
+//   - Penyisipan basis data terjadi dalam goroutine fire-and-forget sehingga tidak pernah
+//     menambah latensi pada waktu respons handler.
 func TrackView(targetType string, db *gorm.DB) fiber.Handler {
 	return func(c *fiber.Ctx) error {
-		// Run the real handler first.
+		// Jalankan handler sebenarnya terlebih dahulu.
 		err := c.Next()
 
-		// Only record views for successful GET requests.
+		// Hanya mencatat tampilan untuk permintaan GET yang berhasil.
 		if c.Method() != "GET" || c.Response().StatusCode() != 200 {
 			return err
 		}
@@ -51,8 +51,8 @@ func TrackView(targetType string, db *gorm.DB) fiber.Handler {
 	}
 }
 
-// extractViewUserID extracts the user_id from the JWT stored in c.Locals("user").
-// Returns nil if the token is absent or malformed (e.g. for unauthenticated routes).
+// extractViewUserID mengekstrak user_id dari JWT yang disimpan dalam c.Locals("user").
+// Mengembalikan nil jika token tidak ada atau rusak (misalnya untuk rute tidak terautentikasi).
 func extractViewUserID(c *fiber.Ctx) *uint {
 	token, ok := c.Locals("user").(*jwt.Token)
 	if !ok {
