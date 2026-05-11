@@ -30,8 +30,9 @@ type UserProfile struct {
 	ExpectedGraduationYear *int    `gorm:"default:null"`
 
 	// Skills & Interests
-	Skills    *string `gorm:"default:null"` // comma-separated
-	Interests *string `gorm:"default:null"` // comma-separated
+	Skills          *string `gorm:"default:null"` // comma-separated
+	Interests       *string `gorm:"default:null"` // comma-separated
+	CareerInterests *string `gorm:"default:null"` // comma-separated (Minat Karir)
 
 	// Mentorship (alumni only)
 	MentorQuota       *int    `gorm:"default:null"`
