@@ -635,11 +635,25 @@ func (s *mentorService) GetRecommendations(studentUserID uint, query string, top
 			return nil, errors.New("profil tidak ditemukan — buat profil terlebih dahulu")
 		}
 		parts := []string{}
+		skills := ""
 		if profile.Skills != nil && strings.TrimSpace(*profile.Skills) != "" {
-			parts = append(parts, *profile.Skills)
+			skills = *profile.Skills
+			// Skills diulang 2x — field boost
+			parts = append(parts, skills, skills)
 		}
 		if profile.Interests != nil && strings.TrimSpace(*profile.Interests) != "" {
-			parts = append(parts, *profile.Interests)
+			// Hanya Interests yang TIDAK ada di Skills yang dimasukkan
+			uniqueInterests := deduplicateInterests(skills, *profile.Interests)
+			if uniqueInterests != "" {
+				parts = append(parts, uniqueInterests)
+			}
+		}
+		if profile.CareerInterests != nil && strings.TrimSpace(*profile.CareerInterests) != "" {
+			// Hanya Minat Karir yang TIDAK ada di Skills yang dimasukkan
+			uniqueCareerInterests := deduplicateInterests(skills, *profile.CareerInterests)
+			if uniqueCareerInterests != "" {
+				parts = append(parts, uniqueCareerInterests)
+			}
 		}
 		if profile.Bio != nil && strings.TrimSpace(*profile.Bio) != "" {
 			parts = append(parts, *profile.Bio)
@@ -649,6 +663,9 @@ func (s *mentorService) GetRecommendations(studentUserID uint, query string, top
 		}
 		if profile.IndustryName != nil && strings.TrimSpace(*profile.IndustryName) != "" {
 			parts = append(parts, *profile.IndustryName)
+		}
+		if profile.IndustryType != nil && strings.TrimSpace(*profile.IndustryType) != "" {
+			parts = append(parts, *profile.IndustryType)
 		}
 		query = strings.Join(parts, " ")
 

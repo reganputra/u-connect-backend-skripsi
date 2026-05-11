@@ -27,19 +27,126 @@ func Tokenize(text string) []string {
 		if idStopwords[w] || enStopwords[w] {
 			continue
 		}
-		stemmed := stem(w)
-		if len(stemmed) < 2 {
+		var token string
+		if base, ok := lemmaDict[w]; ok {
+			token = base
+		} else {
+			token = lemmatize(stem(w))
+		}
+		if len(token) < 2 {
 			continue
 		}
-		if idStopwords[stemmed] || enStopwords[stemmed] {
+		if idStopwords[token] || enStopwords[token] {
 			continue
 		}
-		result = append(result, stemmed)
+		result = append(result, token)
 	}
 	return result
 }
 
-// ───  Stemmer (penghapusan akhiran dan awalan sederhana dalam bahasa Indonesia)  ───────────────────
+// ─── Lemmatizer ───────────────────────────────────────────────────────────────
+
+// lemmatize mengurangi token (setelah stemming) ke basis kanonis menggunakan
+// pencarian kamus terlebih dahulu, kemudian aturan penghilangan sufiks bahasa Inggris.
+func lemmatize(word string) string {
+	if base, ok := lemmaDict[word]; ok {
+		return base
+	}
+	for _, r := range lemmaRules {
+		if strings.HasSuffix(word, r.suffix) {
+			candidate := word[:len(word)-len(r.suffix)] + r.replacement
+			if len(candidate) >= r.minBase {
+				return candidate
+			}
+		}
+	}
+	return word
+}
+
+type lemmaRule struct {
+	suffix      string
+	replacement string
+	minBase     int
+}
+
+// lemmaRules: longest suffix first to avoid partial matches.
+var lemmaRules = []lemmaRule{
+	{"izations", "ize", 3}, {"ization", "ize", 3},
+	{"ations", "", 3}, {"ation", "", 3},
+	{"ments", "", 3}, {"ment", "", 3},
+	{"nesses", "", 3}, {"ness", "", 3},
+	{"ities", "", 3}, {"ity", "", 3},
+	{"ives", "", 3}, {"ive", "", 3},
+	{"ings", "", 3}, {"ning", "n", 3}, {"pping", "p", 3}, {"ing", "", 3},
+	{"ies", "y", 2}, {"ied", "y", 3},
+	{"ous", "", 3}, {"ical", "", 3},
+	{"eds", "", 3}, {"ed", "", 3},
+	{"ers", "", 4}, {"er", "", 4},
+	{"als", "", 4}, {"al", "", 4},
+	{"s", "", 4}, // plural nouns
+}
+
+// lemmaDict maps surface forms (pre-stem English + post-stem Indonesian) to a
+// canonical base token so student and mentor texts normalize to the same term.
+var lemmaDict = map[string]string{
+	// ─── Tech nouns ───
+	"analytics": "analytic", "analysis": "analytic", "analyses": "analytic",
+	"algorithm": "algorithm", "algorithms": "algorithm",
+	"database": "database", "databases": "database",
+	"network": "network", "networks": "network",
+	"model": "model", "models": "model",
+	"system": "system", "systems": "system",
+	"framework": "framework", "frameworks": "framework",
+	"library": "library", "libraries": "library",
+	"query": "query", "queries": "query",
+	"technology": "technology", "technologies": "technology",
+	"data": "data",
+	// ─── English tech gerunds / nominalizations ───
+	"learning": "learn", "machine": "machine",
+	"computing":  "compute",
+	"developing": "develop", "development": "develop", "developments": "develop",
+	"building": "build",
+	"training": "train",
+	"modeling": "model", "modelling": "model",
+	"processing":  "process",
+	"engineering": "engineer",
+	"managing":    "manage", "management": "manage",
+	"programming": "program",
+	"designing":   "design", "design": "design",
+	"testing":   "test",
+	"deploying": "deploy", "deployment": "deploy",
+	"forecasting": "forecast",
+	"analyzing":   "analyze", "analysing": "analyze",
+	"visualization": "visualize", "visualizations": "visualize", "visualizing": "visualize",
+	"implementing": "implement", "implementation": "implement",
+	"optimizing": "optimize", "optimization": "optimize",
+	"monitoring": "monitor",
+	"prediction": "predict", "predictions": "predict", "predictive": "predict",
+	"classification": "classify",
+	"clustering":     "cluster",
+	"collaboration":  "collaborate", "collaborating": "collaborate",
+	// ─── Tech roles ───
+	"developers": "developer", "engineers": "engineer",
+	"scientists": "scientist", "analysts": "analyst",
+	"researchers": "researcher", "architects": "architect",
+	// ─── Indonesian tech terms → canonical ───
+	"pemrograman":  "program",
+	"pengembangan": "develop",
+	"visualisasi":  "visualize",
+	"analisis":     "analytic",
+	"pembelajaran": "learn",
+	"pengelolaan":  "manage",
+	"perancangan":  "design",
+	"pengujian":    "test",
+	"penerapan":    "implement",
+	"keuangan":     "finance",
+	"perbankan":    "bank",
+	"jaringan":     "network",
+	"keamanan":     "security",
+	"kecerdasan":   "intelligence",
+}
+
+// ─── Stemmer (Indonesian prefix/suffix removal) ──────────────────────────────
 
 // Suffixes dicoba mulai dari yang terpanjang terlebih dahulu untuk menghindari penghilangan sebagian.
 var idSuffixes = []string{"kan", "an", "nya", "lah", "kah", "pun", "i"}
@@ -116,10 +223,9 @@ func BuildTFIDF(corpus [][]string) []map[string]float64 {
 			tf[term] = tf[term] / totalTerms // TF(t,d) = freq / total_terms
 		}
 
-		// Hitung TF-IDF (W = TF × IDF)
 		vec := make(map[string]float64, len(tf))
 		for term, tfScore := range tf {
-			idfScore := math.Log(float64(N) / float64(df[term]))
+			idfScore := math.Log(float64(N+1)/float64(df[term]+1)) + 1.0
 			vec[term] = tfScore * idfScore
 		}
 		vectors[i] = vec
@@ -147,7 +253,7 @@ func BuildIDF(corpus [][]string) map[string]float64 {
 	}
 	idf := make(map[string]float64, len(df))
 	for term, freq := range df {
-		idf[term] = math.Log(float64(N) / float64(freq))
+		idf[term] = math.Log(float64(N+1)/float64(freq+1)) + 1.0
 	}
 	return idf
 }

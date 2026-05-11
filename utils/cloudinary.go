@@ -10,11 +10,11 @@ import (
 	"github.com/cloudinary/cloudinary-go/v2/api/uploader"
 )
 
-// UploadImage uploads an image file to Cloudinary (jpg/jpeg/png/webp only).
+// UploadImage mengunggah file gambar ke Cloudinary (hanya jpg/jpeg/png/webp).
 func UploadImage(cld *cloudinary.Cloudinary, file *multipart.FileHeader, folder string) (string, error) {
 	src, err := file.Open()
 	if err != nil {
-		return "", fmt.Errorf("failed to open file: %w", err)
+		return "", fmt.Errorf("gagal membuka file: %w", err)
 	}
 	defer src.Close()
 
@@ -33,11 +33,11 @@ func UploadImage(cld *cloudinary.Cloudinary, file *multipart.FileHeader, folder 
 	return uploadResult.SecureURL, nil
 }
 
-// UploadFile uploads any file type to Cloudinary (no format restriction).
+// UploadFile mengunggah file jenis apa pun ke Cloudinary (tanpa batasan format).
 func UploadFile(cld *cloudinary.Cloudinary, file *multipart.FileHeader, folder string) (string, error) {
 	src, err := file.Open()
 	if err != nil {
-		return "", fmt.Errorf("failed to open file: %w", err)
+		return "", fmt.Errorf("gagal membuka file: %w", err)
 	}
 	defer src.Close()
 
@@ -48,8 +48,8 @@ func UploadFile(cld *cloudinary.Cloudinary, file *multipart.FileHeader, folder s
 		Type:         api.Upload,
 	})
 	if err != nil {
-		// Some Cloudinary accounts classify PDFs as image-based assets.
-		// Retry with auto resource_type to avoid false negatives on valid files.
+		// Beberapa akun Cloudinary mengklasifikasikan PDF sebagai aset berbasis gambar.
+		// Coba lagi dengan resource_type auto untuk menghindari false negatives pada file yang valid.
 		_, seekErr := src.Seek(0, 0)
 		if seekErr != nil {
 			return "", fmt.Errorf("cloudinary upload failed: %w", err)

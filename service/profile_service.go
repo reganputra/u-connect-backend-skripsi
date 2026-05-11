@@ -42,8 +42,9 @@ type ProfileRequest struct {
 	ExpectedGraduationYear *int    `json:"expected_graduation_year"`
 
 	// Skills & Interests
-	Skills    *string `json:"skills"`
-	Interests *string `json:"interests"`
+	Skills          *string `json:"skills"`
+	Interests       *string `json:"interests"`
+	CareerInterests *string `json:"career_interests"`
 
 	// Mentorship (alumni only)
 	MentorQuota       *int    `json:"mentor_quota"`
@@ -79,6 +80,22 @@ type ProfileService interface {
 	GetProfileDirectory(page, limit int) ([]DirectorySummary, int64, error)
 	SearchProfiles(query string, page, limit int) ([]DirectorySummary, int64, error)
 	GetProfilesByRole(role string, page, limit int) ([]DirectorySummary, int64, error)
+	// Admin: partial profile update for any user
+	AdminPatchProfile(targetUserID uint, req AdminProfilePatchRequest) error
+}
+
+// AdminProfilePatchRequest contains only the fields an admin is allowed to patch.
+// All fields are optional — only non-nil values will be applied.
+type AdminProfilePatchRequest struct {
+	Bio               *string `json:"bio"`
+	Skills            *string `json:"skills"`
+	Interests         *string `json:"interests"`
+	CareerInterests   *string `json:"career_interests"`
+	Position          *string `json:"position"`
+	IndustryName      *string `json:"industry_name"`
+	IndustryType      *string `json:"industry_type"`
+	MentorQuota       *int    `json:"mentor_quota"`
+	MentorDescription *string `json:"mentor_description"`
 }
 
 // ─── Implementation ───────────────────────────────────────────────────────────
@@ -146,9 +163,11 @@ func nullFieldsByStatus(profile *models.UserProfile) {
 	}
 	if status != "entrepreneur" {
 		profile.CompanySize = nil
-		profile.IndustryName = nil
-		profile.IndustryType = nil
 		profile.YearFounding = nil
+		if status != "employed" {
+			profile.IndustryName = nil
+			profile.IndustryType = nil
+		}
 	}
 	if status != "continuing_study" {
 		profile.EducationalLevel = nil
@@ -192,6 +211,7 @@ func (s *profileService) CreateProfile(userID uint, req ProfileRequest) (*models
 		ExpectedGraduationYear: req.ExpectedGraduationYear,
 		Skills:                 req.Skills,
 		Interests:              req.Interests,
+		CareerInterests:        req.CareerInterests,
 		MentorQuota:            req.MentorQuota,
 		MentorDescription:      req.MentorDescription,
 		StatusDescription:      req.StatusDescription,
@@ -228,7 +248,8 @@ func (s *profileService) GetPublicProfile(targetUserID uint) (*models.UserProfil
 func (s *profileService) UpdateProfile(userID uint, req ProfileRequest) (*models.UserProfile, error) {
 	profile, err := s.profileRepo.FindProfileByUserID(userID)
 	if err != nil {
-		return nil, errors.New("profil tidak ditemukan")
+		// Profile doesn't exist yet — treat PUT as an upsert and create it.
+		return s.CreateProfile(userID, req)
 	}
 
 	if req.Bio != nil {
@@ -287,6 +308,9 @@ func (s *profileService) UpdateProfile(userID uint, req ProfileRequest) (*models
 	}
 	if req.Interests != nil {
 		profile.Interests = req.Interests
+	}
+	if req.CareerInterests != nil {
+		profile.CareerInterests = req.CareerInterests
 	}
 	if req.MentorQuota != nil {
 		profile.MentorQuota = req.MentorQuota
@@ -424,4 +448,41 @@ func (s *profileService) GetProfilesByRole(role string, page, limit int) ([]Dire
 		return []DirectorySummary{}, 0, errors.New("peran harus student, alumni, atau partner")
 	}
 	return s.profileRepo.GetProfilesByRole(role, page, limit)
+}
+
+// AdminPatchProfile allows an admin to partially update any user's profile.
+// Only non-nil fields in the request are applied; everything else is left unchanged.
+func (s *profileService) AdminPatchProfile(targetUserID uint, req AdminProfilePatchRequest) error {
+	updates := make(map[string]interface{})
+	if req.Bio != nil {
+		updates["bio"] = *req.Bio
+	}
+	if req.Skills != nil {
+		updates["skills"] = *req.Skills
+	}
+	if req.Interests != nil {
+		updates["interests"] = *req.Interests
+	}
+	if req.Position != nil {
+		updates["position"] = *req.Position
+	}
+	if req.IndustryName != nil {
+		updates["industry_name"] = *req.IndustryName
+	}
+	if req.IndustryType != nil {
+		updates["industry_type"] = *req.IndustryType
+	}
+	if req.CareerInterests != nil {
+		updates["career_interests"] = *req.CareerInterests
+	}
+	if req.MentorQuota != nil {
+		updates["mentor_quota"] = *req.MentorQuota
+	}
+	if req.MentorDescription != nil {
+		updates["mentor_description"] = *req.MentorDescription
+	}
+	if len(updates) == 0 {
+		return errors.New("tidak ada field yang diberikan untuk diupdate")
+	}
+	return s.profileRepo.PatchProfileByUserID(targetUserID, updates)
 }

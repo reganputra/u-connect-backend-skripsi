@@ -30,6 +30,14 @@ type MentorRequestRepository interface {
 	ApprovePendingTransactional(mentorID, requestID uint) (*models.MentorRequest, error)
 	EndMentorshipTransactional(mentorID, requestID uint, reason *string) (*models.MentorRequest, int64, error)
 	Update(req *models.MentorRequest) error
+	// FindGroundTruth returns all (student_id, mentor_id) request pairs for MAP evaluation.
+	FindGroundTruth() ([]GroundTruthEntry, error)
+}
+
+// GroundTruthEntry is a flat row from mentor_requests used to build the MAP evaluation ground truth.
+type GroundTruthEntry struct {
+	StudentID uint `gorm:"column:student_id"`
+	MentorID  uint `gorm:"column:mentor_id"`
 }
 
 type mentorRequestRepository struct {
@@ -249,3 +257,16 @@ func (r *mentorRequestRepository) EndMentorshipTransactional(mentorID, requestID
 func (r *mentorRequestRepository) Update(req *models.MentorRequest) error {
 	return r.db.Save(req).Error
 }
+
+// FindGroundTruth fetches all (student_id, mentor_id) pairs from mentor_requests.
+// Every request a student ever made — regardless of status — is treated as a
+// positive relevance signal (the student chose to request that mentor).
+func (r *mentorRequestRepository) FindGroundTruth() ([]GroundTruthEntry, error) {
+	var rows []GroundTruthEntry
+	err := r.db.Table("mentor_requests").
+		Select("student_id, mentor_id").
+		Where("deleted_at IS NULL").
+		Scan(&rows).Error
+	return rows, err
+}
+

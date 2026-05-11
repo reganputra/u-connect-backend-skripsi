@@ -35,6 +35,8 @@ type ProfileRepository interface {
 	GetAllProfiles(page, limit int) ([]DirectorySummary, int64, error)
 	SearchProfiles(query string, page, limit int) ([]DirectorySummary, int64, error)
 	GetProfilesByRole(role string, page, limit int) ([]DirectorySummary, int64, error)
+	// Admin: partial update of any user's profile
+	PatchProfileByUserID(userID uint, updates map[string]interface{}) error
 }
 
 type profileRepository struct {
@@ -60,6 +62,12 @@ func (r *profileRepository) FindProfileByUserID(userID uint) (*models.UserProfil
 		return nil, result.Error
 	}
 	return &profile, nil
+}
+
+func (r *profileRepository) PatchProfileByUserID(userID uint, updates map[string]interface{}) error {
+	return r.db.Model(&models.UserProfile{}).
+		Where("user_id = ?", userID).
+		Updates(updates).Error
 }
 
 func (r *profileRepository) EnsureProfileExists(userID uint) error {
