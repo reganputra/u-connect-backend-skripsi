@@ -5,13 +5,13 @@ import (
 	"strings"
 )
 
-// LoadEnvFile reads a .env file and sets environment variables.
-// It skips empty lines and comment lines starting with '#'.
-// Existing environment variables are not overwritten.
+// LoadEnvFile membaca file .env dan menyetel variabel lingkungan.
+// File ini melewatkan baris kosong dan baris komentar yang dimulai dengan '#'.
+// Variabel lingkungan yang ada tidak ditimpa.
 func LoadEnvFile(filename string) {
 	data, err := os.ReadFile(filename)
 	if err != nil {
-		// .env file is optional, silently ignore if not found
+		// File .env opsional, abaikan secara diam-diam jika tidak ditemukan
 		return
 	}
 
@@ -19,7 +19,7 @@ func LoadEnvFile(filename string) {
 	for _, line := range lines {
 		line = strings.TrimSpace(line)
 
-		// Skip empty lines and comments
+		// Lewati baris kosong dan komentar
 		if line == "" || strings.HasPrefix(line, "#") {
 			continue
 		}
@@ -32,15 +32,15 @@ func LoadEnvFile(filename string) {
 		key := strings.TrimSpace(parts[0])
 		value := strings.TrimSpace(parts[1])
 
-		// Only set if not already defined in the environment
+		// Hanya mengatur jika belum didefinisikan di lingkungan
 		if os.Getenv(key) == "" {
 			os.Setenv(key, value)
 		}
 	}
 }
 
-// GetEnv returns the value of the environment variable named by key.
-// If the variable is not set or is empty, it returns the fallback value.
+// GetEnv mengembalikan nilai variabel lingkungan yang bernama dengan key.
+// Jika variabel tidak diatur atau kosong, ia mengembalikan nilai fallback.
 func GetEnv(key, fallback string) string {
 	if value, ok := os.LookupEnv(key); ok && value != "" {
 		return value

@@ -19,7 +19,7 @@ type CloudinaryAssetRef struct {
 	Format       string
 }
 
-// ParseCloudinaryDeliveryURL extracts Cloudinary asset metadata from a delivery URL.
+// ParseCloudinaryDeliveryURL mengekstrak metadata aset Cloudinary dari URL pengiriman.
 func ParseCloudinaryDeliveryURL(rawURL string) (*CloudinaryAssetRef, error) {
 	u, err := url.Parse(rawURL)
 	if err != nil {
@@ -75,7 +75,7 @@ func ParseCloudinaryDeliveryURL(rawURL string) (*CloudinaryAssetRef, error) {
 	}, nil
 }
 
-// BuildCloudinaryTemporaryDownloadURL creates a signed, time-limited download URL.
+// BuildCloudinaryTemporaryDownloadURL membuat URL unduhan sementara yang ditandatangani dan terbatas waktu.
 func BuildCloudinaryTemporaryDownloadURL(cld *cloudinary.Cloudinary, rawURL string, ttl time.Duration) (string, error) {
 	if cld == nil {
 		return "", fmt.Errorf("cloudinary client is not initialized")

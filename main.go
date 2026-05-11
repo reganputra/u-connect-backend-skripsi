@@ -124,19 +124,16 @@ func main() {
 
 	// ── CORS ──────────────────────────────────────────────────────────────────
 	allowedOrigins := os.Getenv("CORS_ALLOWED_ORIGINS")
-	if allowedOrigins == "" {
-		allowedOrigins = "http://localhost:5173,https://frontend-skripsi-six.vercel.app" // dev & prod default
+	if allowedOrigins == "" { // prod
+		allowedOrigins = "http://localhost:5173" // dev
 	}
 	app.Use(cors.New(cors.Config{
 		Next: func(c *fiber.Ctx) bool {
-			// Skip CORS for WebSocket upgrade requests — the WS auth
-			// middleware handles these directly and CORS headers are
-			// irrelevant once the connection is upgraded.
 			return strings.HasPrefix(c.Path(), "/api/ws")
 		},
 		AllowOrigins:     allowedOrigins,
 		AllowMethods:     "GET,POST,PUT,PATCH,DELETE,OPTIONS",
-		AllowHeaders:     "Origin, Content-Type, Accept, Authorization, Sec-WebSocket-Key, Sec-WebSocket-Version, Sec-WebSocket-Extensions, Connection, Upgrade",
+		AllowHeaders:     "Origin, Content-Type, Accept, Authorization, Sec-WebSocket-Key, Sec-WebSocket-Version, Sec-WebSocket-Extensions, Connection, Upgrade, ngrok-skip-browser-warning",
 		ExposeHeaders:    "Content-Length",
 		AllowCredentials: allowedOrigins != "*", // credentials not allowed with wildcard
 	}))
@@ -160,7 +157,7 @@ func main() {
 	routes.RegisterEventRoutes(app, c.EventCtrl, db)
 	routes.RegisterJobRoutes(app, c.JobCtrl, db)
 	routes.RegisterReportRoutes(app, c.ReportCtrl)
-	routes.RegisterAdminRoutes(app, c.AdminCtrl, c.AuthCtrl)
+	routes.RegisterAdminRoutes(app, c.AdminCtrl, c.AuthCtrl, c.EvalCtrl)
 	routes.RegisterMentorRoutes(app, c.MentorCtrl)
 	routes.SetupFollowRoutes(app, c.FollowCtrl)
 	routes.SetupMessageRoutes(app, c.MessageCtrl, hub, c.MessageSvc, c.UserRepo, c.NotifSvc)

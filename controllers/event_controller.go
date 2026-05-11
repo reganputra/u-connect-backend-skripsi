@@ -11,7 +11,6 @@ import (
 	"github.com/reganputra/skripsi-backend/utils"
 )
 
-
 type EventController struct {
 	eventSvc service.EventService
 }
@@ -197,7 +196,6 @@ func (ctrl *EventController) RegisterForEvent(c *fiber.Ctx) error {
 	return utils.SuccessResponse(c, fiber.StatusOK, fiber.Map{"message": "berhasil mendaftar"})
 }
 
-
 func (ctrl *EventController) CancelRegistration(c *fiber.Ctx) error {
 	userID, err := getUserIDFromToken(c)
 	if err != nil {
@@ -295,7 +293,7 @@ func (ctrl *EventController) DeleteAgenda(c *fiber.Ctx) error {
 	return utils.SuccessResponse(c, fiber.StatusOK, fiber.Map{"message": "item agenda berhasil dihapus"})
 }
 
-// parseEventTime parses an RFC3339 time string into a *time.Time.
+// parseEventTime mem-parsing string waktu RFC3339 ke dalam *time.Time.
 func parseEventTime(val string) *time.Time {
 	if val == "" {
 		return nil

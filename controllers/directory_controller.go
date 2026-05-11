@@ -17,8 +17,7 @@ func NewDirectoryController(profileSvc service.ProfileService, portfolioSvc serv
 	return &DirectoryController{profileSvc: profileSvc, portfolioSvc: portfolioSvc}
 }
 
-// GET /api/directory/:userID
-// Returns detailed public profile for a specific user.
+// Mengembalikan profil publik lengkap untuk pengguna tertentu.
 func (ctrl *DirectoryController) GetPublicProfile(c *fiber.Ctx) error {
 	userID, err := strconv.ParseUint(c.Params("userID"), 10, 64)
 	if err != nil {
@@ -30,13 +29,10 @@ func (ctrl *DirectoryController) GetPublicProfile(c *fiber.Ctx) error {
 		return utils.ErrorResponse(c, fiber.StatusNotFound, err.Error())
 	}
 
-	// Keep this response shape identical to GET /api/profile
-	// so frontend can reuse the same profile detail renderer.
 	return utils.SuccessResponse(c, fiber.StatusOK, profile)
 }
 
-// GET /api/directory/:userID/portfolio
-// Returns public portfolio items for a specific user.
+// Mengembalikan item portofolio publik untuk pengguna tertentu.
 func (ctrl *DirectoryController) GetPublicPortfolio(c *fiber.Ctx) error {
 	userID, err := strconv.ParseUint(c.Params("userID"), 10, 64)
 	if err != nil {
@@ -51,8 +47,7 @@ func (ctrl *DirectoryController) GetPublicPortfolio(c *fiber.Ctx) error {
 	return utils.SuccessResponse(c, fiber.StatusOK, portfolioItems)
 }
 
-// GET /api/directory
-// Returns paginated list of all user profiles (students + alumni).
+// Mengembalikan daftar profil pengguna yang dipaginasi (mahasiswa + alumni).
 func (ctrl *DirectoryController) GetDirectory(c *fiber.Ctx) error {
 	page, _ := strconv.Atoi(c.Query("page", "1"))
 	limit, _ := strconv.Atoi(c.Query("limit", "20"))
@@ -70,8 +65,7 @@ func (ctrl *DirectoryController) GetDirectory(c *fiber.Ctx) error {
 	})
 }
 
-// GET /api/directory/search?q=<query>
-// Searches profiles by name, skills, company, or interests.
+// Mencari profil berdasarkan nama, keahlian, perusahaan, atau minat.
 func (ctrl *DirectoryController) SearchProfiles(c *fiber.Ctx) error {
 	query := c.Query("q")
 	if query == "" {
@@ -95,8 +89,7 @@ func (ctrl *DirectoryController) SearchProfiles(c *fiber.Ctx) error {
 	})
 }
 
-// GET /api/directory/role/:role
-// Returns paginated profiles filtered by role (student, alumni, or partner).
+// Mengembalikan profil yang dipaginasi yang difilter berdasarkan peran (student, alumni, atau partner).
 func (ctrl *DirectoryController) GetProfilesByRole(c *fiber.Ctx) error {
 	role := c.Params("role")
 	if role != "student" && role != "alumni" && role != "partner" {

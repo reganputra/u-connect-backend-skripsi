@@ -13,9 +13,11 @@ type MentorDoc struct {
 	MentorBio       string
 	Skills          string
 	Interests       string
+	CareerInterests string
 	Position        string
 	CompanyName     string
 	IndustryName    string
+	IndustryType    string
 	ExperienceText  string
 	YearsExperience int
 	MentorQuota     int
@@ -131,9 +133,11 @@ func (r *mentorRepository) FindAllMentorDocs() ([]MentorDoc, error) {
 			COALESCE(up.mentor_description, '')  AS mentor_bio,
 			COALESCE(up.skills, '')              AS skills,
 			COALESCE(up.interests, '')           AS interests,
+			COALESCE(up.career_interests, '')    AS career_interests,
 			COALESCE(up.position, '')            AS position,
 			COALESCE(up.company_name, '')        AS company_name,
 			COALESCE(up.industry_name, '')       AS industry_name,
+			COALESCE(up.industry_type, '')       AS industry_type,
 			COALESCE(exp.experience_text, '')    AS experience_text,
 			COALESCE(exp.years_experience, 0)    AS years_experience,
 			up.mentor_quota

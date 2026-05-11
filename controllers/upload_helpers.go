@@ -9,8 +9,8 @@ import (
 	"github.com/reganputra/skripsi-backend/utils"
 )
 
-// uploadFilesIfPresent handles multiple file uploads for form-data requests
-// Returns a slice of URLs. If no files found or error occurs, returns empty slice or error
+// uploadFilesIfPresent menangani unggahan file ganda untuk permintaan form-data
+// Mengembalikan slice of URLs. Jika tidak ada file yang ditemukan atau terjadi kesalahan, mengembalikan slice kosong atau error
 func uploadFilesIfPresent(c *fiber.Ctx, fieldName, folder string) ([]string, error) {
 	form, err := c.MultipartForm()
 	if err != nil {
@@ -39,8 +39,8 @@ func findMultipartFiles(form *multipart.Form, fieldName string) []*multipart.Fil
 		return []*multipart.FileHeader{}
 	}
 
-	// Priority order avoids accidental duplicates when clients submit multiple
-	// equivalent key styles in a single request.
+	// Priority order menghindari duplikat tidak sengaja ketika klien mengirimkan banyak
+	// gaya kunci yang setara dalam satu permintaan.
 	if files, ok := form.File[fieldName]; ok && len(files) > 0 {
 		return files
 	}

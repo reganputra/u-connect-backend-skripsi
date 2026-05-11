@@ -10,11 +10,12 @@ import (
 )
 
 type AdminController struct {
-	svc service.AdminService
+	svc        service.AdminService
+	profileSvc service.ProfileService
 }
 
-func NewAdminController(svc service.AdminService) *AdminController {
-	return &AdminController{svc: svc}
+func NewAdminController(svc service.AdminService, profileSvc service.ProfileService) *AdminController {
+	return &AdminController{svc: svc, profileSvc: profileSvc}
 }
 
 // ─── Admin helpers ────────────────────────────────────────────────────────────
@@ -48,8 +49,9 @@ func (ctrl *AdminController) GetUsers(c *fiber.Ctx) error {
 	page, _ := strconv.Atoi(c.Query("page", "1"))
 	limit, _ := strconv.Atoi(c.Query("limit", "20"))
 	role := c.Query("role")
+	search := c.Query("search") // cari berdasarkan nama atau email
 
-	users, total, err := ctrl.svc.GetUsers(page, limit, role)
+	users, total, err := ctrl.svc.GetUsers(page, limit, role, search)
 	if err != nil {
 		return utils.ErrorResponse(c, fiber.StatusInternalServerError, err.Error())
 	}
@@ -57,6 +59,7 @@ func (ctrl *AdminController) GetUsers(c *fiber.Ctx) error {
 		"total": total, "page": page, "limit": limit, "data": users,
 	})
 }
+
 
 func (ctrl *AdminController) GetUserByID(c *fiber.Ctx) error {
 	id, err := strconv.ParseUint(c.Params("id"), 10, 64)
@@ -264,3 +267,77 @@ func (ctrl *AdminController) DeleteCategory(c *fiber.Ctx) error {
 	}
 	return utils.SuccessResponse(c, fiber.StatusOK, fiber.Map{"message": "kategori berhasil dihapus"})
 }
+
+// PATCH /api/admin/users/:id/profile
+func (ctrl *AdminController) PatchUserProfile(c *fiber.Ctx) error {
+	targetID, err := strconv.ParseUint(c.Params("id"), 10, 64)
+	if err != nil {
+		return utils.ErrorResponse(c, fiber.StatusBadRequest, "ID pengguna tidak valid")
+	}
+	var req service.AdminProfilePatchRequest
+	if err := c.BodyParser(&req); err != nil {
+		return utils.ErrorResponse(c, fiber.StatusBadRequest, "request body tidak valid")
+	}
+	if err := ctrl.profileSvc.AdminPatchProfile(uint(targetID), req); err != nil {
+		if err.Error() == "tidak ada field yang diberikan untuk diupdate" {
+			return utils.ErrorResponse(c, fiber.StatusBadRequest, err.Error())
+		}
+		return utils.ErrorResponse(c, fiber.StatusInternalServerError, err.Error())
+	}
+	return utils.SuccessResponse(c, fiber.StatusOK, fiber.Map{"message": "profil pengguna berhasil diperbarui"})
+}
+
+// POST /api/admin/users/:id/experience
+func (ctrl *AdminController) AddUserExperience(c *fiber.Ctx) error {
+	targetID, err := strconv.ParseUint(c.Params("id"), 10, 64)
+	if err != nil {
+		return utils.ErrorResponse(c, fiber.StatusBadRequest, "ID pengguna tidak valid")
+	}
+	var req service.ExperienceRequest
+	if err := c.BodyParser(&req); err != nil {
+		return utils.ErrorResponse(c, fiber.StatusBadRequest, "request body tidak valid")
+	}
+	exp, err := ctrl.profileSvc.AddExperience(uint(targetID), req)
+	if err != nil {
+		return utils.ErrorResponse(c, fiber.StatusBadRequest, err.Error())
+	}
+	return utils.SuccessResponse(c, fiber.StatusCreated, exp)
+}
+
+// PUT /api/admin/users/:id/experience/:expId
+func (ctrl *AdminController) UpdateUserExperience(c *fiber.Ctx) error {
+	targetID, err := strconv.ParseUint(c.Params("id"), 10, 64)
+	if err != nil {
+		return utils.ErrorResponse(c, fiber.StatusBadRequest, "ID pengguna tidak valid")
+	}
+	expID, err := strconv.ParseUint(c.Params("expId"), 10, 64)
+	if err != nil {
+		return utils.ErrorResponse(c, fiber.StatusBadRequest, "ID pengalaman tidak valid")
+	}
+	var req service.ExperienceRequest
+	if err := c.BodyParser(&req); err != nil {
+		return utils.ErrorResponse(c, fiber.StatusBadRequest, "request body tidak valid")
+	}
+	exp, err := ctrl.profileSvc.UpdateExperience(uint(targetID), uint(expID), req)
+	if err != nil {
+		return utils.ErrorResponse(c, fiber.StatusBadRequest, err.Error())
+	}
+	return utils.SuccessResponse(c, fiber.StatusOK, exp)
+}
+
+// DELETE /api/admin/users/:id/experience/:expId
+func (ctrl *AdminController) DeleteUserExperience(c *fiber.Ctx) error {
+	targetID, err := strconv.ParseUint(c.Params("id"), 10, 64)
+	if err != nil {
+		return utils.ErrorResponse(c, fiber.StatusBadRequest, "ID pengguna tidak valid")
+	}
+	expID, err := strconv.ParseUint(c.Params("expId"), 10, 64)
+	if err != nil {
+		return utils.ErrorResponse(c, fiber.StatusBadRequest, "ID pengalaman tidak valid")
+	}
+	if err := ctrl.profileSvc.DeleteExperience(uint(targetID), uint(expID)); err != nil {
+		return utils.ErrorResponse(c, fiber.StatusBadRequest, err.Error())
+	}
+	return utils.SuccessResponse(c, fiber.StatusOK, fiber.Map{"message": "pengalaman berhasil dihapus"})
+}
+

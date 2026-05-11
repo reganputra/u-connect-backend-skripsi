@@ -9,7 +9,7 @@ import (
 	"github.com/reganputra/skripsi-backend/utils"
 )
 
-// Protected returns a Fiber middleware that validates Bearer JWT tokens.
+// Protected mengembalikan middleware Fiber yang memvalidasi token JWT Bearer.
 func Protected() fiber.Handler {
 	secret := os.Getenv("JWT_SECRET")
 	return jwtware.New(jwtware.Config{
@@ -20,7 +20,7 @@ func Protected() fiber.Handler {
 	})
 }
 
-// RequireRole returns a middleware that allows only the specified roles.
+// RequireRole mengembalikan middleware yang hanya mengizinkan peran yang ditentukan.
 func RequireRole(roles ...string) fiber.Handler {
 	return func(c *fiber.Ctx) error {
 		user, ok := c.Locals("user").(*jwt.Token)
