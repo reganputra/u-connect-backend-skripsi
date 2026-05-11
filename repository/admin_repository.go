@@ -1,6 +1,9 @@
 package repository
 
 import (
+	"strings"
+	"time"
+
 	"github.com/reganputra/skripsi-backend/models"
 	"gorm.io/gorm"
 )
@@ -10,7 +13,7 @@ type AdminRepository interface {
 	GetStats() (map[string]int64, error)
 
 	// User management
-	FindUsers(page, limit int, role string) ([]models.User, int64, error)
+	FindUsers(page, limit int, role, search string) ([]AdminUserWithProfile, int64, error)
 	FindUserByID(id uint) (*models.User, error)
 	UpdateUser(u *models.User) error
 
@@ -19,6 +22,28 @@ type AdminRepository interface {
 	DeleteGroup(id uint) error
 	DeleteEvent(id uint) error
 	DeleteJob(id uint) error
+}
+
+// AdminUserWithProfile is the flat DTO returned by the admin user list.
+// It joins User + UserProfile so the frontend can display AND edit profile
+// fields inline without a separate profile request.
+type AdminUserWithProfile struct {
+	// User fields
+	ID        uint      `json:"id"`
+	Email     string    `json:"email"`
+	Role      string    `json:"role"`
+	IsActive  bool      `json:"is_active"`
+	CreatedAt time.Time `json:"created_at"`
+	// Profile fields (nullable — user may not have a profile yet)
+	Name              *string `json:"name"`
+	ProfilePicture    *string `json:"profile_picture"`
+	Bio               *string `json:"bio"`
+	Skills            *string `json:"skills"`
+	Interests         *string `json:"interests"`
+	Position          *string `json:"position"`
+	IndustryName      *string `json:"industry_name"`
+	MentorQuota       *int    `json:"mentor_quota"`
+	MentorDescription *string `json:"mentor_description"`
 }
 
 type adminRepository struct{ db *gorm.DB }
@@ -59,18 +84,29 @@ func (r *adminRepository) GetStats() (map[string]int64, error) {
 
 // ─── User Management ──────────────────────────────────────────────────────────
 
-func (r *adminRepository) FindUsers(page, limit int, role string) ([]models.User, int64, error) {
-	var users []models.User
+func (r *adminRepository) FindUsers(page, limit int, role, search string) ([]AdminUserWithProfile, int64, error) {
+	var results []AdminUserWithProfile
 	var total int64
 	offset := (page - 1) * limit
 
-	q := r.db.Model(&models.User{})
+	q := r.db.Table("users u").
+		Select(`u.id, u.email, u.role, u.is_active, u.created_at, u.name,
+			   up.profile_picture, up.bio,
+			   up.skills, up.interests, up.position,
+			   up.industry_name, up.mentor_quota, up.mentor_description`).
+		Joins("LEFT JOIN user_profiles up ON up.user_id = u.id")
+
 	if role != "" {
-		q = q.Where("role = ?", role)
+		q = q.Where("u.role = ?", role)
 	}
+	if s := strings.TrimSpace(search); s != "" {
+		like := "%" + strings.ToLower(s) + "%"
+		q = q.Where("LOWER(u.email) LIKE ? OR LOWER(u.name) LIKE ?", like, like)
+	}
+
 	q.Count(&total)
-	err := q.Order("created_at desc").Offset(offset).Limit(limit).Find(&users).Error
-	return users, total, err
+	err := q.Order("u.created_at DESC").Offset(offset).Limit(limit).Scan(&results).Error
+	return results, total, err
 }
 
 func (r *adminRepository) FindUserByID(id uint) (*models.User, error) {

@@ -6,7 +6,7 @@ import (
 	"github.com/reganputra/skripsi-backend/middleware"
 )
 
-func RegisterAdminRoutes(app *fiber.App, ctrl *controllers.AdminController, authCtrl *controllers.AuthController) {
+func RegisterAdminRoutes(app *fiber.App, ctrl *controllers.AdminController, authCtrl *controllers.AuthController, evalCtrl *controllers.EvaluationController) {
 	// Public: category list (any authenticated user can read categories)
 	app.Get("/api/categories", middleware.Protected(), ctrl.GetCategories)
 
@@ -22,6 +22,10 @@ func RegisterAdminRoutes(app *fiber.App, ctrl *controllers.AdminController, auth
 	admin.Patch("/users/:id/status", ctrl.SetUserStatus)
 	admin.Patch("/users/:id/role", ctrl.SetUserRole)
 	admin.Patch("/users/:id/unlock-reset", authCtrl.UnlockUserReset)
+	admin.Patch("/users/:id/profile", ctrl.PatchUserProfile)
+	admin.Post("/users/:id/experience", ctrl.AddUserExperience)
+	admin.Put("/users/:id/experience/:expId", ctrl.UpdateUserExperience)
+	admin.Delete("/users/:id/experience/:expId", ctrl.DeleteUserExperience)
 
 	// Report moderation
 	admin.Get("/reports", ctrl.GetReports)
@@ -39,4 +43,7 @@ func RegisterAdminRoutes(app *fiber.App, ctrl *controllers.AdminController, auth
 	admin.Post("/categories", ctrl.CreateCategory)
 	admin.Put("/categories/:id", ctrl.UpdateCategory)
 	admin.Delete("/categories/:id", ctrl.DeleteCategory)
+
+	// CBF Evaluation (MAP metric) — admin-only, for academic/thesis evaluation
+	admin.Get("/evaluation/cbf", evalCtrl.EvaluateCBF)
 }

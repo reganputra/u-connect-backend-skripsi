@@ -49,7 +49,7 @@ type AdminService interface {
 	GetDashboardStats() (map[string]int64, error)
 
 	// User management
-	GetUsers(page, limit int, role string) ([]models.User, int64, error)
+	GetUsers(page, limit int, role, search string) ([]repository.AdminUserWithProfile, int64, error)
 	GetUserByID(id uint) (*models.User, error)
 	SetUserStatus(id uint, req UpdateUserStatusRequest) (*models.User, error)
 	SetUserRole(id uint, req UpdateUserRoleRequest) (*models.User, error)
@@ -111,14 +111,14 @@ func (s *adminService) GetDashboardStats() (map[string]int64, error) {
 
 // ─── User Management ──────────────────────────────────────────────────────────
 
-func (s *adminService) GetUsers(page, limit int, role string) ([]models.User, int64, error) {
+func (s *adminService) GetUsers(page, limit int, role, search string) ([]repository.AdminUserWithProfile, int64, error) {
 	if page < 1 {
 		page = 1
 	}
 	if limit < 1 || limit > 100 {
 		limit = 20
 	}
-	return s.adminRepo.FindUsers(page, limit, role)
+	return s.adminRepo.FindUsers(page, limit, role, search)
 }
 
 func (s *adminService) GetUserByID(id uint) (*models.User, error) {
