@@ -45,8 +45,7 @@ func main() {
 	// Initialize Cloudinary
 	config.ConnectCloudinary()
 
-	// ── Background: migrate + seed (runs after HTTP server is already listening) ──
-	// This ensures the server responds to Back4App's health-check immediately
+	// ── Background: migrate + seed (runs after HTTP server is already listening)
 	// instead of timing out while AutoMigrate runs 20+ slow SQL queries.
 	go func() {
 		if err := config.DB.AutoMigrate(

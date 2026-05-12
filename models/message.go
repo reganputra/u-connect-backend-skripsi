@@ -8,8 +8,10 @@ type Message struct {
 	gorm.Model
 	SenderID   uint   `gorm:"not null;index:idx_msg_conv,priority:1"`
 	ReceiverID uint   `gorm:"not null;index:idx_msg_conv,priority:2;index:idx_msg_unread,priority:1"`
-	Content    string `gorm:"not null"`
-	IsRead     bool   `gorm:"not null;default:false;index:idx_msg_unread,priority:2"`
-	Sender     User   `gorm:"foreignKey:SenderID"`
-	Receiver   User   `gorm:"foreignKey:ReceiverID"`
+	Content    string   `gorm:"not null"`
+	ReplyToID  *uint    `gorm:"index"`
+	IsRead     bool     `gorm:"not null;default:false;index:idx_msg_unread,priority:2"`
+	Sender     User     `gorm:"foreignKey:SenderID"`
+	Receiver   User     `gorm:"foreignKey:ReceiverID"`
+	ReplyTo    *Message `gorm:"foreignKey:ReplyToID"`
 }

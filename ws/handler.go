@@ -18,6 +18,7 @@ import (
 type IncomingMsg struct {
 	ReceiverID uint   `json:"receiver_id"`
 	Content    string `json:"content"`
+	ReplyToID  *uint  `json:"reply_to_id,omitempty"`
 }
 
 // Keepalive timing constants.
@@ -194,7 +195,7 @@ func WSHandler(hub *Hub, msgSvc service.MessageService, userRepo repository.User
 				userID, incoming.ReceiverID, len(incoming.Content))
 
 			// Persist message (validates follow relationship in service layer)
-			msg, err := msgSvc.SendMessage(userID, incoming.ReceiverID, incoming.Content)
+			msg, err := msgSvc.SendMessage(userID, incoming.ReceiverID, incoming.Content, incoming.ReplyToID)
 			if err != nil {
 				log.Printf("[WS/MSG]  WARN  service error — from: %d → to: %d — %v",
 					userID, incoming.ReceiverID, err)
