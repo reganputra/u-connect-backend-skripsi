@@ -3084,6 +3084,16 @@ Returns paginated messages newest-first between the caller and `:userID`.
           "picture_url": "https://res.cloudinary.com/.../profiles/budi.jpg"
         },
         "Content": "Halo kak!",
+        "ReplyToID": 14,
+        "ReplyTo": {
+          "ID": 14,
+          "SenderID": 2,
+          "Content": "Halo Budi, silakan DM saya ya.",
+          "Sender": {
+            "ID": 2,
+            "Name": "Mentor Alumni"
+          }
+        },
         "IsRead": true,
         "CreatedAt": "2026-04-04T10:30:00Z"
       }
@@ -3134,9 +3144,11 @@ ws://localhost:8080/api/ws?token=<jwt>
 ```json
 {
   "receiver_id": 8,
-  "content": "Halo! Ada waktu untuk diskusi Python?"
+  "content": "Halo! Ada waktu untuk diskusi Python?",
+  "reply_to_id": 14
 }
 ```
+> `reply_to_id` is optional.
 
 #### Server → Client (new message received)
 
@@ -3148,6 +3160,7 @@ ws://localhost:8080/api/ws?token=<jwt>
     "SenderID": 2,
     "ReceiverID": 8,
     "Content": "Halo! Ada waktu untuk diskusi Python?",
+    "ReplyToID": 14,
     "IsRead": false,
     "CreatedAt": "2026-04-04T10:30:00Z"
   }

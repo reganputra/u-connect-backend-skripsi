@@ -25,6 +25,8 @@ type MessageRepository interface {
 	MarkAsRead(receiverID, senderID uint) error
 	// CountUnread returns the total number of unread messages for receiverID.
 	CountUnread(receiverID uint) (int64, error)
+	// FindByID finds a message by its ID.
+	FindByID(id uint) (*models.Message, error)
 }
 
 type messageRepository struct {
@@ -57,6 +59,9 @@ func (r *messageRepository) GetConversation(userA, userB uint, page, limit int) 
 		Preload("Sender.Profile").
 		Preload("Receiver").
 		Preload("Receiver.Profile").
+		Preload("ReplyTo").
+		Preload("ReplyTo.Sender").
+		Preload("ReplyTo.Sender.Profile").
 		Order("created_at DESC").
 		Offset(offset).Limit(limit).
 		Find(&msgs).Error
@@ -125,4 +130,10 @@ func (r *messageRepository) CountUnread(receiverID uint) (int64, error) {
 		Where("receiver_id = ? AND is_read = false", receiverID).
 		Count(&count).Error
 	return count, err
+}
+
+func (r *messageRepository) FindByID(id uint) (*models.Message, error) {
+	var msg models.Message
+	err := r.db.First(&msg, id).Error
+	return &msg, err
 }

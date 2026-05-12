@@ -9,7 +9,7 @@ import (
 
 type MessageService interface {
 	// SendMessage persists a message after validating follow relationship.
-	SendMessage(senderID, receiverID uint, content string) (*models.Message, error)
+	SendMessage(senderID, receiverID uint, content string, replyToID *uint) (*models.Message, error)
 	// GetConversation returns paginated messages between two users.
 	// Returns error if caller is not a participant.
 	GetConversation(callerID, partnerID uint, page, limit int) ([]models.Message, int64, error)
@@ -38,7 +38,7 @@ func NewMessageService(
 	}
 }
 
-func (s *messageService) SendMessage(senderID, receiverID uint, content string) (*models.Message, error) {
+func (s *messageService) SendMessage(senderID, receiverID uint, content string, replyToID *uint) (*models.Message, error) {
 	if senderID == receiverID {
 		return nil, errors.New("tidak dapat mengirim pesan kepada diri sendiri")
 	}
@@ -55,10 +55,24 @@ func (s *messageService) SendMessage(senderID, receiverID uint, content string) 
 		return nil, errors.New("anda harus mengikuti pengguna ini sebelum mengirim pesan")
 	}
 
+	// Validate ReplyToID if provided
+	if replyToID != nil {
+		// Check if the replied message exists and belongs to the same conversation
+		replyMsg, err := s.msgRepo.FindByID(*replyToID)
+		if err != nil {
+			return nil, errors.New("pesan yang dibalas tidak ditemukan")
+		}
+		if (replyMsg.SenderID != senderID && replyMsg.SenderID != receiverID) ||
+			(replyMsg.ReceiverID != senderID && replyMsg.ReceiverID != receiverID) {
+			return nil, errors.New("tidak dapat membalas pesan dari percakapan lain")
+		}
+	}
+
 	msg := &models.Message{
 		SenderID:   senderID,
 		ReceiverID: receiverID,
 		Content:    content,
+		ReplyToID:  replyToID,
 	}
 	if err := s.msgRepo.Create(msg); err != nil {
 		return nil, err
