@@ -25,6 +25,7 @@ Request body must include `Content-Type: application/json` for JSON endpoints or
 - [Mentoring Module](#mentoring-module)
 - [Message Module](#message-module)
 - [Follow Module](#follow-module)
+- [Engagement Analytics (Admin)](#engagement-analytics-admin)
 - [Cloudinary Upload Reference](#cloudinary-upload-reference)
 
 ---
@@ -3629,6 +3630,161 @@ Returns a list of users who are following the specified user `id`.
 Returns a list of users that the specified user `id` is currently following.
 
 **Response `200`:** (Same structure as `GET /api/users/:id/followers`)
+
+---
+
+## Engagement Analytics (Admin)
+
+> All endpoints in this section require **admin** role. Requests from non-admin users will receive `403 Forbidden`.
+
+Base path: `/api/admin/analytics`
+
+### View Tracking & Deduplication Behaviour
+
+The backend tracks content detail views (posts, groups, events, jobs) automatically via a server-side middleware. Key rules:
+
+- A view is recorded only on a successful `GET` request to a detail endpoint (e.g. `GET /api/feed/:id`).
+- **Cooldown window:** For authenticated users, a new view event for the same `(user, content_type, content_id)` combination is only recorded once per **1 hour**. Duplicate requests within the window are silently dropped and do **not** inflate counts.
+- Unauthenticated (public) requests are recorded without deduplication because they cannot be attributed to a stable identity.
+- The INSERT runs in a background goroutine — it never adds latency to the client response.
+
+---
+
+### GET `/api/admin/analytics/overview` — Platform Overview Stats
+
+**Auth required. Admin only.**
+
+Returns a concise summary of platform-wide engagement counters.
+
+**Response `200`:**
+
+```json
+{
+  "success": true,
+  "data": {
+    "total_users": 52,
+    "total_posts": 134,
+    "total_groups": 18,
+    "total_events": 27,
+    "total_jobs": 41,
+    "total_reactions": 308,
+    "total_comments": 195,
+    "new_users_last_7d": 6
+  }
+}
+```
+
+| Field | Description |
+|---|---|
+| `total_users` | Total registered user accounts |
+| `total_posts` | Total feed posts |
+| `total_groups` | Total groups |
+| `total_events` | Total events |
+| `total_jobs` | Total job postings |
+| `total_reactions` | Total reactions across all content |
+| `total_comments` | Total comments across all content |
+| `new_users_last_7d` | Users who registered in the last 7 days |
+
+---
+
+### GET `/api/admin/analytics/trends` — Daily Trend Data
+
+**Auth required. Admin only.**
+
+Returns a time-series of daily engagement metrics read from pre-aggregated daily snapshots. The snapshot scheduler runs once per day at UTC midnight and computes the previous calendar day's figures.
+
+**Query Parameters:**
+
+| Parameter | Type | Default | Max | Description |
+|---|---|---|---|---|
+| `days` | integer | `30` | `365` | Number of past calendar days to include |
+
+**Example:** `GET /api/admin/analytics/trends?days=7`
+
+**Response `200`:**
+
+```json
+{
+  "success": true,
+  "data": {
+    "days": 7,
+    "data": [
+      {
+        "date": "2026-05-10",
+        "active_users": 8,
+        "new_users": 2,
+        "post_views": 281,
+        "group_views": 0
+      },
+      {
+        "date": "2026-05-11",
+        "active_users": 5,
+        "new_users": 2,
+        "post_views": 709,
+        "group_views": 13
+      }
+    ]
+  }
+}
+```
+
+| Field | Description |
+|---|---|
+| `date` | Calendar date (`YYYY-MM-DD`, UTC) |
+| `active_users` | Distinct users who viewed any content page that day |
+| `new_users` | Users whose account was created on that day |
+| `post_views` | Total post detail page views that day (after cooldown deduplication) |
+| `group_views` | Total group detail page views that day (after cooldown deduplication) |
+
+> **Note:** Days with no recorded activity (before the analytics feature was enabled, or when the scheduler had not yet run) will **not** appear in the array. The frontend should fill missing dates with zeros when rendering charts.
+
+---
+
+### GET `/api/admin/analytics/top-content` — Top Content by Views
+
+**Auth required. Admin only.**
+
+Returns the most-viewed content items within a time window, ranked by view count. Counts reflect deduplicated views (1 view per user per hour per item).
+
+**Query Parameters:**
+
+| Parameter | Type | Default | Allowed values | Description |
+|---|---|---|---|---|
+| `type` | string | `post` | `post`, `group` | Content type to rank |
+| `days` | integer | `7` | `1`–`365` | Look-back window in days |
+| `limit` | integer | `10` | `1`–`50` | Maximum number of items to return |
+
+**Example:** `GET /api/admin/analytics/top-content?type=post&days=7&limit=5`
+
+**Response `200`:**
+
+```json
+{
+  "success": true,
+  "data": {
+    "type": "post",
+    "days": 7,
+    "limit": 5,
+    "data": [
+      { "target_id": 7, "view_count": 12 },
+      { "target_id": 3, "view_count": 9 },
+      { "target_id": 5, "view_count": 7 }
+    ]
+  }
+}
+```
+
+| Field | Description |
+|---|---|
+| `target_id` | ID of the content item (post ID or group ID depending on `type`) |
+| `view_count` | Number of deduplicated view events in the requested window |
+
+**Error cases:**
+
+| Status | Reason |
+|---|---|
+| `401` | Not authenticated |
+| `403` | Authenticated user is not an admin |
 
 ---
 
