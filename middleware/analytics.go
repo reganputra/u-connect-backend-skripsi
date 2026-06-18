@@ -10,22 +10,32 @@ import (
 	"gorm.io/gorm"
 )
 
-// TrackView mengembalikan middleware Fiber yang menambahkan baris PageView secara asinkron
-// setelah handler merespons.
+// ViewCooldownDuration is the minimum time that must elapse before the same
+// authenticated user can generate a second view event for the same piece of
+// content. Requests that arrive within this window are silently dropped so
+// that repeated page refreshes or frontend re-fetches do not inflate counts.
 //
-// Aturan:
-//   - Hanya mencatat tampilan untuk permintaan GET yang mengembalikan HTTP 200.
-//   - Mengekstrak ID sumber daya dari parameter rute ":id".
-//   - Menangkap ID pengguna terautentikasi dari JWT dalam c.Locals("user").
-//     Jika tidak ada JWT yang hadir (rute publik di masa mendatang), user_id disimpan sebagai nil.
-//   - Penyisipan basis data terjadi dalam goroutine fire-and-forget sehingga tidak pernah
-//     menambah latensi pada waktu respons handler.
+// 1 hour mirrors common industry practice for "unique hourly viewer" metrics
+// and is straightforward to explain in academic documentation.
+const ViewCooldownDuration = 1 * time.Hour
+
+// TrackView returns a Fiber middleware that appends a PageView row
+// asynchronously after the handler has responded.
+//
+// Rules:
+//   - Only records views for GET requests that return HTTP 200.
+//   - Extracts the resource ID from the ":id" route parameter.
+//   - Captures the authenticated user's ID from the JWT stored in c.Locals("user").
+//     If no JWT is present (future public routes), the cooldown check is skipped
+//     and the view is recorded with a nil user_id.
+//   - The deduplication gate runs inside the goroutine so it never adds latency
+//     to the handler's response time.
 func TrackView(targetType string, db *gorm.DB) fiber.Handler {
 	return func(c *fiber.Ctx) error {
-		// Jalankan handler sebenarnya terlebih dahulu.
+		// Run the actual handler first.
 		err := c.Next()
 
-		// Hanya mencatat tampilan untuk permintaan GET yang berhasil.
+		// Only track successful GET requests.
 		if c.Method() != "GET" || c.Response().StatusCode() != 200 {
 			return err
 		}
@@ -39,6 +49,26 @@ func TrackView(targetType string, db *gorm.DB) fiber.Handler {
 		userID := extractViewUserID(c)
 
 		go func() {
+			// Deduplication gate — only enforced for authenticated users because
+			// anonymous views cannot be attributed to a stable identity.
+			if userID != nil {
+				cutoff := time.Now().UTC().Add(-ViewCooldownDuration)
+
+				var count int64
+				db.Model(&models.PageView{}).
+					Where(
+						"user_id = ? AND target_type = ? AND target_id = ? AND created_at >= ?",
+						*userID, targetType, uint(id), cutoff,
+					).
+					Limit(1).
+					Count(&count)
+
+				if count > 0 {
+					// View already recorded within the cooldown window — skip insert.
+					return
+				}
+			}
+
 			_ = db.Create(&models.PageView{
 				CreatedAt:  time.Now().UTC(),
 				UserID:     userID,
@@ -51,8 +81,8 @@ func TrackView(targetType string, db *gorm.DB) fiber.Handler {
 	}
 }
 
-// extractViewUserID mengekstrak user_id dari JWT yang disimpan dalam c.Locals("user").
-// Mengembalikan nil jika token tidak ada atau rusak (misalnya untuk rute tidak terautentikasi).
+// extractViewUserID extracts the user_id from the JWT stored in c.Locals("user").
+// Returns nil if no token is present or the token is malformed (e.g. public routes).
 func extractViewUserID(c *fiber.Ctx) *uint {
 	token, ok := c.Locals("user").(*jwt.Token)
 	if !ok {
