@@ -44,6 +44,36 @@ func Tokenize(text string) []string {
 	return result
 }
 
+// TokenizeWithoutLemmatizer menjalankan alur kerja NLP tanpa Bilingual Lemmatizer (dictionary & rules).
+func TokenizeWithoutLemmatizer(text string) []string {
+	// Ganti koma/tanda hubung dengan spasi agar “machine-learning” dan “Python, Go” terpisah dengan benar
+	text = strings.NewReplacer(",", " ", "-", " ", "_", " ", "/", " ").Replace(text)
+	text = strings.ToLower(text)
+	text = nonAlpha.ReplaceAllString(text, " ")
+
+	words := strings.Fields(text)
+	result := make([]string, 0, len(words))
+	for _, w := range words {
+		if len(w) < 2 {
+			continue
+		}
+		if idStopwords[w] || enStopwords[w] {
+			continue
+		}
+		// Hanya jalankan Stemmer Indonesia biasa (tanpa lemmaDict & lemmaRules)
+		token := stem(w)
+		if len(token) < 2 {
+			continue
+		}
+		if idStopwords[token] || enStopwords[token] {
+			continue
+		}
+		result = append(result, token)
+	}
+	return result
+}
+
+
 // ─── Lemmatizer ───────────────────────────────────────────────────────────────
 
 // lemmatize mengurangi token (setelah stemming) ke basis kanonis menggunakan

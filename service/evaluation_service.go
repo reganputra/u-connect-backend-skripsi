@@ -2,6 +2,7 @@ package service
 
 import (
 	"fmt"
+	"math"
 	"sort"
 
 	"github.com/reganputra/skripsi-backend/repository"
@@ -19,6 +20,8 @@ type MAPResult struct {
 	PrecisionAt1   float64           `json:"precision_at_1"`
 	PrecisionAt3   float64           `json:"precision_at_3"`
 	PrecisionAt5   float64           `json:"precision_at_5"`
+	RecallAt5      float64           `json:"recall_at_5"`
+	NdcgAt5        float64           `json:"ndcg_at_5"`
 	PerStudent     []StudentAPResult `json:"per_student"`
 }
 
@@ -42,6 +45,8 @@ type StudentAPResult struct {
 	PrecisionAt1   float64        `json:"precision_at_1"`
 	PrecisionAt3   float64        `json:"precision_at_3"`
 	PrecisionAt5   float64        `json:"precision_at_5"`
+	RecallAt5      float64        `json:"recall_at_5"`
+	NdcgAt5        float64        `json:"ndcg_at_5"`
 	RankedMentors  []RankedMentor `json:"ranked_mentors"` // full ranked list with similarity scores
 }
 
@@ -52,6 +57,7 @@ type EvaluationService interface {
 	// topN controls how many recommendations to evaluate (e.g., 10 → evaluate top-10).
 	// studentIDs is an optional whitelist — if non-empty, only those students are evaluated.
 	EvaluateCBF(topN int, studentIDs []uint) (*MAPResult, error)
+	EvaluateCBFWithoutLemmatizer(topN int, studentIDs []uint) (*MAPResult, error)
 }
 
 // ─── Implementation ────────────────────────────────────────────────────────────
@@ -129,7 +135,7 @@ func (s *evaluationService) EvaluateCBF(topN int, studentIDs []uint) (*MAPResult
 	// ── Step 3: Per-student evaluation ───────────────────────────────────────
 	var perStudent []StudentAPResult
 	var allAPs []float64
-	var sumP1, sumP3, sumP5 float64
+	var sumP1, sumP3, sumP5, sumR5, sumNdcg5 float64
 
 	for studentID, relevantMentors := range gtMap {
 		// Run CBF for this student (empty query → use student's profile)
@@ -162,7 +168,7 @@ func (s *evaluationService) EvaluateCBF(topN int, studentIDs []uint) (*MAPResult
 			continue
 		}
 
-		ap, hits, p1, p3, p5 := computeAP(rankedIDs, relevantMentors, topN)
+		ap, hits, p1, p3, p5, r5, ndcg5 := computeMetrics(rankedIDs, relevantMentors, topN)
 
 		name := nameMap[studentID]
 		if name == "" {
@@ -192,12 +198,16 @@ func (s *evaluationService) EvaluateCBF(topN int, studentIDs []uint) (*MAPResult
 			PrecisionAt1:   p1,
 			PrecisionAt3:   p3,
 			PrecisionAt5:   p5,
+			RecallAt5:      r5,
+			NdcgAt5:        ndcg5,
 			RankedMentors:  rankedMentors,
 		})
 		allAPs = append(allAPs, ap)
 		sumP1 += p1
 		sumP3 += p3
 		sumP5 += p5
+		sumR5 += r5
+		sumNdcg5 += ndcg5
 	}
 
 	// Sort per-student results by AP descending for readability
@@ -206,7 +216,7 @@ func (s *evaluationService) EvaluateCBF(topN int, studentIDs []uint) (*MAPResult
 	})
 
 	// ── Step 4: Aggregate ────────────────────────────────────────────────────
-	mapScore, avgP1, avgP3, avgP5 := 0.0, 0.0, 0.0, 0.0
+	mapScore, avgP1, avgP3, avgP5, avgR5, avgNdcg5 := 0.0, 0.0, 0.0, 0.0, 0.0, 0.0
 	if n := float64(len(allAPs)); n > 0 {
 		for _, ap := range allAPs {
 			mapScore += ap
@@ -215,6 +225,8 @@ func (s *evaluationService) EvaluateCBF(topN int, studentIDs []uint) (*MAPResult
 		avgP1 = sumP1 / n
 		avgP3 = sumP3 / n
 		avgP5 = sumP5 / n
+		avgR5 = sumR5 / n
+		avgNdcg5 = sumNdcg5 / n
 	}
 
 	return &MAPResult{
@@ -225,28 +237,182 @@ func (s *evaluationService) EvaluateCBF(topN int, studentIDs []uint) (*MAPResult
 		PrecisionAt1:   avgP1,
 		PrecisionAt3:   avgP3,
 		PrecisionAt5:   avgP5,
+		RecallAt5:      avgR5,
+		NdcgAt5:        avgNdcg5,
 		PerStudent:     perStudent,
 	}, nil
 }
 
-// computeAP calculates Average Precision for a single student query.
+func (s *evaluationService) EvaluateCBFWithoutLemmatizer(topN int, studentIDs []uint) (*MAPResult, error) {
+	if topN <= 0 {
+		topN = 10
+	}
+
+	whitelist := make(map[uint]struct{}, len(studentIDs))
+	for _, id := range studentIDs {
+		whitelist[id] = struct{}{}
+	}
+
+	gtRows, err := s.requestRepo.FindGroundTruth()
+	if err != nil {
+		return nil, fmt.Errorf("gagal mengambil ground truth: %w", err)
+	}
+
+	gtMap := make(map[uint]map[uint]struct{})
+	for _, row := range gtRows {
+		if len(whitelist) > 0 {
+			if _, ok := whitelist[row.StudentID]; !ok {
+				continue
+			}
+		}
+		if _, ok := gtMap[row.StudentID]; !ok {
+			gtMap[row.StudentID] = make(map[uint]struct{})
+		}
+		gtMap[row.StudentID][row.MentorID] = struct{}{}
+	}
+
+	if len(gtMap) == 0 {
+		return &MAPResult{TopN: topN}, nil
+	}
+
+	idsForQuery := make([]uint, 0, len(gtMap))
+	for sid := range gtMap {
+		idsForQuery = append(idsForQuery, sid)
+	}
+	type nameRow struct {
+		ID   uint
+		Name string
+	}
+	var nameRows []nameRow
+	s.db.Table("users").Select("id, name").Where("id IN ?", idsForQuery).Scan(&nameRows)
+	nameMap := make(map[uint]string, len(nameRows))
+	for _, r := range nameRows {
+		nameMap[r.ID] = r.Name
+	}
+
+	var perStudent []StudentAPResult
+	var allAPs []float64
+	var sumP1, sumP3, sumP5, sumR5, sumNdcg5 float64
+
+	for studentID, relevantMentors := range gtMap {
+		recs, err := s.mentorSvc.GetRecommendationsWithoutLemmatizer(studentID, "", topN)
+		if err != nil {
+			continue
+		}
+
+		rankedIDs := make([]uint, len(recs))
+		for i, r := range recs {
+			rankedIDs[i] = r.UserID
+		}
+
+		relevantInPool := 0
+		for mid := range relevantMentors {
+			for _, rid := range rankedIDs {
+				if mid == rid {
+					relevantInPool++
+					break
+				}
+			}
+		}
+		if relevantInPool == 0 {
+			continue
+		}
+
+		ap, hits, p1, p3, p5, r5, ndcg5 := computeMetrics(rankedIDs, relevantMentors, topN)
+
+		name := nameMap[studentID]
+		if name == "" {
+			name = fmt.Sprintf("Student #%d", studentID)
+		}
+
+		rankedMentors := make([]RankedMentor, len(recs))
+		for i, rec := range recs {
+			_, isRel := relevantMentors[rec.UserID]
+			rankedMentors[i] = RankedMentor{
+				Rank:            i + 1,
+				MentorID:        rec.UserID,
+				MentorName:      rec.Name,
+				SimilarityScore: rec.SimilarityScore,
+				IsRelevant:      isRel,
+			}
+		}
+
+		perStudent = append(perStudent, StudentAPResult{
+			StudentID:      studentID,
+			StudentName:    name,
+			RelevantCount:  len(relevantMentors),
+			RelevantInPool: relevantInPool,
+			FoundInTopN:    hits,
+			AP:             ap,
+			PrecisionAt1:   p1,
+			PrecisionAt3:   p3,
+			PrecisionAt5:   p5,
+			RecallAt5:      r5,
+			NdcgAt5:        ndcg5,
+			RankedMentors:  rankedMentors,
+		})
+		allAPs = append(allAPs, ap)
+		sumP1 += p1
+		sumP3 += p3
+		sumP5 += p5
+		sumR5 += r5
+		sumNdcg5 += ndcg5
+	}
+
+	sort.Slice(perStudent, func(i, j int) bool {
+		return perStudent[i].AP > perStudent[j].AP
+	})
+
+	mapScore, avgP1, avgP3, avgP5, avgR5, avgNdcg5 := 0.0, 0.0, 0.0, 0.0, 0.0, 0.0
+	if n := float64(len(allAPs)); n > 0 {
+		for _, ap := range allAPs {
+			mapScore += ap
+		}
+		mapScore /= n
+		avgP1 = sumP1 / n
+		avgP3 = sumP3 / n
+		avgP5 = sumP5 / n
+		avgR5 = sumR5 / n
+		avgNdcg5 = sumNdcg5 / n
+	}
+
+	return &MAPResult{
+		TopN:           topN,
+		TotalStudents:  len(gtMap),
+		ValidTestCases: len(allAPs),
+		MAP:            mapScore,
+		PrecisionAt1:   avgP1,
+		PrecisionAt3:   avgP3,
+		PrecisionAt5:   avgP5,
+		RecallAt5:      avgR5,
+		NdcgAt5:        avgNdcg5,
+		PerStudent:     perStudent,
+	}, nil
+}
+
+
+// computeMetrics calculates all evaluation metrics for a single student query.
 //
-//   - rankedIDs  — ordered list of mentor UserIDs returned by CBF (rank 1 = index 0)
-//   - relevant   — set of mentor UserIDs from the student's actual ground truth
-//   - topN       — cap; only positions 1…topN are considered
+//   - rankedIDs — ordered list of mentor UserIDs returned by CBF (rank 1 = index 0)
+//   - relevant  — set of mentor UserIDs from the student's actual ground truth
+//   - topN      — cap; only positions 1…topN are considered
 //
-// Returns ap, number of hits, and precision at ranks 1, 3, 5.
-func computeAP(rankedIDs []uint, relevant map[uint]struct{}, topN int) (ap float64, hits int, p1, p3, p5 float64) {
-	cap := topN
-	if len(rankedIDs) < cap {
-		cap = len(rankedIDs)
+// Returns ap, hits, precision at 1/3/5, recall@5, and ndcg@5.
+func computeMetrics(rankedIDs []uint, relevant map[uint]struct{}, topN int) (ap float64, hits int, p1, p3, p5, r5, ndcg5 float64) {
+	capVal := topN
+	if len(rankedIDs) < capVal {
+		capVal = len(rankedIDs)
 	}
 	sumPrecision := 0.0
-	for i := 0; i < cap; i++ {
+	hitsAt5 := 0
+	for i := 0; i < capVal; i++ {
 		rank := i + 1
 		if _, ok := relevant[rankedIDs[i]]; ok {
 			hits++
 			sumPrecision += float64(hits) / float64(rank)
+			if rank <= 5 {
+				hitsAt5++
+			}
 		}
 		switch rank {
 		case 1:
@@ -259,6 +425,47 @@ func computeAP(rankedIDs []uint, relevant map[uint]struct{}, topN int) (ap float
 	}
 	if len(relevant) > 0 {
 		ap = sumPrecision / float64(len(relevant))
+		// Recall@5 = dokumen relevan yang ditemukan di top-5 / total relevan
+		r5 = float64(hitsAt5) / float64(len(relevant))
 	}
+	ndcg5 = calculateNDCG5(rankedIDs, relevant)
 	return
+}
+
+// calculateNDCG5 menghitung Normalized Discounted Cumulative Gain pada posisi ke-5.
+// Relevansi bersifat biner: 1 jika mentor ada di ground truth, 0 jika tidak.
+func calculateNDCG5(rankedIDs []uint, relevant map[uint]struct{}) float64 {
+	k := 5
+	if len(rankedIDs) < k {
+		k = len(rankedIDs)
+	}
+
+	// DCG@5
+	dcg := 0.0
+	for i := 0; i < k; i++ {
+		if _, ok := relevant[rankedIDs[i]]; ok {
+			rank := i + 1
+			dcg += 1.0 / math.Log2(float64(rank+1))
+		}
+	}
+
+	if dcg == 0.0 {
+		return 0.0
+	}
+
+	// IDCG@5: urutan terbaik teoretis — tempatkan semua dokumen relevan di peringkat teratas
+	idealHits := len(relevant)
+	if idealHits > 5 {
+		idealHits = 5
+	}
+	idcg := 0.0
+	for i := 0; i < idealHits; i++ {
+		rank := i + 1
+		idcg += 1.0 / math.Log2(float64(rank+1))
+	}
+
+	if idcg == 0.0 {
+		return 0.0
+	}
+	return dcg / idcg
 }

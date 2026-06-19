@@ -105,12 +105,12 @@ func main() {
 	// ── Fiber app ─────────────────────────────────────────────────────────────
 	app := fiber.New(fiber.Config{
 		AppName:      "Alumni Community Platform API v1.0",
-		ReadTimeout:  15 * time.Second, // 3.5: cancel slow/stalled requests
+		ReadTimeout:  15 * time.Second,
 		WriteTimeout: 15 * time.Second,
 		IdleTimeout:  60 * time.Second,
 	})
 
-	// 3.6 Panic recovery — catches any handler panic, logs it with stack
+	// Panic recovery — catches any handler panic, logs it with stack
 	// trace, and returns 500 without crashing the server.
 	app.Use(recover.New(recover.Config{
 		EnableStackTrace: true,

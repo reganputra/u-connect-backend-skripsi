@@ -46,4 +46,5 @@ func RegisterAdminRoutes(app *fiber.App, ctrl *controllers.AdminController, auth
 
 	// CBF Evaluation (MAP metric) — admin-only, for academic/thesis evaluation
 	admin.Get("/evaluation/cbf", evalCtrl.EvaluateCBF)
+	admin.Get("/evaluation/cbf-no-lemma", evalCtrl.EvaluateCBFWithoutLemmatizer)
 }

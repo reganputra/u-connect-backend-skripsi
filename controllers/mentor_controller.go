@@ -462,6 +462,23 @@ func (ctrl *MentorController) GetRecommendations(c *fiber.Ctx) error {
 	return utils.SuccessResponse(c, fiber.StatusOK, results)
 }
 
+// GetRecommendationsWithoutLemmatizer godoc — GET /api/mentors/recommend-no-lemma (student only)
+func (ctrl *MentorController) GetRecommendationsWithoutLemmatizer(c *fiber.Ctx) error {
+	userID, err := getUserIDFromToken(c)
+	if err != nil {
+		return utils.ErrorResponse(c, fiber.StatusUnauthorized, err.Error())
+	}
+	query := c.Query("q", "")
+	topN, _ := strconv.Atoi(c.Query("top", "10"))
+
+	results, err := ctrl.mentorSvc.GetRecommendationsWithoutLemmatizer(userID, query, topN)
+	if err != nil {
+		return utils.ErrorResponse(c, fiber.StatusBadRequest, err.Error())
+	}
+	return utils.SuccessResponse(c, fiber.StatusOK, results)
+}
+
+
 // SearchRecommendations godoc — POST /api/mentors/recommend/search  (student only)
 // Accepts a JSON body with a natural-language query for richer search expressions
 // that would be cumbersome to encode as a URL query param.

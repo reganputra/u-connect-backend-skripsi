@@ -69,6 +69,7 @@ func deduplicateInterests(skills, interests string) string {
 // RecommendationService computes mentor recommendations using TF-IDF + Cosine Similarity.
 type RecommendationService interface {
 	RecommendMentors(studentText string, topN int) ([]RecommendResult, error)
+	RecommendMentorsWithoutLemmatizer(studentText string, topN int) ([]RecommendResult, error)
 }
 
 // corpusCacheSnapshot is a consistent point-in-time read of all corpus cache fields.
@@ -95,8 +96,9 @@ type corpusCache struct {
 const cacheTTL = 5 * time.Minute
 
 type recommendationService struct {
-	mentorRepo repository.MentorRepository
-	cache      corpusCache
+	mentorRepo    repository.MentorRepository
+	cache         corpusCache
+	cacheNoLemma  corpusCache
 }
 
 func NewRecommendationService(mentorRepo repository.MentorRepository) RecommendationService {
@@ -182,6 +184,68 @@ func (s *recommendationService) loadCorpus() (corpusCacheSnapshot, error) {
 	}, nil
 }
 
+// loadCorpusNoLemma returns a consistent cache snapshot for non-lemmatized corpus.
+func (s *recommendationService) loadCorpusNoLemma() (corpusCacheSnapshot, error) {
+	s.cacheNoLemma.mu.RLock()
+	if !s.cacheNoLemma.loadedAt.IsZero() && time.Since(s.cacheNoLemma.loadedAt) < cacheTTL {
+		snap := corpusCacheSnapshot{
+			docs:           s.cacheNoLemma.docs,
+			texts:          s.cacheNoLemma.texts,
+			tokenSets:      s.cacheNoLemma.tokenSets,
+			idf:            s.cacheNoLemma.idf,
+			normalizedVecs: s.cacheNoLemma.normalizedVecs,
+		}
+		s.cacheNoLemma.mu.RUnlock()
+		return snap, nil
+	}
+	s.cacheNoLemma.mu.RUnlock()
+
+	// Cache miss or expired — reload from DB
+	docs, err := s.mentorRepo.FindAllMentorDocs()
+	if err != nil {
+		return corpusCacheSnapshot{}, err
+	}
+	texts := make([]string, len(docs))
+	sets := make([]map[string]struct{}, len(docs))
+	corpusTokens := make([][]string, len(docs))
+	for i, d := range docs {
+		uniqueInterests := deduplicateInterests(d.Skills, d.Interests)
+		uniqueCareerInterests := deduplicateInterests(d.Skills, d.CareerInterests)
+		parts := []string{
+			d.Skills, d.Skills,
+			uniqueInterests, uniqueCareerInterests,
+			d.MentorBio, d.Position, d.CompanyName, d.IndustryName, d.IndustryType, d.ExperienceText,
+		}
+		texts[i] = strings.Join(parts, " ")
+		corpusTokens[i] = utils.TokenizeWithoutLemmatizer(texts[i])
+		sets[i] = toSet(corpusTokens[i])
+	}
+
+	idf := utils.BuildIDF(corpusTokens)
+
+	normVecs := make([]map[string]float64, len(docs))
+	for i, tokens := range corpusTokens {
+		normVecs[i] = utils.L2Normalize(utils.TFIDFVector(tokens, idf))
+	}
+
+	s.cacheNoLemma.mu.Lock()
+	s.cacheNoLemma.docs = docs
+	s.cacheNoLemma.texts = texts
+	s.cacheNoLemma.tokenSets = sets
+	s.cacheNoLemma.idf = idf
+	s.cacheNoLemma.normalizedVecs = normVecs
+	s.cacheNoLemma.loadedAt = time.Now()
+	s.cacheNoLemma.mu.Unlock()
+
+	return corpusCacheSnapshot{
+		docs:           docs,
+		texts:          texts,
+		tokenSets:      sets,
+		idf:            idf,
+		normalizedVecs: normVecs,
+	}, nil
+}
+
 func (s *recommendationService) RecommendMentors(studentText string, topN int) ([]RecommendResult, error) {
 	cleanedQuery := strings.TrimSpace(studentText)
 
@@ -195,12 +259,10 @@ func (s *recommendationService) RecommendMentors(studentText string, topN int) (
 	}
 
 	// ── Step 2: Vectorize student query ───────────────────────────────────────
-	// IDF comes from the cached mentor corpus. Terms outside mentor vocab get weight 0.
-	// Both student and mentor vectors are L2-normalized → dot product == cosine similarity.
 	studentTokens := utils.Tokenize(cleanedQuery)
 	studentVec := utils.L2Normalize(utils.TFIDFVector(studentTokens, snap.idf))
 
-	// ── Step 3: Score each mentor (Pure TF-IDF Cosine Similarity) ─────────────
+	// ── Step 3: Score each mentor ─────────────────────────────────────────────
 	results := make([]RecommendResult, len(snap.docs))
 	for i, doc := range snap.docs {
 		textScore := dotProduct(studentVec, snap.normalizedVecs[i])
@@ -226,15 +288,64 @@ func (s *recommendationService) RecommendMentors(studentText string, topN int) (
 		}
 	}
 
-	// ── Step 6: Sort by similarity score DESC ─────────────────────────────────
 	sort.Slice(results, func(i, j int) bool {
 		return results[i].SimilarityScore > results[j].SimilarityScore
 	})
 
-	// ── Step 7: Trim to topN ──────────────────────────────────────────────────
 	if topN > 0 && topN < len(results) {
 		results = results[:topN]
 	}
 
 	return results, nil
 }
+
+func (s *recommendationService) RecommendMentorsWithoutLemmatizer(studentText string, topN int) ([]RecommendResult, error) {
+	cleanedQuery := strings.TrimSpace(studentText)
+
+	snap, err := s.loadCorpusNoLemma()
+	if err != nil {
+		return nil, err
+	}
+	if len(snap.docs) == 0 {
+		return []RecommendResult{}, nil
+	}
+
+	studentTokens := utils.TokenizeWithoutLemmatizer(cleanedQuery)
+	studentVec := utils.L2Normalize(utils.TFIDFVector(studentTokens, snap.idf))
+
+	results := make([]RecommendResult, len(snap.docs))
+	for i, doc := range snap.docs {
+		textScore := dotProduct(studentVec, snap.normalizedVecs[i])
+
+		results[i] = RecommendResult{
+			UserID:          doc.UserID,
+			Name:            doc.Name,
+			ProfilePicture:  doc.ProfilePicture,
+			MentorBio:       doc.MentorBio,
+			Skills:          doc.Skills,
+			Interests:       doc.Interests,
+			CareerInterests: doc.CareerInterests,
+			Position:        doc.Position,
+			CompanyName:     doc.CompanyName,
+			IndustryName:    doc.IndustryName,
+			IndustryType:    doc.IndustryType,
+			YearsExperience: doc.YearsExperience,
+			ScoreBreakdown: map[string]float64{
+				"text_similarity": textScore,
+			},
+			MentorQuota:     doc.MentorQuota,
+			SimilarityScore: textScore,
+		}
+	}
+
+	sort.Slice(results, func(i, j int) bool {
+		return results[i].SimilarityScore > results[j].SimilarityScore
+	})
+
+	if topN > 0 && topN < len(results) {
+		results = results[:topN]
+	}
+
+	return results, nil
+}
+
