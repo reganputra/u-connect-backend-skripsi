@@ -12,6 +12,7 @@ func RegisterMentorRoutes(app *fiber.App, ctrl *controllers.MentorController) {
 	// Fiber treating "recommend" as an :id parameter value.
 	mentors := app.Group("/api/mentors", middleware.Protected())
 	mentors.Get("/recommend", middleware.RequireRole("student"), ctrl.GetRecommendations)
+	mentors.Get("/recommend-no-lemma", middleware.RequireRole("student"), ctrl.GetRecommendationsWithoutLemmatizer)
 	mentors.Post("/recommend/search", middleware.RequireRole("student"), ctrl.SearchRecommendations)
 	mentors.Get("/", middleware.RequireRole("student"), ctrl.GetMentors)
 	mentors.Get("/:id", middleware.RequireRole("student"), ctrl.GetMentorDetail)

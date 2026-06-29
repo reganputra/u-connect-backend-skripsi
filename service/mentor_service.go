@@ -82,6 +82,7 @@ type MentorService interface {
 	// GetRecommendations returns TF-IDF ranked mentors.
 	// If query is empty, it falls back to the student's profile skills+interests.
 	GetRecommendations(studentUserID uint, query string, topN int) ([]RecommendResult, error)
+	GetRecommendationsWithoutLemmatizer(studentUserID uint, query string, topN int) ([]RecommendResult, error)
 }
 
 // ─── Implementation ───────────────────────────────────────────────────────────
@@ -680,3 +681,53 @@ func (s *mentorService) GetRecommendations(studentUserID uint, query string, top
 	}
 	return s.recommendSvc.RecommendMentors(query, topN)
 }
+
+func (s *mentorService) GetRecommendationsWithoutLemmatizer(studentUserID uint, query string, topN int) ([]RecommendResult, error) {
+	if strings.TrimSpace(query) == "" {
+		profile, err := s.profileRepo.FindProfileByUserID(studentUserID)
+		if err != nil {
+			return nil, errors.New("profil tidak ditemukan — buat profil terlebih dahulu")
+		}
+		parts := []string{}
+		skills := ""
+		if profile.Skills != nil && strings.TrimSpace(*profile.Skills) != "" {
+			skills = *profile.Skills
+			parts = append(parts, skills, skills)
+		}
+		if profile.Interests != nil && strings.TrimSpace(*profile.Interests) != "" {
+			uniqueInterests := deduplicateInterests(skills, *profile.Interests)
+			if uniqueInterests != "" {
+				parts = append(parts, uniqueInterests)
+			}
+		}
+		if profile.CareerInterests != nil && strings.TrimSpace(*profile.CareerInterests) != "" {
+			uniqueCareerInterests := deduplicateInterests(skills, *profile.CareerInterests)
+			if uniqueCareerInterests != "" {
+				parts = append(parts, uniqueCareerInterests)
+			}
+		}
+		if profile.Bio != nil && strings.TrimSpace(*profile.Bio) != "" {
+			parts = append(parts, *profile.Bio)
+		}
+		if profile.Position != nil && strings.TrimSpace(*profile.Position) != "" {
+			parts = append(parts, *profile.Position)
+		}
+		if profile.IndustryName != nil && strings.TrimSpace(*profile.IndustryName) != "" {
+			parts = append(parts, *profile.IndustryName)
+		}
+		if profile.IndustryType != nil && strings.TrimSpace(*profile.IndustryType) != "" {
+			parts = append(parts, *profile.IndustryType)
+		}
+		query = strings.Join(parts, " ")
+
+		if strings.TrimSpace(query) == "" {
+			return nil, errors.New("lengkapi skills atau interests di profil untuk mendapatkan rekomendasi")
+		}
+	}
+
+	if topN <= 0 {
+		topN = 10
+	}
+	return s.recommendSvc.RecommendMentorsWithoutLemmatizer(query, topN)
+}
+

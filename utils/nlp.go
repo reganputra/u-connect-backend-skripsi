@@ -13,7 +13,7 @@ var nonAlpha = regexp.MustCompile(`[^a-zA-Z\s]`)
 // Tokenize menjalankan seluruh alur kerja NLP: konversi huruf besar-kecil → pembersihan → tokenisasi → penghapusan kata pengisi → stemming.
 // Input dapat berupa teks yang dipisahkan koma (keterampilan/minat) atau teks bebas.
 func Tokenize(text string) []string {
-	// Ganti koma/tanda hubung dengan spasi agar “machine-learning” dan “Python, Go” terpisah dengan benar
+	// Ganti koma/tanda hubung dengan spasi agar "machine-learning" dan "Python, Go" terpisah dengan benar
 	text = strings.NewReplacer(",", " ", "-", " ", "_", " ", "/", " ").Replace(text)
 	text = strings.ToLower(text)
 	text = nonAlpha.ReplaceAllString(text, " ")
@@ -44,10 +44,40 @@ func Tokenize(text string) []string {
 	return result
 }
 
+// TokenizeWithoutLemmatizer menjalankan alur kerja NLP tanpa Bilingual Lemmatizer (dictionary & rules).
+func TokenizeWithoutLemmatizer(text string) []string {
+	// Ganti koma/tanda hubung dengan spasi agar "machine-learning" dan "Python, Go" terpisah dengan benar
+	text = strings.NewReplacer(",", " ", "-", " ", "_", " ", "/", " ").Replace(text)
+	text = strings.ToLower(text)
+	text = nonAlpha.ReplaceAllString(text, " ")
+
+	words := strings.Fields(text)
+	result := make([]string, 0, len(words))
+	for _, w := range words {
+		if len(w) < 2 {
+			continue
+		}
+		if idStopwords[w] || enStopwords[w] {
+			continue
+		}
+		// Hanya jalankan Stemmer Indonesia biasa (tanpa lemmaDict & lemmaRules)
+		token := stem(w)
+		if len(token) < 2 {
+			continue
+		}
+		if idStopwords[token] || enStopwords[token] {
+			continue
+		}
+		result = append(result, token)
+	}
+	return result
+}
+
 // ─── Lemmatizer ───────────────────────────────────────────────────────────────
 
 // lemmatize mengurangi token (setelah stemming) ke basis kanonis menggunakan
 // pencarian kamus terlebih dahulu, kemudian aturan penghilangan sufiks bahasa Inggris.
+// Data kamus (lemmaDict, lemmaRules) ada di utils/nlp_lemma.go.
 func lemmatize(word string) string {
 	if base, ok := lemmaDict[word]; ok {
 		return base
@@ -61,89 +91,6 @@ func lemmatize(word string) string {
 		}
 	}
 	return word
-}
-
-type lemmaRule struct {
-	suffix      string
-	replacement string
-	minBase     int
-}
-
-// lemmaRules: longest suffix first to avoid partial matches.
-var lemmaRules = []lemmaRule{
-	{"izations", "ize", 3}, {"ization", "ize", 3},
-	{"ations", "", 3}, {"ation", "", 3},
-	{"ments", "", 3}, {"ment", "", 3},
-	{"nesses", "", 3}, {"ness", "", 3},
-	{"ities", "", 3}, {"ity", "", 3},
-	{"ives", "", 3}, {"ive", "", 3},
-	{"ings", "", 3}, {"ning", "n", 3}, {"pping", "p", 3}, {"ing", "", 3},
-	{"ies", "y", 2}, {"ied", "y", 3},
-	{"ous", "", 3}, {"ical", "", 3},
-	{"eds", "", 3}, {"ed", "", 3},
-	{"ers", "", 4}, {"er", "", 4},
-	{"als", "", 4}, {"al", "", 4},
-	{"s", "", 4}, // plural nouns
-}
-
-// lemmaDict maps surface forms (pre-stem English + post-stem Indonesian) to a
-// canonical base token so student and mentor texts normalize to the same term.
-var lemmaDict = map[string]string{
-	// ─── Tech nouns ───
-	"analytics": "analytic", "analysis": "analytic", "analyses": "analytic",
-	"algorithm": "algorithm", "algorithms": "algorithm",
-	"database": "database", "databases": "database",
-	"network": "network", "networks": "network",
-	"model": "model", "models": "model",
-	"system": "system", "systems": "system",
-	"framework": "framework", "frameworks": "framework",
-	"library": "library", "libraries": "library",
-	"query": "query", "queries": "query",
-	"technology": "technology", "technologies": "technology",
-	"data": "data",
-	// ─── English tech gerunds / nominalizations ───
-	"learning": "learn", "machine": "machine",
-	"computing":  "compute",
-	"developing": "develop", "development": "develop", "developments": "develop",
-	"building": "build",
-	"training": "train",
-	"modeling": "model", "modelling": "model",
-	"processing":  "process",
-	"engineering": "engineer",
-	"managing":    "manage", "management": "manage",
-	"programming": "program",
-	"designing":   "design", "design": "design",
-	"testing":   "test",
-	"deploying": "deploy", "deployment": "deploy",
-	"forecasting": "forecast",
-	"analyzing":   "analyze", "analysing": "analyze",
-	"visualization": "visualize", "visualizations": "visualize", "visualizing": "visualize",
-	"implementing": "implement", "implementation": "implement",
-	"optimizing": "optimize", "optimization": "optimize",
-	"monitoring": "monitor",
-	"prediction": "predict", "predictions": "predict", "predictive": "predict",
-	"classification": "classify",
-	"clustering":     "cluster",
-	"collaboration":  "collaborate", "collaborating": "collaborate",
-	// ─── Tech roles ───
-	"developers": "developer", "engineers": "engineer",
-	"scientists": "scientist", "analysts": "analyst",
-	"researchers": "researcher", "architects": "architect",
-	// ─── Indonesian tech terms → canonical ───
-	"pemrograman":  "program",
-	"pengembangan": "develop",
-	"visualisasi":  "visualize",
-	"analisis":     "analytic",
-	"pembelajaran": "learn",
-	"pengelolaan":  "manage",
-	"perancangan":  "design",
-	"pengujian":    "test",
-	"penerapan":    "implement",
-	"keuangan":     "finance",
-	"perbankan":    "bank",
-	"jaringan":     "network",
-	"keamanan":     "security",
-	"kecerdasan":   "intelligence",
 }
 
 // ─── Stemmer (Indonesian prefix/suffix removal) ──────────────────────────────
@@ -308,63 +255,4 @@ func CosineSimilarity(a, b map[string]float64) float64 {
 		return 0
 	}
 	return dot / (math.Sqrt(normA) * math.Sqrt(normB))
-}
-
-// ─── Stopwords ────────────────────────────────────────────────────────────────
-
-var idStopwords = map[string]bool{
-	"yang": true, "dan": true, "di": true, "ke": true, "dari": true,
-	"dengan": true, "untuk": true, "adalah": true, "pada": true, "ini": true,
-	"itu": true, "atau": true, "juga": true, "sudah": true, "saya": true,
-	"anda": true, "kamu": true, "kami": true, "kita": true, "mereka": true,
-	"dia": true, "ia": true, "ada": true, "akan": true, "bisa": true,
-	"dapat": true, "bukan": true, "tidak": true, "belum": true, "lagi": true,
-	"masih": true, "hanya": true, "serta": true, "tetapi": true, "namun": true,
-	"karena": true, "sehingga": true, "agar": true, "supaya": true, "maka": true,
-	"oleh": true, "tentang": true, "dalam": true, "antara": true, "setelah": true,
-	"sebelum": true, "ketika": true, "bila": true, "jika": true, "apakah": true,
-	"bagaimana": true, "mengapa": true, "kapan": true, "dimana": true, "siapa": true,
-	"apa": true, "telah": true, "sangat": true, "lebih": true, "tersebut": true,
-	"bahwa": true, "hampir": true, "selain": true, "atas": true, "bawah": true,
-	"selama": true, "hingga": true, "sampai": true, "saat": true, "waktu": true,
-	"tahun": true, "bulan": true, "hari": true, "sebuah": true, "setiap": true,
-	"semua": true, "beberapa": true, "jadi": true, "kalau": true, "kemudian": true,
-	"lalu": true, "sejak": true, "sesudah": true, "berbagai": true, "seperti": true,
-	"pula": true, "sini": true, "sana": true, "situ": true, "mana": true,
-	"pun": true, "lah": true, "kah": true, "nya": true, "ku": true, "mu": true,
-	"harus": true, "perlu": true, "boleh": true, "mau": true, "ingin": true,
-	"sudahlah": true, "baik": true, "buruk": true, "besar": true, "kecil": true,
-	"sama": true, "baru": true, "lama": true, "jauh": true, "dekat": true,
-	"awal": true, "akhir": true, "mulai": true, "semenjak": true, "yakni": true,
-	"yaitu": true,
-}
-
-var enStopwords = map[string]bool{
-	"a": true, "an": true, "the": true, "and": true, "or": true, "but": true,
-	"in": true, "on": true, "at": true, "to": true, "for": true, "of": true,
-	"with": true, "by": true, "from": true, "is": true, "are": true, "was": true,
-	"were": true, "be": true, "been": true, "being": true, "have": true, "has": true,
-	"had": true, "do": true, "does": true, "did": true, "will": true, "would": true,
-	"could": true, "should": true, "may": true, "might": true, "shall": true,
-	"can": true, "need": true, "as": true, "about": true, "above": true,
-	"after": true, "again": true, "against": true, "all": true, "am": true,
-	"any": true, "because": true, "before": true, "between": true, "both": true,
-	"during": true, "each": true, "few": true, "further": true, "he": true,
-	"her": true, "here": true, "herself": true, "him": true, "himself": true,
-	"his": true, "how": true, "i": true, "if": true, "into": true, "it": true,
-	"its": true, "itself": true, "just": true, "me": true, "more": true,
-	"most": true, "my": true, "myself": true, "no": true, "not": true, "now": true,
-	"off": true, "once": true, "only": true, "other": true, "our": true,
-	"ourselves": true, "out": true, "own": true, "same": true, "she": true,
-	"so": true, "some": true, "such": true, "than": true, "that": true,
-	"their": true, "them": true, "themselves": true, "then": true, "there": true,
-	"these": true, "they": true, "this": true, "those": true, "through": true,
-	"too": true, "under": true, "until": true, "up": true, "very": true,
-	"we": true, "what": true, "when": true, "where": true, "which": true,
-	"while": true, "who": true, "whom": true, "why": true, "you": true,
-	"your": true, "yours": true, "yourself": true, "yourselves": true,
-	"get": true, "got": true, "make": true, "made": true, "use": true,
-	"used": true, "also": true, "like": true, "well": true, "even": true,
-	"back": true, "good": true, "much": true, "take": true, "come": true,
-	"since": true, "new": true, "work": true, "working": true, "worked": true,
 }

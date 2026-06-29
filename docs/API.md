@@ -2134,6 +2134,7 @@ Endpoint khusus admin untuk mengevaluasi performa sistem rekomendasi Content-Bas
 | Method | Endpoint                      | Auth  | Description                              |
 | ------ | ----------------------------- | ----- | ---------------------------------------- |
 | GET    | `/api/admin/evaluation/cbf`   | admin | Hitung MAP untuk sistem rekomendasi CBF  |
+| GET    | `/api/admin/evaluation/cbf-no-lemma` | admin | Hitung MAP untuk sistem rekomendasi CBF tanpa Bilingual Lemmatizer |
 
 **Query Params:**
 
@@ -2157,6 +2158,8 @@ Contoh: `?top_n=10&student_ids=5,12,18`
     "precision_at_1": 0.6667,
     "precision_at_3": 0.5556,
     "precision_at_5": 0.4000,
+    "recall_at_5": 0.6667,
+    "ndcg_at_5": 0.7031,
     "per_student": [
       {
         "student_id": 5,
@@ -2168,6 +2171,8 @@ Contoh: `?top_n=10&student_ids=5,12,18`
         "precision_at_1": 1.0,
         "precision_at_3": 0.333,
         "precision_at_5": 0.2,
+        "recall_at_5": 1.0,
+        "ndcg_at_5": 1.0,
         "ranked_mentors": [
           {
             "rank": 1,
@@ -2196,6 +2201,8 @@ Contoh: `?top_n=10&student_ids=5,12,18`
 |---|---|
 | `map` | Mean Average Precision keseluruhan sistem |
 | `precision_at_1/3/5` | Rata-rata presisi di posisi 1, 3, dan 5 |
+| `recall_at_5` | Rata-rata Recall@5: proporsi mentor relevan yang berhasil ditemukan di top-5 |
+| `ndcg_at_5` | Rata-rata NDCG@5: kualitas urutan hasil rekomendasi, mempertimbangkan posisi |
 | `total_students` | Jumlah mahasiswa yang punya riwayat request |
 | `valid_test_cases` | Mahasiswa yang diikutkan evaluasi (mentor relevannya ada di pool rekomendasi) |
 | `relevant_count` | Jumlah mentor relevan di ground truth mahasiswa ini |
@@ -2742,6 +2749,17 @@ Returns the mentor's full profile including `User` and `Experiences`. Returns `4
 | ----- | ------------------------------------------------------------- | ------------------------------------------- |
 | `q`   | Custom free-text query (e.g. `python machine learning cloud`) | Student's `skills + interests` from profile |
 | `top` | Number of results to return                                   | `10`                                        |
+
+---
+
+#### GET `/api/mentors/recommend-no-lemma` — Auto Recommendations (No Bilingual Lemmatizer)
+
+> Sama seperti `/recommend` tetapi menonaktifkan Bilingual Lemmatizer (dictionary mapping & rules) pada pipeline pemrosesan teks. Berguna untuk membandingkan hasil rekomendasi secara langsung.
+
+**Query params & Response:** Sama seperti `/recommend`.
+
+---
+
 
 **How it works:**
 
