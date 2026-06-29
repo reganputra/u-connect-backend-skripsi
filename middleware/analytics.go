@@ -10,32 +10,32 @@ import (
 	"gorm.io/gorm"
 )
 
-// ViewCooldownDuration is the minimum time that must elapse before the same
-// authenticated user can generate a second view event for the same piece of
-// content. Requests that arrive within this window are silently dropped so
-// that repeated page refreshes or frontend re-fetches do not inflate counts.
+// ViewCooldownDuration adalah jangka waktu minimum yang harus berlalu sebelum
+// pengguna yang sama (yang telah terautentikasikan) dapat menghasilkan peristiwa tampilan kedua untuk
+// konten yang sama. Permintaan yang masuk dalam rentang waktu ini akan diabaikan tanpa pemberitahuan sehingga
+// penyegaran halaman berulang atau pengambilan ulang data oleh frontend tidak akan meningkatkan jumlah hitungan.
 //
-// 1 hour mirrors common industry practice for "unique hourly viewer" metrics
-// and is straightforward to explain in academic documentation.
+// 1 jam mencerminkan praktik industri umum untuk metrik "unique hourly viewer"
+// dan mudah dijelaskan dalam dokumentasi akademik.
 const ViewCooldownDuration = 1 * time.Hour
 
-// TrackView returns a Fiber middleware that appends a PageView row
-// asynchronously after the handler has responded.
+// TrackView adalah middleware Fiber yang menambahkan baris PageView
+// secara asinkron setelah handler selesai merespons.
 //
-// Rules:
-//   - Only records views for GET requests that return HTTP 200.
-//   - Extracts the resource ID from the ":id" route parameter.
-//   - Captures the authenticated user's ID from the JWT stored in c.Locals("user").
-//     If no JWT is present (future public routes), the cooldown check is skipped
-//     and the view is recorded with a nil user_id.
-//   - The deduplication gate runs inside the goroutine so it never adds latency
-//     to the handler's response time.
+// Aturan:
+//   - Hanya mencatat tampilan untuk permintaan GET yang mengembalikan HTTP 200.
+//   - Mengambil resource ID dari parameter route ":id".
+//   - Mengambil ID pengguna dari JWT yang disimpan dalam c.Locals("user").
+//     Jika tidak ada JWT (rute publik di masa mendatang), pemeriksaan cooldown dilewati
+//     dan tampilan dicatat dengan user_id nil.
+//   - Gerbang deduplikasi berjalan di dalam goroutine sehingga tidak pernah menambahkan latensi
+//     ke waktu respons handler.
 func TrackView(targetType string, db *gorm.DB) fiber.Handler {
 	return func(c *fiber.Ctx) error {
-		// Run the actual handler first.
+		// Jalankan handler yang sebenarnya terlebih dahulu.
 		err := c.Next()
 
-		// Only track successful GET requests.
+		// Hanya lacak permintaan GET yang berhasil.
 		if c.Method() != "GET" || c.Response().StatusCode() != 200 {
 			return err
 		}
@@ -49,8 +49,8 @@ func TrackView(targetType string, db *gorm.DB) fiber.Handler {
 		userID := extractViewUserID(c)
 
 		go func() {
-			// Deduplication gate — only enforced for authenticated users because
-			// anonymous views cannot be attributed to a stable identity.
+			// Filter deduplikasi — hanya diterapkan untuk pengguna yang telah terotentikasi karena
+			// tampilan anonim tidak dapat dikaitkan dengan identitas yang tetap.
 			if userID != nil {
 				cutoff := time.Now().UTC().Add(-ViewCooldownDuration)
 
@@ -64,7 +64,7 @@ func TrackView(targetType string, db *gorm.DB) fiber.Handler {
 					Count(&count)
 
 				if count > 0 {
-					// View already recorded within the cooldown window — skip insert.
+					// Tampilan sudah tercatat dalam jendela cooldown — lewati penyisipan.
 					return
 				}
 			}
@@ -81,8 +81,8 @@ func TrackView(targetType string, db *gorm.DB) fiber.Handler {
 	}
 }
 
-// extractViewUserID extracts the user_id from the JWT stored in c.Locals("user").
-// Returns nil if no token is present or the token is malformed (e.g. public routes).
+// extractViewUserID mengekstrak user_id dari JWT yang disimpan dalam c.Locals("user").
+// Mengembalikan nil jika tidak ada token yang ada atau token rusak (misalnya rute publik).
 func extractViewUserID(c *fiber.Ctx) *uint {
 	token, ok := c.Locals("user").(*jwt.Token)
 	if !ok {
