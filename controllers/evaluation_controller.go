@@ -66,3 +66,51 @@ func (ctrl *EvaluationController) EvaluateCBFWithoutLemmatizer(c *fiber.Ctx) err
 	return utils.SuccessResponse(c, fiber.StatusOK, result)
 }
 
+// EvaluateCBFMRR mengevaluasi sistem rekomendasi CBF menggunakan metrik MRR.
+func (ctrl *EvaluationController) EvaluateCBFMRR(c *fiber.Ctx) error {
+	topN, _ := strconv.Atoi(c.Query("top_n", "10"))
+	if topN <= 0 || topN > 50 {
+		topN = 10
+	}
+
+	var studentIDs []uint
+	if raw := c.Query("student_ids"); raw != "" {
+		for _, part := range strings.Split(raw, ",") {
+			part = strings.TrimSpace(part)
+			if id, err := strconv.ParseUint(part, 10, 64); err == nil && id > 0 {
+				studentIDs = append(studentIDs, uint(id))
+			}
+		}
+	}
+
+	result, err := ctrl.svc.EvaluateCBFMRR(topN, studentIDs)
+	if err != nil {
+		return utils.ErrorResponse(c, fiber.StatusInternalServerError, err.Error())
+	}
+	return utils.SuccessResponse(c, fiber.StatusOK, result)
+}
+
+// EvaluateCBFMRRWithoutLemmatizer mengevaluasi sistem rekomendasi CBF menggunakan metrik MRR tanpa Bilingual Lemmatizer.
+func (ctrl *EvaluationController) EvaluateCBFMRRWithoutLemmatizer(c *fiber.Ctx) error {
+	topN, _ := strconv.Atoi(c.Query("top_n", "10"))
+	if topN <= 0 || topN > 50 {
+		topN = 10
+	}
+
+	var studentIDs []uint
+	if raw := c.Query("student_ids"); raw != "" {
+		for _, part := range strings.Split(raw, ",") {
+			part = strings.TrimSpace(part)
+			if id, err := strconv.ParseUint(part, 10, 64); err == nil && id > 0 {
+				studentIDs = append(studentIDs, uint(id))
+			}
+		}
+	}
+
+	result, err := ctrl.svc.EvaluateCBFMRRWithoutLemmatizer(topN, studentIDs)
+	if err != nil {
+		return utils.ErrorResponse(c, fiber.StatusInternalServerError, err.Error())
+	}
+	return utils.SuccessResponse(c, fiber.StatusOK, result)
+}
+

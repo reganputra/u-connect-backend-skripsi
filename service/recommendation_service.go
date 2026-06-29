@@ -95,6 +95,11 @@ type corpusCache struct {
 
 const cacheTTL = 5 * time.Minute
 
+// minScore adalah ambang batas minimum cosine similarity agar seorang mentor
+// diikutsertakan dalam hasil rekomendasi. Mentor dengan skor di bawah nilai ini
+// dianggap tidak memiliki relevansi semantik yang cukup dengan profil mahasiswa.
+const minScore = 0.1
+
 type recommendationService struct {
 	mentorRepo    repository.MentorRepository
 	cache         corpusCache
@@ -288,6 +293,15 @@ func (s *recommendationService) RecommendMentors(studentText string, topN int) (
 		}
 	}
 
+	// Filter mentor dengan skor di bawah threshold minimum
+	filtered := results[:0]
+	for _, r := range results {
+		if r.SimilarityScore >= minScore {
+			filtered = append(filtered, r)
+		}
+	}
+	results = filtered
+
 	sort.Slice(results, func(i, j int) bool {
 		return results[i].SimilarityScore > results[j].SimilarityScore
 	})
@@ -337,6 +351,15 @@ func (s *recommendationService) RecommendMentorsWithoutLemmatizer(studentText st
 			SimilarityScore: textScore,
 		}
 	}
+
+	// Filter mentor dengan skor di bawah threshold minimum
+	filtered := results[:0]
+	for _, r := range results {
+		if r.SimilarityScore >= minScore {
+			filtered = append(filtered, r)
+		}
+	}
+	results = filtered
 
 	sort.Slice(results, func(i, j int) bool {
 		return results[i].SimilarityScore > results[j].SimilarityScore
