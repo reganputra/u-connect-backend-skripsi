@@ -157,6 +157,7 @@ func nullFieldsByStatus(profile *models.UserProfile) {
 	if status != "employed" {
 		profile.Position = nil
 		profile.CompanyLocation = nil
+		profile.IndustryType = nil
 		if status != "entrepreneur" {
 			profile.CompanyName = nil
 		}
@@ -164,10 +165,7 @@ func nullFieldsByStatus(profile *models.UserProfile) {
 	if status != "entrepreneur" {
 		profile.CompanySize = nil
 		profile.YearFounding = nil
-		if status != "employed" {
-			profile.IndustryName = nil
-			profile.IndustryType = nil
-		}
+		profile.IndustryName = nil
 	}
 	if status != "continuing_study" {
 		profile.EducationalLevel = nil
