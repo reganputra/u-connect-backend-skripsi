@@ -114,3 +114,20 @@ func (ctrl *EvaluationController) EvaluateCBFMRRWithoutLemmatizer(c *fiber.Ctx) 
 	return utils.SuccessResponse(c, fiber.StatusOK, result)
 }
 
+// ExplainCBF menjelaskan tahapan perhitungan rekomendasi CBF per mahasiswa terhadap mentor tertentu.
+func (ctrl *EvaluationController) ExplainCBF(c *fiber.Ctx) error {
+	studentID, _ := strconv.ParseUint(c.Query("student_id"), 10, 64)
+	mentorID, _ := strconv.ParseUint(c.Query("mentor_id"), 10, 64)
+	customQuery := c.Query("q", "")
+
+	if studentID == 0 || mentorID == 0 {
+		return utils.ErrorResponse(c, fiber.StatusBadRequest, "student_id dan mentor_id wajib diisi")
+	}
+
+	result, err := ctrl.svc.ExplainCBF(uint(studentID), uint(mentorID), customQuery)
+	if err != nil {
+		return utils.ErrorResponse(c, fiber.StatusInternalServerError, err.Error())
+	}
+	return utils.SuccessResponse(c, fiber.StatusOK, result)
+}
+

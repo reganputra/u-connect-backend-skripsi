@@ -4,9 +4,11 @@ import (
 	"fmt"
 	"math"
 	"sort"
+	"strings"
 	"time"
 
 	"github.com/reganputra/skripsi-backend/repository"
+	"github.com/reganputra/skripsi-backend/utils"
 	"gorm.io/gorm"
 )
 
@@ -96,6 +98,54 @@ type StudentAPResult struct {
 	RankedMentors  []RankedMentor `json:"ranked_mentors"` // full ranked list with similarity scores
 }
 
+// ─── Explain DTOs ─────────────────────────────────────────────────────────────
+
+type TFInfo struct {
+	Term  string  `json:"term"`
+	Count int     `json:"count"`
+	Total int     `json:"total"`
+	TF    float64 `json:"tf"`
+}
+
+type IDFInfo struct {
+	Term    string  `json:"term"`
+	DocFreq int     `json:"doc_freq"`
+	Total   int     `json:"total"`
+	IDF     float64 `json:"idf"`
+}
+
+type VectorWeightInfo struct {
+	Term       string  `json:"term"`
+	TFIDF      float64 `json:"tf_idf"`
+	Normalized float64 `json:"normalized"`
+}
+
+type MatchTermInfo struct {
+	Term          string  `json:"term"`
+	QueryWeight   float64 `json:"query_weight"`
+	MentorWeight  float64 `json:"mentor_weight"`
+	Product       float64 `json:"product"`
+}
+
+type CBFExplanation struct {
+	StudentID       uint               `json:"student_id"`
+	StudentName     string             `json:"student_name"`
+	QueryText       string             `json:"query_text"`
+	QueryTokens     []string           `json:"query_tokens"`
+	MentorID        uint               `json:"mentor_id"`
+	MentorName      string             `json:"mentor_name"`
+	MentorText      string             `json:"mentor_text"`
+	MentorTokens    []string           `json:"mentor_tokens"`
+	QueryTF         []TFInfo           `json:"query_tf"`
+	MentorTF        []TFInfo           `json:"mentor_tf"`
+	IDF             []IDFInfo          `json:"idf"`
+	QueryVector     []VectorWeightInfo `json:"query_vector"`
+	MentorVector    []VectorWeightInfo `json:"mentor_vector"`
+	MatchingTerms   []MatchTermInfo    `json:"matching_terms"`
+	DotProduct      float64            `json:"dot_product"`
+	SimilarityScore float64            `json:"similarity_score"`
+}
+
 // ─── Interface ─────────────────────────────────────────────────────────────────
 
 type EvaluationService interface {
@@ -106,6 +156,7 @@ type EvaluationService interface {
 	EvaluateCBFWithoutLemmatizer(topN int, studentIDs []uint) (*MAPResult, error)
 	EvaluateCBFMRR(topN int, studentIDs []uint) (*MRRResult, error)
 	EvaluateCBFMRRWithoutLemmatizer(topN int, studentIDs []uint) (*MRRResult, error)
+	ExplainCBF(studentID, mentorID uint, customQuery string) (*CBFExplanation, error)
 }
 
 // ─── Implementation ────────────────────────────────────────────────────────────
@@ -932,4 +983,225 @@ func calculateNDCG5(rankedIDs []uint, relevant map[uint]struct{}) float64 {
 		return 0.0
 	}
 	return dcg / idcg
+}
+
+func (s *evaluationService) ExplainCBF(studentID, mentorID uint, customQuery string) (*CBFExplanation, error) {
+	// ── Step 1: Dapatkan Kueri Teks ──────────────────────────────────────────
+	queryText := strings.TrimSpace(customQuery)
+	if queryText == "" {
+		var prof struct {
+			Bio             *string
+			Skills          *string
+			Interests       *string
+			CareerInterests *string
+			Position        *string
+			IndustryName    *string
+			IndustryType    *string
+		}
+		err := s.db.Table("user_profiles").Where("user_id = ? AND deleted_at IS NULL", studentID).First(&prof).Error
+		if err != nil {
+			return nil, fmt.Errorf("profil mahasiswa tidak ditemukan: %w", err)
+		}
+		parts := []string{}
+		skills := ""
+		if prof.Skills != nil && strings.TrimSpace(*prof.Skills) != "" {
+			skills = *prof.Skills
+			parts = append(parts, skills, skills)
+		}
+		if prof.Interests != nil && strings.TrimSpace(*prof.Interests) != "" {
+			uniqueInterests := deduplicateInterests(skills, *prof.Interests)
+			if uniqueInterests != "" {
+				parts = append(parts, uniqueInterests)
+			}
+		}
+		if prof.CareerInterests != nil && strings.TrimSpace(*prof.CareerInterests) != "" {
+			uniqueCareerInterests := deduplicateInterests(skills, *prof.CareerInterests)
+			if uniqueCareerInterests != "" {
+				parts = append(parts, uniqueCareerInterests)
+			}
+		}
+		if prof.Bio != nil && strings.TrimSpace(*prof.Bio) != "" {
+			parts = append(parts, *prof.Bio)
+		}
+		if prof.Position != nil && strings.TrimSpace(*prof.Position) != "" {
+			parts = append(parts, *prof.Position)
+		}
+		if prof.IndustryName != nil && strings.TrimSpace(*prof.IndustryName) != "" {
+			parts = append(parts, *prof.IndustryName)
+		}
+		if prof.IndustryType != nil && strings.TrimSpace(*prof.IndustryType) != "" {
+			parts = append(parts, *prof.IndustryType)
+		}
+		queryText = strings.Join(parts, " ")
+		if strings.TrimSpace(queryText) == "" {
+			return nil, fmt.Errorf("lengkapi profil terlebih dahulu untuk menjelaskan rekomendasi otomatis")
+		}
+	}
+
+	// ── Step 2: Dapatkan Korpus & Mentor Target ─────────────────────────────
+	mSvc, ok := s.mentorSvc.(*mentorService)
+	if !ok {
+		return nil, fmt.Errorf("gagal cast mentor service")
+	}
+	recSvc, ok := mSvc.recommendSvc.(*recommendationService)
+	if !ok {
+		return nil, fmt.Errorf("gagal cast recommendation service")
+	}
+	snap, err := recSvc.loadCorpus()
+	if err != nil {
+		return nil, fmt.Errorf("gagal memuat korpus mentor: %w", err)
+	}
+
+	var mentorIdx = -1
+	for i, doc := range snap.docs {
+		if doc.UserID == mentorID {
+			mentorIdx = i
+			break
+		}
+	}
+	if mentorIdx == -1 {
+		return nil, fmt.Errorf("mentor dengan ID %d tidak ditemukan atau tidak aktif", mentorID)
+	}
+	targetDoc := snap.docs[mentorIdx]
+	mentorText := snap.texts[mentorIdx]
+	mentorNormalizedVec := snap.normalizedVecs[mentorIdx]
+
+	// ── Step 3: Preprocessing & Tokenisasi ────────────────────────────────────
+	queryTokens := utils.Tokenize(queryText)
+	mentorTokens := utils.Tokenize(mentorText)
+
+	// ── Step 4: Perhitungan TF ────────────────────────────────────────────────
+	queryTFCounts := make(map[string]int)
+	for _, t := range queryTokens {
+		queryTFCounts[t]++
+	}
+	queryTotalTokens := len(queryTokens)
+	var queryTFList []TFInfo
+	for term, count := range queryTFCounts {
+		queryTFList = append(queryTFList, TFInfo{
+			Term:  term,
+			Count: count,
+			Total: queryTotalTokens,
+			TF:    float64(count) / float64(queryTotalTokens),
+		})
+	}
+	sort.Slice(queryTFList, func(i, j int) bool {
+		return queryTFList[i].Term < queryTFList[j].Term
+	})
+
+	mentorTFCounts := make(map[string]int)
+	for _, t := range mentorTokens {
+		mentorTFCounts[t]++
+	}
+	mentorTotalTokens := len(mentorTokens)
+	var mentorTFList []TFInfo
+	for term, count := range mentorTFCounts {
+		mentorTFList = append(mentorTFList, TFInfo{
+			Term:  term,
+			Count: count,
+			Total: mentorTotalTokens,
+			TF:    float64(count) / float64(mentorTotalTokens),
+		})
+	}
+	sort.Slice(mentorTFList, func(i, j int) bool {
+		return mentorTFList[i].Term < mentorTFList[j].Term
+	})
+
+	// ── Step 5: Perhitungan IDF ───────────────────────────────────────────────
+	var idfList []IDFInfo
+	totalDocs := len(snap.docs)
+	queryUniqueTerms := make(map[string]struct{})
+	for _, t := range queryTokens {
+		queryUniqueTerms[t] = struct{}{}
+	}
+	for term := range queryUniqueTerms {
+		df := 0
+		for _, set := range snap.tokenSets {
+			if _, ok := set[term]; ok {
+				df++
+			}
+		}
+		idfVal := snap.idf[term]
+		idfList = append(idfList, IDFInfo{
+			Term:    term,
+			DocFreq: df,
+			Total:   totalDocs,
+			IDF:     idfVal,
+		})
+	}
+	sort.Slice(idfList, func(i, j int) bool {
+		return idfList[i].Term < idfList[j].Term
+	})
+
+	// ── Step 6: Perhitungan TF-IDF & Normalisasi L2 ───────────────────────────
+	queryRawVec := utils.TFIDFVector(queryTokens, snap.idf)
+	queryNormVec := utils.L2Normalize(queryRawVec)
+	var queryVectorList []VectorWeightInfo
+	for term, rawWeight := range queryRawVec {
+		queryVectorList = append(queryVectorList, VectorWeightInfo{
+			Term:       term,
+			TFIDF:      rawWeight,
+			Normalized: queryNormVec[term],
+		})
+	}
+	sort.Slice(queryVectorList, func(i, j int) bool {
+		return queryVectorList[i].Term < queryVectorList[j].Term
+	})
+
+	mentorRawVec := utils.TFIDFVector(mentorTokens, snap.idf)
+	var mentorVectorList []VectorWeightInfo
+	for term, rawWeight := range mentorRawVec {
+		mentorVectorList = append(mentorVectorList, VectorWeightInfo{
+			Term:       term,
+			TFIDF:      rawWeight,
+			Normalized: mentorNormalizedVec[term],
+		})
+	}
+	sort.Slice(mentorVectorList, func(i, j int) bool {
+		return mentorVectorList[i].Term < mentorVectorList[j].Term
+	})
+
+	// ── Step 7: Pencocokan Term & Perhitungan Cosine Similarity ──────────────
+	var matchingTerms []MatchTermInfo
+	dotProduct := 0.0
+	for term, qWeight := range queryNormVec {
+		if mWeight, exists := mentorNormalizedVec[term]; exists {
+			prod := qWeight * mWeight
+			dotProduct += prod
+			matchingTerms = append(matchingTerms, MatchTermInfo{
+				Term:          term,
+				QueryWeight:   qWeight,
+				MentorWeight:  mWeight,
+				Product:       prod,
+			})
+		}
+	}
+	sort.Slice(matchingTerms, func(i, j int) bool {
+		return matchingTerms[i].Product > matchingTerms[j].Product
+	})
+
+	var studentName string
+	s.db.Table("users").Select("name").Where("id = ?", studentID).Scan(&studentName)
+	if studentName == "" {
+		studentName = fmt.Sprintf("Student #%d", studentID)
+	}
+
+	return &CBFExplanation{
+		StudentID:       studentID,
+		StudentName:     studentName,
+		QueryText:       queryText,
+		QueryTokens:     queryTokens,
+		MentorID:        mentorID,
+		MentorName:      targetDoc.Name,
+		MentorText:      mentorText,
+		MentorTokens:    mentorTokens,
+		QueryTF:         queryTFList,
+		MentorTF:        mentorTFList,
+		IDF:             idfList,
+		QueryVector:     queryVectorList,
+		MentorVector:    mentorVectorList,
+		MatchingTerms:   matchingTerms,
+		DotProduct:      dotProduct,
+		SimilarityScore: dotProduct,
+	}, nil
 }

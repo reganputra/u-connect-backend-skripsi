@@ -309,7 +309,7 @@ func (s *authService) ForgotPassword(req ForgotPasswordRequest) error {
 		if remaining <= 0 {
 			return errors.New("data tidak cocok — akun terkunci karena terlalu banyak percobaan, hubungi admin")
 		}
-		return errors.New(fmt.Sprintf("data yang dimasukkan tidak cocok (%d percobaan tersisa)", remaining))
+		return fmt.Errorf("data yang dimasukkan tidak cocok (%d percobaan tersisa)", remaining)
 	}
 
 	hashed, err := bcrypt.GenerateFromPassword([]byte(req.NewPassword), bcrypt.DefaultCost)

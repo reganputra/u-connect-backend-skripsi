@@ -55,6 +55,23 @@ func parseOptionalString(val string) *string {
 	return &val
 }
 
+// parseFormString returns a pointer to the string if the field is present in the request form, else nil.
+func parseFormString(c *fiber.Ctx, key string) *string {
+	form, err := c.MultipartForm()
+	if err == nil && form != nil {
+		if _, ok := form.Value[key]; ok {
+			val := c.FormValue(key)
+			return &val
+		}
+	}
+	// Fallback to check if it's set
+	val := c.FormValue(key)
+	if val != "" {
+		return &val
+	}
+	return nil
+}
+
 // parseOptionalInt returns a *int if the form value is a valid non-zero int, else nil.
 func parseOptionalInt(val string) *int {
 	if val == "" {
@@ -125,27 +142,27 @@ func (ctrl *ProfileController) CreateProfile(c *fiber.Ctx) error {
 
 	req := service.ProfileRequest{
 		ProfilePicture:         parseOptionalString(pictureURL),
-		Bio:                    parseOptionalString(c.FormValue("bio")),
-		Location:               parseOptionalString(c.FormValue("location")),
-		JobStatus:              parseOptionalString(c.FormValue("job_status")),
-		Position:               parseOptionalString(c.FormValue("position")),
-		CompanyName:            parseOptionalString(c.FormValue("company_name")),
-		CompanyLocation:        parseOptionalString(c.FormValue("company_location")),
+		Bio:                    parseFormString(c, "bio"),
+		Location:               parseFormString(c, "location"),
+		JobStatus:              parseFormString(c, "job_status"),
+		Position:               parseFormString(c, "position"),
+		CompanyName:            parseFormString(c, "company_name"),
+		CompanyLocation:        parseFormString(c, "company_location"),
 		CompanySize:            companySize,
-		IndustryName:           parseOptionalString(c.FormValue("industry_name")),
-		IndustryType:           parseOptionalString(c.FormValue("industry_type")),
+		IndustryName:           parseFormString(c, "industry_name"),
+		IndustryType:           parseFormString(c, "industry_type"),
 		YearFounding:           yearFounding,
 		Salary:                 salary,
-		EducationalLevel:       parseOptionalString(c.FormValue("educational_level")),
-		AdvancedStudyProgram:   parseOptionalString(c.FormValue("advanced_study_program")),
-		InstitutionName:        parseOptionalString(c.FormValue("institution_name")),
+		EducationalLevel:       parseFormString(c, "educational_level"),
+		AdvancedStudyProgram:   parseFormString(c, "advanced_study_program"),
+		InstitutionName:        parseFormString(c, "institution_name"),
 		ExpectedGraduationYear: expectedGradYear,
-		Skills:                 parseOptionalString(c.FormValue("skills")),
-		Interests:              parseOptionalString(c.FormValue("interests")),
-		CareerInterests:        parseOptionalString(c.FormValue("career_interests")),
+		Skills:                 parseFormString(c, "skills"),
+		Interests:              parseFormString(c, "interests"),
+		CareerInterests:        parseFormString(c, "career_interests"),
 		MentorQuota:            mentorQuota,
-		MentorDescription:      parseOptionalString(c.FormValue("mentor_description")),
-		StatusDescription:      parseOptionalString(c.FormValue("status_description")),
+		MentorDescription:      parseFormString(c, "mentor_description"),
+		StatusDescription:      parseFormString(c, "status_description"),
 	}
 
 	_ = yearEnroll
@@ -190,29 +207,29 @@ func (ctrl *ProfileController) UpdateProfile(c *fiber.Ctx) error {
 	expectedGradYear := parseOptionalInt(c.FormValue("expected_graduation_year"))
 
 	req := service.ProfileRequest{
-		Name:                   parseOptionalString(c.FormValue("name")),
+		Name:                   parseFormString(c, "name"),
 		ProfilePicture:         parseOptionalString(pictureURL),
-		Bio:                    parseOptionalString(c.FormValue("bio")),
-		Location:               parseOptionalString(c.FormValue("location")),
-		JobStatus:              parseOptionalString(c.FormValue("job_status")),
-		Position:               parseOptionalString(c.FormValue("position")),
-		CompanyName:            parseOptionalString(c.FormValue("company_name")),
-		CompanyLocation:        parseOptionalString(c.FormValue("company_location")),
+		Bio:                    parseFormString(c, "bio"),
+		Location:               parseFormString(c, "location"),
+		JobStatus:              parseFormString(c, "job_status"),
+		Position:               parseFormString(c, "position"),
+		CompanyName:            parseFormString(c, "company_name"),
+		CompanyLocation:        parseFormString(c, "company_location"),
 		CompanySize:            companySize,
-		IndustryName:           parseOptionalString(c.FormValue("industry_name")),
-		IndustryType:           parseOptionalString(c.FormValue("industry_type")),
+		IndustryName:           parseFormString(c, "industry_name"),
+		IndustryType:           parseFormString(c, "industry_type"),
 		YearFounding:           yearFounding,
 		Salary:                 salary,
-		EducationalLevel:       parseOptionalString(c.FormValue("educational_level")),
-		AdvancedStudyProgram:   parseOptionalString(c.FormValue("advanced_study_program")),
-		InstitutionName:        parseOptionalString(c.FormValue("institution_name")),
+		EducationalLevel:       parseFormString(c, "educational_level"),
+		AdvancedStudyProgram:   parseFormString(c, "advanced_study_program"),
+		InstitutionName:        parseFormString(c, "institution_name"),
 		ExpectedGraduationYear: expectedGradYear,
-		Skills:                 parseOptionalString(c.FormValue("skills")),
-		Interests:              parseOptionalString(c.FormValue("interests")),
-		CareerInterests:        parseOptionalString(c.FormValue("career_interests")),
+		Skills:                 parseFormString(c, "skills"),
+		Interests:              parseFormString(c, "interests"),
+		CareerInterests:        parseFormString(c, "career_interests"),
 		MentorQuota:            mentorQuota,
-		MentorDescription:      parseOptionalString(c.FormValue("mentor_description")),
-		StatusDescription:      parseOptionalString(c.FormValue("status_description")),
+		MentorDescription:      parseFormString(c, "mentor_description"),
+		StatusDescription:      parseFormString(c, "status_description"),
 	}
 
 	profile, err := ctrl.profileSvc.UpdateProfile(userID, req)
