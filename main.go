@@ -168,13 +168,13 @@ func main() {
 	schedulerCtx, cancelSchedulers := context.WithCancel(context.Background())
 	go scheduler.StartEventReminderScheduler(schedulerCtx, db, c.NotifSvc)
 	go scheduler.StartEventStatusScheduler(schedulerCtx, db)
-	go scheduler.StartAnalyticsSnapshotScheduler(schedulerCtx, c.AnalyticsCtrl.Svc())
+	// go scheduler.StartAnalyticsSnapshotScheduler(schedulerCtx, c.AnalyticsCtrl.Svc())
 	// Backfill: compute snapshots for last 90 days on first boot
-	go func() {
-		if err := c.AnalyticsCtrl.Svc().BackfillSnapshots(90); err != nil {
-			log.Printf("[analytics] backfill error: %v", err)
-		}
-	}()
+	// go func() {
+	// 	if err := c.AnalyticsCtrl.Svc().BackfillSnapshots(90); err != nil {
+	// 		log.Printf("[analytics] backfill error: %v", err)
+	// 	}
+	// }()
 
 	// ── Start server ──────────────────────────────────────────────────────────
 	// Prefer the `PORT` env var (platforms like Vercel provide this),

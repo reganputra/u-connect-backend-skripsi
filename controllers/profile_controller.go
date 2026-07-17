@@ -211,6 +211,8 @@ func (ctrl *ProfileController) UpdateProfile(c *fiber.Ctx) error {
 		ProfilePicture:         parseOptionalString(pictureURL),
 		Bio:                    parseFormString(c, "bio"),
 		Location:               parseFormString(c, "location"),
+		LinkedinURL:            parseOptionalString(c.FormValue("linkedin_url")),
+		GithubURL:              parseOptionalString(c.FormValue("github_url")),
 		JobStatus:              parseFormString(c, "job_status"),
 		Position:               parseFormString(c, "position"),
 		CompanyName:            parseFormString(c, "company_name"),

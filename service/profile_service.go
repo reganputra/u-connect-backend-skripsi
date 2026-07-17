@@ -23,6 +23,8 @@ type ProfileRequest struct {
 	ProfilePicture *string `json:"profile_picture"`
 	Bio            *string `json:"bio"`
 	Location       *string `json:"location"`
+	LinkedinURL    *string `json:"linkedin_url"`
+	GithubURL      *string `json:"github_url"`
 
 	// Professional
 	JobStatus       *string `json:"job_status"`
@@ -194,6 +196,8 @@ func (s *profileService) CreateProfile(userID uint, req ProfileRequest) (*models
 		UserID:                 userID,
 		Bio:                    req.Bio,
 		Location:               req.Location,
+		LinkedinURL:            req.LinkedinURL,
+		GithubURL:              req.GithubURL,
 		JobStatus:              req.JobStatus,
 		Position:               req.Position,
 		CompanyName:            req.CompanyName,
@@ -261,6 +265,12 @@ func (s *profileService) UpdateProfile(userID uint, req ProfileRequest) (*models
 	}
 	if req.Location != nil {
 		profile.Location = req.Location
+	}
+	if req.LinkedinURL != nil {
+		profile.LinkedinURL = req.LinkedinURL
+	}
+	if req.GithubURL != nil {
+		profile.GithubURL = req.GithubURL
 	}
 	if req.JobStatus != nil {
 		profile.JobStatus = req.JobStatus
