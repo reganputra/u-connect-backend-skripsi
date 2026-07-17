@@ -443,6 +443,8 @@ Notes:
 | `skills`                   | ❌                          | Comma-separated text (used by mentor recommendation)  |
 | `interests`                | ❌                          | Comma-separated text (used by mentor recommendation)  |
 | `career_interests`         | ❌                          | Comma-separated text (used by mentor recommendation)  |
+| `linkedin_url`             | ❌                          | URL to user's LinkedIn profile                        |
+| `github_url`               | ❌                          | URL to user's GitHub profile                          |
 | `position`                 | if `employed`               | Current job title                                     |
 | `company_name`             | if `employed`               | Current company name                                  |
 | `company_location`         | ❌                          | Company/work location (relevant for `employed`)       |
