@@ -3,18 +3,12 @@ package service
 import (
 	"errors"
 
+	"github.com/reganputra/skripsi-backend/constant"
 	"github.com/reganputra/skripsi-backend/models"
 	"github.com/reganputra/skripsi-backend/repository"
 )
 
-var validProfileJobStatuses = map[string]bool{
-	"employed":         true,
-	"entrepreneur":     true,
-	"continuing_study": true,
-	"unemployed":       true,
-	"freelance":        true,
-	"student":          true,
-}
+var validProfileJobStatuses = constant.ProfileJobStatuses
 
 // ─── DTOs ─────────────────────────────────────────────────────────────────────
 
@@ -452,7 +446,7 @@ func (s *profileService) SearchProfiles(query string, page, limit int) ([]Direct
 
 // GetProfilesByRole returns paginated profiles filtered by role (student, alumni, or partner).
 func (s *profileService) GetProfilesByRole(role string, page, limit int) ([]DirectorySummary, int64, error) {
-	if role != "student" && role != "alumni" && role != "partner" {
+	if !constant.IsValidDirectoryRole(role) {
 		return []DirectorySummary{}, 0, errors.New("peran harus student, alumni, atau partner")
 	}
 	return s.profileRepo.GetProfilesByRole(role, page, limit)

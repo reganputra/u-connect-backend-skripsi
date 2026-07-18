@@ -51,7 +51,9 @@ func (r *messageRepository) GetConversation(userA, userB uint, page, limit int) 
 			userA, userB, userB, userA,
 		)
 
-	base.Count(&total)
+	if err := base.Count(&total).Error; err != nil {
+		return nil, 0, err
+	}
 
 	offset := (page - 1) * limit
 	err := base.

@@ -43,7 +43,6 @@ func (r *followRepository) Follow(followerID, followingID uint) error {
 	return nil
 }
 
-
 func (r *followRepository) Unfollow(followerID, followingID uint) error {
 	return r.db.
 		Unscoped().

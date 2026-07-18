@@ -35,8 +35,8 @@ type SimilarityStats struct {
 // MAPResult is the top-level response from the MAP evaluation endpoint.
 type MAPResult struct {
 	TopN                   int               `json:"top_n"`
-	TotalStudents          int               `json:"total_students"`          // students with ≥1 request in DB
-	ValidTestCases         int               `json:"valid_test_cases"`        // students whose relevant mentors are in the rec pool
+	TotalStudents          int               `json:"total_students"`   // students with ≥1 request in DB
+	ValidTestCases         int               `json:"valid_test_cases"` // students whose relevant mentors are in the rec pool
 	MAP                    float64           `json:"map"`
 	PrecisionAt1           float64           `json:"precision_at_1"`
 	PrecisionAt3           float64           `json:"precision_at_3"`
@@ -53,8 +53,8 @@ type MAPResult struct {
 // MRRResult is the top-level response from the MRR evaluation endpoint.
 type MRRResult struct {
 	TopN                   int               `json:"top_n"`
-	TotalStudents          int               `json:"total_students"`          // students with ≥1 request in DB
-	ValidTestCases         int               `json:"valid_test_cases"`        // students evaluated
+	TotalStudents          int               `json:"total_students"`   // students with ≥1 request in DB
+	ValidTestCases         int               `json:"valid_test_cases"` // students evaluated
 	MRR                    float64           `json:"mrr"`
 	AvgResponseTimeMS      float64           `json:"avg_response_time_ms"`
 	RecommendationCoverage float64           `json:"recommendation_coverage"`
@@ -121,10 +121,10 @@ type VectorWeightInfo struct {
 }
 
 type MatchTermInfo struct {
-	Term          string  `json:"term"`
-	QueryWeight   float64 `json:"query_weight"`
-	MentorWeight  float64 `json:"mentor_weight"`
-	Product       float64 `json:"product"`
+	Term         string  `json:"term"`
+	QueryWeight  float64 `json:"query_weight"`
+	MentorWeight float64 `json:"mentor_weight"`
+	Product      float64 `json:"product"`
 }
 
 type CBFExplanation struct {
@@ -1169,10 +1169,10 @@ func (s *evaluationService) ExplainCBF(studentID, mentorID uint, customQuery str
 			prod := qWeight * mWeight
 			dotProduct += prod
 			matchingTerms = append(matchingTerms, MatchTermInfo{
-				Term:          term,
-				QueryWeight:   qWeight,
-				MentorWeight:  mWeight,
-				Product:       prod,
+				Term:         term,
+				QueryWeight:  qWeight,
+				MentorWeight: mWeight,
+				Product:      prod,
 			})
 		}
 	}

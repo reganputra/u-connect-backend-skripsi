@@ -7,6 +7,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/reganputra/skripsi-backend/constant"
 	"github.com/reganputra/skripsi-backend/models"
 	"github.com/reganputra/skripsi-backend/repository"
 )
@@ -247,11 +248,11 @@ func (s *mentorService) RejectRequest(mentorUserID, requestID uint, reason strin
 	if req.MentorID != mentorUserID {
 		return nil, errors.New("akses ditolak")
 	}
-	if req.Status != "pending" {
+	if req.Status != constant.StatusPending {
 		return nil, errors.New("permintaan sudah diproses")
 	}
 
-	req.Status = "rejected"
+	req.Status = constant.StatusRejected
 	req.RejectReason = &reason
 	now := time.Now()
 	req.RejectedAt = &now
@@ -281,7 +282,7 @@ func (s *mentorService) GetMyMentees(mentorUserID uint) ([]models.MentorRequest,
 	// Filter to approved only
 	var approved []models.MentorRequest
 	for _, r := range reqs {
-		if r.Status == "approved" {
+		if r.Status == constant.StatusApproved {
 			approved = append(approved, r)
 		}
 	}
@@ -342,7 +343,7 @@ func (s *mentorService) CreateSession(mentorUserID uint, req SessionRequest) (*m
 		Topic:       req.Topic,
 		Notes:       req.Notes,
 		SessionDate: req.SessionDate,
-		Status:      "scheduled",
+		Status:      constant.StatusScheduled,
 	}
 	if err := s.sessionRepo.Create(session); err != nil {
 		return nil, errors.New("gagal membuat sesi mentoring")
@@ -382,7 +383,7 @@ func (s *mentorService) CreateSessionAsStudent(studentUserID uint, req StudentSe
 		Topic:       req.Topic,
 		Notes:       req.Notes,
 		SessionDate: req.SessionDate,
-		Status:      "scheduled",
+		Status:      constant.StatusScheduled,
 	}
 	if err := s.sessionRepo.Create(session); err != nil {
 		return nil, errors.New("gagal membuat sesi mentoring")
@@ -415,16 +416,15 @@ func (s *mentorService) UpdateSession(mentorUserID, sessionID uint, req UpdateSe
 	if session.MentorID != mentorUserID {
 		return nil, errors.New("akses ditolak")
 	}
-	if session.Status == "completed" || session.Status == "cancelled" {
+	if session.Status == constant.StatusCompleted || session.Status == constant.StatusCancelled {
 		return nil, errors.New("status sesi sudah final")
 	}
 
-	validStatuses := map[string]bool{"scheduled": true, "completed": true, "cancelled": true}
-	if req.Status != "" && !validStatuses[req.Status] {
+	if req.Status != "" && !constant.SessionStatuses[req.Status] {
 		return nil, errors.New("status tidak valid")
 	}
 	if req.Status != "" {
-		if session.Status == "scheduled" && req.Status == "completed" {
+		if session.Status == constant.StatusScheduled && req.Status == constant.StatusCompleted {
 			if session.SessionDate != nil && session.SessionDate.After(time.Now()) {
 				return nil, errors.New("sesi belum dapat diselesaikan sebelum waktunya")
 			}
@@ -432,7 +432,7 @@ func (s *mentorService) UpdateSession(mentorUserID, sessionID uint, req UpdateSe
 			session.CompletedAt = &now
 			session.CancelledAt = nil
 		}
-		if session.Status == "scheduled" && req.Status == "cancelled" {
+		if session.Status == constant.StatusScheduled && req.Status == constant.StatusCancelled {
 			now := time.Now()
 			session.CancelledAt = &now
 		}
@@ -500,7 +500,7 @@ func (s *mentorService) RequestMentoring(studentUserID, mentorUserID uint, req M
 
 	// Student 2-mentor limit check
 	count, _ := s.requestRepo.CountApprovedForStudent(studentUserID)
-	if count >= 2 {
+	if count >= int64(constant.MaxMentorsPerStudent) {
 		return nil, errors.New("anda sudah memiliki 2 mentor aktif")
 	}
 
@@ -508,7 +508,7 @@ func (s *mentorService) RequestMentoring(studentUserID, mentorUserID uint, req M
 		MentorID:        mentorUserID,
 		StudentID:       studentUserID,
 		Message:         req.Message,
-		Status:          "pending",
+		Status:          constant.StatusPending,
 		SimilarityScore: req.SimilarityScore,
 	}
 	if err := s.requestRepo.Create(mentorReq); err != nil {
@@ -539,11 +539,11 @@ func (s *mentorService) WithdrawRequest(studentUserID, requestID uint) error {
 	if req.StudentID != studentUserID {
 		return errors.New("akses ditolak")
 	}
-	if req.Status != "pending" {
+	if req.Status != constant.StatusPending {
 		return errors.New("hanya permintaan pending yang bisa ditarik")
 	}
 	now := time.Now()
-	req.Status = "withdrawn"
+	req.Status = constant.StatusWithdrawn
 	req.WithdrawnAt = &now
 	if err := s.requestRepo.Update(req); err != nil {
 		return errors.New("gagal menarik permintaan")
@@ -558,7 +558,7 @@ func (s *mentorService) GetMyMentors(studentUserID uint) ([]models.MentorRequest
 	}
 	var approved []models.MentorRequest
 	for _, r := range reqs {
-		if r.Status == "approved" {
+		if r.Status == constant.StatusApproved {
 			approved = append(approved, r)
 		}
 	}
@@ -730,4 +730,3 @@ func (s *mentorService) GetRecommendationsWithoutLemmatizer(studentUserID uint, 
 	}
 	return s.recommendSvc.RecommendMentorsWithoutLemmatizer(query, topN)
 }
-

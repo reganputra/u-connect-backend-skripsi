@@ -53,20 +53,30 @@ func (r *analyticsRepository) GetEnhancedStats() (*EnhancedStats, error) {
 	db := r.db
 
 	// Helper for simple counts.
-	count := func(model interface{}, where ...string) int64 {
+	count := func(model interface{}, where ...string) (int64, error) {
 		var n int64
 		q := db.Model(model)
 		for _, w := range where {
 			q = q.Where(w)
 		}
-		q.Count(&n)
-		return n
+		err := q.Count(&n).Error
+		return n, err
 	}
 
-	s.TotalReactions = count(&models.Reaction{})
-	s.TotalComments = count(&models.Comment{})
+	var err error
+	s.TotalReactions, err = count(&models.Reaction{})
+	if err != nil {
+		return nil, err
+	}
+	s.TotalComments, err = count(&models.Comment{})
+	if err != nil {
+		return nil, err
+	}
 	now := time.Now().UTC()
-	s.NewUsersLast7d = count(&models.User{}, "created_at >= '"+now.AddDate(0, 0, -7).Format(time.RFC3339)+"'")
+	s.NewUsersLast7d, err = count(&models.User{}, "created_at >= '"+now.AddDate(0, 0, -7).Format(time.RFC3339)+"'")
+	if err != nil {
+		return nil, err
+	}
 
 	return s, nil
 }

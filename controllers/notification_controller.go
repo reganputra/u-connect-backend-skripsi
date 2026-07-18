@@ -2,7 +2,6 @@ package controllers
 
 import (
 	"errors"
-	"strconv"
 
 	"github.com/gofiber/fiber/v2"
 	"github.com/reganputra/skripsi-backend/service"
@@ -24,8 +23,7 @@ func (ctrl *NotificationController) GetMyNotifications(c *fiber.Ctx) error {
 	if err != nil {
 		return utils.ErrorResponse(c, fiber.StatusUnauthorized, err.Error())
 	}
-	page, _ := strconv.Atoi(c.Query("page", "1"))
-	limit, _ := strconv.Atoi(c.Query("limit", "20"))
+	page, limit := utils.ParsePagination(c, 20)
 
 	notifs, total, err := ctrl.notifSvc.GetMyNotifications(userID, page, limit)
 	if err != nil {
@@ -58,9 +56,9 @@ func (ctrl *NotificationController) MarkAsRead(c *fiber.Ctx) error {
 	if err != nil {
 		return utils.ErrorResponse(c, fiber.StatusUnauthorized, err.Error())
 	}
-	notifID, err := strconv.ParseUint(c.Params("id"), 10, 64)
-	if err != nil {
-		return utils.ErrorResponse(c, fiber.StatusBadRequest, "ID notifikasi tidak valid")
+	notifID, ok := utils.MustParseIDParam(c, "id", "notifikasi")
+	if !ok {
+		return nil
 	}
 	if err := ctrl.notifSvc.MarkAsRead(uint(notifID), userID); err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {

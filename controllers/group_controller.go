@@ -4,6 +4,7 @@ import (
 	"strconv"
 
 	"github.com/gofiber/fiber/v2"
+	"github.com/reganputra/skripsi-backend/dto"
 	"github.com/reganputra/skripsi-backend/service"
 	"github.com/reganputra/skripsi-backend/utils"
 )
@@ -42,19 +43,13 @@ func (ctrl *GroupController) CreateGroup(c *fiber.Ctx) error {
 }
 
 func (ctrl *GroupController) GetGroups(c *fiber.Ctx) error {
-	page, _ := strconv.Atoi(c.Query("page", "1"))
-	limit, _ := strconv.Atoi(c.Query("limit", "20"))
+	page, limit := utils.ParsePagination(c, 20)
 
 	groups, total, err := ctrl.groupSvc.GetGroups(page, limit)
 	if err != nil {
 		return utils.ErrorResponse(c, fiber.StatusInternalServerError, "gagal mengambil data grup")
 	}
-	return utils.SuccessResponse(c, fiber.StatusOK, fiber.Map{
-		"total": total,
-		"page":  page,
-		"limit": limit,
-		"data":  groups,
-	})
+	return utils.PaginatedResponse(c, fiber.StatusOK, groups, total, page, limit)
 }
 
 func (ctrl *GroupController) GetOwnedGroups(c *fiber.Ctx) error {
@@ -62,45 +57,38 @@ func (ctrl *GroupController) GetOwnedGroups(c *fiber.Ctx) error {
 	if err != nil {
 		return utils.ErrorResponse(c, fiber.StatusUnauthorized, err.Error())
 	}
-	page, _ := strconv.Atoi(c.Query("page", "1"))
-	limit, _ := strconv.Atoi(c.Query("limit", "20"))
+	page, limit := utils.ParsePagination(c, 20)
 
 	groups, total, err := ctrl.groupSvc.GetOwnedGroups(userID, page, limit)
 	if err != nil {
 		return utils.ErrorResponse(c, fiber.StatusInternalServerError, "gagal mengambil data grup milik pengguna")
 	}
 
-	return utils.SuccessResponse(c, fiber.StatusOK, fiber.Map{
-		"total": total,
-		"page":  page,
-		"limit": limit,
-		"data":  groups,
-	})
+	return utils.PaginatedResponse(c, fiber.StatusOK, groups, total, page, limit)
 }
 
 func (ctrl *GroupController) GetGroupByID(c *fiber.Ctx) error {
-	groupID, err := strconv.ParseUint(c.Params("id"), 10, 64)
-	if err != nil {
-		return utils.ErrorResponse(c, fiber.StatusBadRequest, "ID grup tidak valid")
+	groupID, ok := utils.MustParseIDParam(c, "id", "grup")
+	if !ok {
+		return nil
 	}
 	articlePage, _ := strconv.Atoi(c.Query("article_page", "1"))
 	articleLimit, _ := strconv.Atoi(c.Query("article_limit", "10"))
-	group, err := ctrl.groupSvc.GetGroupByID(uint(groupID), articlePage, articleLimit)
+	group, err := ctrl.groupSvc.GetGroupByID(groupID, articlePage, articleLimit)
 	if err != nil {
 		return utils.ErrorResponse(c, fiber.StatusNotFound, err.Error())
 	}
 	return utils.SuccessResponse(c, fiber.StatusOK, group)
 }
 
-
 func (ctrl *GroupController) UpdateGroup(c *fiber.Ctx) error {
 	userID, err := getUserIDFromToken(c)
 	if err != nil {
 		return utils.ErrorResponse(c, fiber.StatusUnauthorized, err.Error())
 	}
-	groupID, err := strconv.ParseUint(c.Params("id"), 10, 64)
-	if err != nil {
-		return utils.ErrorResponse(c, fiber.StatusBadRequest, "ID grup tidak valid")
+	groupID, ok := utils.MustParseIDParam(c, "id", "grup")
+	if !ok {
+		return nil
 	}
 	bannerURL, err := uploadFileIfPresent(c, "banner", "alumni-platform/groups/banners")
 	if err != nil {
@@ -113,7 +101,7 @@ func (ctrl *GroupController) UpdateGroup(c *fiber.Ctx) error {
 		Rules:       parseOptionalString(c.FormValue("rules")),
 		BannerURL:   parseOptionalString(bannerURL),
 	}
-	group, err := ctrl.groupSvc.UpdateGroup(userID, uint(groupID), req)
+	group, err := ctrl.groupSvc.UpdateGroup(userID, groupID, req)
 	if err != nil {
 		if err.Error() == "akses ditolak: hanya pemilik grup" {
 			return utils.ErrorResponse(c, fiber.StatusForbidden, err.Error())
@@ -128,11 +116,11 @@ func (ctrl *GroupController) DeleteGroup(c *fiber.Ctx) error {
 	if err != nil {
 		return utils.ErrorResponse(c, fiber.StatusUnauthorized, err.Error())
 	}
-	groupID, err := strconv.ParseUint(c.Params("id"), 10, 64)
-	if err != nil {
-		return utils.ErrorResponse(c, fiber.StatusBadRequest, "ID grup tidak valid")
+	groupID, ok := utils.MustParseIDParam(c, "id", "grup")
+	if !ok {
+		return nil
 	}
-	if err := ctrl.groupSvc.DeleteGroup(userID, uint(groupID)); err != nil {
+	if err := ctrl.groupSvc.DeleteGroup(userID, groupID); err != nil {
 		if err.Error() == "akses ditolak: hanya pemilik grup" {
 			return utils.ErrorResponse(c, fiber.StatusForbidden, err.Error())
 		}
@@ -148,11 +136,11 @@ func (ctrl *GroupController) JoinGroup(c *fiber.Ctx) error {
 	if err != nil {
 		return utils.ErrorResponse(c, fiber.StatusUnauthorized, err.Error())
 	}
-	groupID, err := strconv.ParseUint(c.Params("id"), 10, 64)
-	if err != nil {
-		return utils.ErrorResponse(c, fiber.StatusBadRequest, "ID grup tidak valid")
+	groupID, ok := utils.MustParseIDParam(c, "id", "grup")
+	if !ok {
+		return nil
 	}
-	if err := ctrl.groupSvc.JoinGroup(userID, uint(groupID)); err != nil {
+	if err := ctrl.groupSvc.JoinGroup(userID, groupID); err != nil {
 		return utils.ErrorResponse(c, fiber.StatusBadRequest, err.Error())
 	}
 	return utils.SuccessResponse(c, fiber.StatusOK, fiber.Map{"message": "berhasil bergabung dengan grup"})
@@ -163,34 +151,28 @@ func (ctrl *GroupController) LeaveGroup(c *fiber.Ctx) error {
 	if err != nil {
 		return utils.ErrorResponse(c, fiber.StatusUnauthorized, err.Error())
 	}
-	groupID, err := strconv.ParseUint(c.Params("id"), 10, 64)
-	if err != nil {
-		return utils.ErrorResponse(c, fiber.StatusBadRequest, "ID grup tidak valid")
+	groupID, ok := utils.MustParseIDParam(c, "id", "grup")
+	if !ok {
+		return nil
 	}
-	if err := ctrl.groupSvc.LeaveGroup(userID, uint(groupID)); err != nil {
+	if err := ctrl.groupSvc.LeaveGroup(userID, groupID); err != nil {
 		return utils.ErrorResponse(c, fiber.StatusBadRequest, err.Error())
 	}
 	return utils.SuccessResponse(c, fiber.StatusOK, fiber.Map{"message": "berhasil meninggalkan grup"})
 }
 
 func (ctrl *GroupController) GetGroupMembers(c *fiber.Ctx) error {
-	groupID, err := strconv.ParseUint(c.Params("id"), 10, 64)
-	if err != nil {
-		return utils.ErrorResponse(c, fiber.StatusBadRequest, "ID grup tidak valid")
+	groupID, ok := utils.MustParseIDParam(c, "id", "grup")
+	if !ok {
+		return nil
 	}
-	page, _ := strconv.Atoi(c.Query("page", "1"))
-	limit, _ := strconv.Atoi(c.Query("limit", "20"))
+	page, limit := utils.ParsePagination(c, 20)
 
-	members, total, err := ctrl.groupSvc.GetGroupMembers(uint(groupID), page, limit)
+	members, total, err := ctrl.groupSvc.GetGroupMembers(groupID, page, limit)
 	if err != nil {
 		return utils.ErrorResponse(c, fiber.StatusInternalServerError, "gagal mengambil data anggota")
 	}
-	return utils.SuccessResponse(c, fiber.StatusOK, fiber.Map{
-		"total":   total,
-		"page":    page,
-		"limit":   limit,
-		"members": members,
-	})
+	return utils.PaginatedResponse(c, fiber.StatusOK, members, total, page, limit)
 }
 
 func (ctrl *GroupController) GetJoinedGroups(c *fiber.Ctx) error {
@@ -198,19 +180,13 @@ func (ctrl *GroupController) GetJoinedGroups(c *fiber.Ctx) error {
 	if err != nil {
 		return utils.ErrorResponse(c, fiber.StatusUnauthorized, err.Error())
 	}
-	page, _ := strconv.Atoi(c.Query("page", "1"))
-	limit, _ := strconv.Atoi(c.Query("limit", "20"))
+	page, limit := utils.ParsePagination(c, 20)
 
 	groups, total, err := ctrl.groupSvc.GetJoinedGroups(userID, page, limit)
 	if err != nil {
 		return utils.ErrorResponse(c, fiber.StatusInternalServerError, "gagal mengambil data grup yang diikuti")
 	}
-	return utils.SuccessResponse(c, fiber.StatusOK, fiber.Map{
-		"total": total,
-		"page":  page,
-		"limit": limit,
-		"data":  groups,
-	})
+	return utils.PaginatedResponse(c, fiber.StatusOK, groups, total, page, limit)
 }
 
 func (ctrl *GroupController) KickMember(c *fiber.Ctx) error {
@@ -218,19 +194,17 @@ func (ctrl *GroupController) KickMember(c *fiber.Ctx) error {
 	if err != nil {
 		return utils.ErrorResponse(c, fiber.StatusUnauthorized, err.Error())
 	}
-	groupID, err := strconv.ParseUint(c.Params("id"), 10, 64)
-	if err != nil {
-		return utils.ErrorResponse(c, fiber.StatusBadRequest, "ID grup tidak valid")
+	groupID, ok := utils.MustParseIDParam(c, "id", "grup")
+	if !ok {
+		return nil
 	}
-	targetID, err := strconv.ParseUint(c.Params("userID"), 10, 64)
-	if err != nil {
-		return utils.ErrorResponse(c, fiber.StatusBadRequest, "ID pengguna tidak valid")
+	targetID, ok := utils.MustParseIDParam(c, "userID", "pengguna")
+	if !ok {
+		return nil
 	}
-	var body struct {
-		Reason string `json:"reason"`
-	}
+	var body dto.KickMemberRequest
 	_ = c.BodyParser(&body)
-	if err := ctrl.groupSvc.KickMember(userID, uint(groupID), uint(targetID), body.Reason); err != nil {
+	if err := ctrl.groupSvc.KickMember(userID, groupID, targetID, body.Reason); err != nil {
 		if err.Error() == "akses ditolak: hanya pemilik grup" {
 			return utils.ErrorResponse(c, fiber.StatusForbidden, err.Error())
 		}
@@ -246,9 +220,9 @@ func (ctrl *GroupController) CreateGroupArticle(c *fiber.Ctx) error {
 	if err != nil {
 		return utils.ErrorResponse(c, fiber.StatusUnauthorized, err.Error())
 	}
-	groupID, err := strconv.ParseUint(c.Params("id"), 10, 64)
-	if err != nil {
-		return utils.ErrorResponse(c, fiber.StatusBadRequest, "ID grup tidak valid")
+	groupID, ok := utils.MustParseIDParam(c, "id", "grup")
+	if !ok {
+		return nil
 	}
 
 	mediaURLs, err := uploadFilesIfPresent(c, "medias", "alumni-platform/groups/articles")
@@ -272,7 +246,7 @@ func (ctrl *GroupController) CreateGroupArticle(c *fiber.Ctx) error {
 		Content:   c.FormValue("content"),
 		MediaURLs: mediaURLs,
 	}
-	article, err := ctrl.groupSvc.CreateGroupArticle(userID, uint(groupID), req)
+	article, err := ctrl.groupSvc.CreateGroupArticle(userID, groupID, req)
 	if err != nil {
 		if err.Error() == "akses ditolak: hanya anggota grup" {
 			return utils.ErrorResponse(c, fiber.StatusForbidden, err.Error())
@@ -284,11 +258,11 @@ func (ctrl *GroupController) CreateGroupArticle(c *fiber.Ctx) error {
 
 func (ctrl *GroupController) GetGroupArticleDetail(c *fiber.Ctx) error {
 	userID, _ := getUserIDFromToken(c)
-	articleID, err := strconv.ParseUint(c.Params("id"), 10, 64)
-	if err != nil {
-		return utils.ErrorResponse(c, fiber.StatusBadRequest, "ID artikel tidak valid")
+	articleID, ok := utils.MustParseIDParam(c, "id", "artikel")
+	if !ok {
+		return nil
 	}
-	detail, err := ctrl.groupSvc.GetGroupArticleDetail(userID, uint(articleID))
+	detail, err := ctrl.groupSvc.GetGroupArticleDetail(userID, articleID)
 	if err != nil {
 		return utils.ErrorResponse(c, fiber.StatusNotFound, err.Error())
 	}
@@ -300,9 +274,9 @@ func (ctrl *GroupController) UpdateGroupArticle(c *fiber.Ctx) error {
 	if err != nil {
 		return utils.ErrorResponse(c, fiber.StatusUnauthorized, err.Error())
 	}
-	articleID, err := strconv.ParseUint(c.Params("id"), 10, 64)
-	if err != nil {
-		return utils.ErrorResponse(c, fiber.StatusBadRequest, "ID artikel tidak valid")
+	articleID, ok := utils.MustParseIDParam(c, "id", "artikel")
+	if !ok {
+		return nil
 	}
 
 	mediaURLs, err := uploadFilesIfPresent(c, "medias", "alumni-platform/groups/articles")
@@ -326,7 +300,7 @@ func (ctrl *GroupController) UpdateGroupArticle(c *fiber.Ctx) error {
 		Content:   c.FormValue("content"),
 		MediaURLs: mediaURLs,
 	}
-	article, err := ctrl.groupSvc.UpdateGroupArticle(userID, uint(articleID), req)
+	article, err := ctrl.groupSvc.UpdateGroupArticle(userID, articleID, req)
 	if err != nil {
 		if err.Error() == "akses ditolak" {
 			return utils.ErrorResponse(c, fiber.StatusForbidden, err.Error())
@@ -341,11 +315,11 @@ func (ctrl *GroupController) DeleteGroupArticle(c *fiber.Ctx) error {
 	if err != nil {
 		return utils.ErrorResponse(c, fiber.StatusUnauthorized, err.Error())
 	}
-	articleID, err := strconv.ParseUint(c.Params("id"), 10, 64)
-	if err != nil {
-		return utils.ErrorResponse(c, fiber.StatusBadRequest, "ID artikel tidak valid")
+	articleID, ok := utils.MustParseIDParam(c, "id", "artikel")
+	if !ok {
+		return nil
 	}
-	if err := ctrl.groupSvc.DeleteGroupArticle(userID, uint(articleID)); err != nil {
+	if err := ctrl.groupSvc.DeleteGroupArticle(userID, articleID); err != nil {
 		if err.Error() == "akses ditolak" {
 			return utils.ErrorResponse(c, fiber.StatusForbidden, err.Error())
 		}
@@ -361,15 +335,15 @@ func (ctrl *GroupController) AddGroupComment(c *fiber.Ctx) error {
 	if err != nil {
 		return utils.ErrorResponse(c, fiber.StatusUnauthorized, err.Error())
 	}
-	articleID, err := strconv.ParseUint(c.Params("id"), 10, 64)
-	if err != nil {
-		return utils.ErrorResponse(c, fiber.StatusBadRequest, "ID artikel tidak valid")
+	articleID, ok := utils.MustParseIDParam(c, "id", "artikel")
+	if !ok {
+		return nil
 	}
 	var req service.GroupCommentRequest
 	if err := c.BodyParser(&req); err != nil {
 		return utils.ErrorResponse(c, fiber.StatusBadRequest, "isi permintaan tidak valid")
 	}
-	comment, err := ctrl.groupSvc.AddGroupComment(userID, uint(articleID), req)
+	comment, err := ctrl.groupSvc.AddGroupComment(userID, articleID, req)
 	if err != nil {
 		if err.Error() == "akses ditolak: hanya anggota grup" {
 			return utils.ErrorResponse(c, fiber.StatusForbidden, err.Error())
@@ -384,15 +358,15 @@ func (ctrl *GroupController) UpdateGroupComment(c *fiber.Ctx) error {
 	if err != nil {
 		return utils.ErrorResponse(c, fiber.StatusUnauthorized, err.Error())
 	}
-	commentID, err := strconv.ParseUint(c.Params("id"), 10, 64)
-	if err != nil {
-		return utils.ErrorResponse(c, fiber.StatusBadRequest, "ID komentar tidak valid")
+	commentID, ok := utils.MustParseIDParam(c, "id", "komentar")
+	if !ok {
+		return nil
 	}
 	var req service.GroupCommentRequest
 	if err := c.BodyParser(&req); err != nil {
 		return utils.ErrorResponse(c, fiber.StatusBadRequest, "isi permintaan tidak valid")
 	}
-	comment, err := ctrl.groupSvc.UpdateGroupComment(userID, uint(commentID), req)
+	comment, err := ctrl.groupSvc.UpdateGroupComment(userID, commentID, req)
 	if err != nil {
 		if err.Error() == "akses ditolak" {
 			return utils.ErrorResponse(c, fiber.StatusForbidden, err.Error())
@@ -407,11 +381,11 @@ func (ctrl *GroupController) DeleteGroupComment(c *fiber.Ctx) error {
 	if err != nil {
 		return utils.ErrorResponse(c, fiber.StatusUnauthorized, err.Error())
 	}
-	commentID, err := strconv.ParseUint(c.Params("id"), 10, 64)
-	if err != nil {
-		return utils.ErrorResponse(c, fiber.StatusBadRequest, "ID komentar tidak valid")
+	commentID, ok := utils.MustParseIDParam(c, "id", "komentar")
+	if !ok {
+		return nil
 	}
-	if err := ctrl.groupSvc.DeleteGroupComment(userID, uint(commentID)); err != nil {
+	if err := ctrl.groupSvc.DeleteGroupComment(userID, commentID); err != nil {
 		if err.Error() == "akses ditolak" {
 			return utils.ErrorResponse(c, fiber.StatusForbidden, err.Error())
 		}
@@ -427,15 +401,15 @@ func (ctrl *GroupController) ReactToGroupArticle(c *fiber.Ctx) error {
 	if err != nil {
 		return utils.ErrorResponse(c, fiber.StatusUnauthorized, err.Error())
 	}
-	articleID, err := strconv.ParseUint(c.Params("id"), 10, 64)
-	if err != nil {
-		return utils.ErrorResponse(c, fiber.StatusBadRequest, "ID artikel tidak valid")
+	articleID, ok := utils.MustParseIDParam(c, "id", "artikel")
+	if !ok {
+		return nil
 	}
 	var req service.GroupReactionRequest
 	if err := c.BodyParser(&req); err != nil {
 		return utils.ErrorResponse(c, fiber.StatusBadRequest, "isi permintaan tidak valid")
 	}
-	result, err := ctrl.groupSvc.ReactToGroupArticle(userID, uint(articleID), req)
+	result, err := ctrl.groupSvc.ReactToGroupArticle(userID, articleID, req)
 	if err != nil {
 		if err.Error() == "akses ditolak: hanya anggota grup" {
 			return utils.ErrorResponse(c, fiber.StatusForbidden, err.Error())
@@ -450,15 +424,15 @@ func (ctrl *GroupController) ReactToGroupComment(c *fiber.Ctx) error {
 	if err != nil {
 		return utils.ErrorResponse(c, fiber.StatusUnauthorized, err.Error())
 	}
-	commentID, err := strconv.ParseUint(c.Params("id"), 10, 64)
-	if err != nil {
-		return utils.ErrorResponse(c, fiber.StatusBadRequest, "ID komentar tidak valid")
+	commentID, ok := utils.MustParseIDParam(c, "id", "komentar")
+	if !ok {
+		return nil
 	}
 	var req service.GroupReactionRequest
 	if err := c.BodyParser(&req); err != nil {
 		return utils.ErrorResponse(c, fiber.StatusBadRequest, "isi permintaan tidak valid")
 	}
-	result, err := ctrl.groupSvc.ReactToGroupComment(userID, uint(commentID), req)
+	result, err := ctrl.groupSvc.ReactToGroupComment(userID, commentID, req)
 	if err != nil {
 		if err.Error() == "akses ditolak: hanya anggota grup" {
 			return utils.ErrorResponse(c, fiber.StatusForbidden, err.Error())

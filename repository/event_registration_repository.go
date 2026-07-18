@@ -58,7 +58,6 @@ func (r *eventRegistrationRepository) CreateEventRegistration(reg *models.EventR
 	return nil
 }
 
-
 func (r *eventRegistrationRepository) FindEventRegistration(eventID, userID uint) (*models.EventRegistration, error) {
 	var reg models.EventRegistration
 	err := r.db.Where("event_id = ? AND user_id = ?", eventID, userID).First(&reg).Error

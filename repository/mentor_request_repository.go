@@ -4,6 +4,7 @@ import (
 	"errors"
 	"time"
 
+	"github.com/reganputra/skripsi-backend/constant"
 	"github.com/reganputra/skripsi-backend/models"
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
@@ -125,7 +126,7 @@ func (r *mentorRequestRepository) ApprovePendingTransactional(mentorID, requestI
 		if req.MentorID != mentorID {
 			return ErrRequestForbidden
 		}
-		if req.Status != "pending" {
+		if req.Status != constant.StatusPending {
 			return ErrRequestAlreadyHandled
 		}
 
@@ -135,7 +136,7 @@ func (r *mentorRequestRepository) ApprovePendingTransactional(mentorID, requestI
 			Count(&studentApprovedCount).Error; err != nil {
 			return err
 		}
-		if studentApprovedCount >= 2 {
+		if studentApprovedCount >= int64(constant.MaxMentorsPerStudent) {
 			return ErrStudentLimitReached
 		}
 
@@ -167,7 +168,7 @@ func (r *mentorRequestRepository) ApprovePendingTransactional(mentorID, requestI
 		}
 
 		now := time.Now()
-		req.Status = "approved"
+		req.Status = constant.StatusApproved
 		req.ApprovedAt = &now
 		req.RejectedAt = nil
 		req.WithdrawnAt = nil
@@ -211,15 +212,14 @@ func (r *mentorRequestRepository) EndMentorshipTransactional(mentorID, requestID
 		if req.MentorID != mentorID {
 			return ErrRequestForbidden
 		}
-		if req.Status != "approved" {
+		if req.Status != constant.StatusApproved {
 			return ErrRequestAlreadyHandled
 		}
 
 		now := time.Now()
-		req.Status = "ended"
+		req.Status = constant.StatusEnded
 		req.EndedAt = &now
 		req.EndReason = reason
-		req.ApprovedAt = req.ApprovedAt
 		req.RejectedAt = nil
 		req.WithdrawnAt = nil
 		if err := tx.Save(&req).Error; err != nil {
@@ -229,7 +229,7 @@ func (r *mentorRequestRepository) EndMentorshipTransactional(mentorID, requestID
 		cancelResult := tx.Model(&models.MentoringSession{}).
 			Where("mentor_id = ? AND student_id = ? AND status = 'scheduled'", mentorID, req.StudentID).
 			Updates(map[string]any{
-				"status":       "cancelled",
+				"status":       constant.StatusCancelled,
 				"cancelled_at": now,
 			})
 		if cancelResult.Error != nil {
@@ -269,4 +269,3 @@ func (r *mentorRequestRepository) FindGroundTruth() ([]GroundTruthEntry, error) 
 		Scan(&rows).Error
 	return rows, err
 }
-

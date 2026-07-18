@@ -3,6 +3,7 @@ package repository
 import (
 	"time"
 
+	"github.com/reganputra/skripsi-backend/constant"
 	"github.com/reganputra/skripsi-backend/models"
 	"gorm.io/gorm"
 )
@@ -36,7 +37,9 @@ func (r *eventRepository) CreateEvent(event *models.Event) error {
 func (r *eventRepository) FindEvents(offset, limit int) ([]models.Event, int64, error) {
 	var events []models.Event
 	var total int64
-	r.db.Model(&models.Event{}).Count(&total)
+	if err := r.db.Model(&models.Event{}).Count(&total).Error; err != nil {
+		return nil, 0, err
+	}
 	err := r.db.
 		Preload("User").
 		Order("created_at DESC").
@@ -138,8 +141,8 @@ func (r *eventRepository) AutoCompletePastEvents(now time.Time) (int64, error) {
 	ongoingResult := r.db.Model(&models.Event{}).
 		Where("start_time IS NOT NULL").
 		Where("start_time <= ?", now).
-		Where("status = ?", "upcoming").
-		Update("status", "ongoing")
+		Where("status = ?", constant.StatusUpcoming).
+		Update("status", constant.StatusOngoing)
 
 	if ongoingResult.Error != nil {
 		return 0, ongoingResult.Error
@@ -148,10 +151,10 @@ func (r *eventRepository) AutoCompletePastEvents(now time.Time) (int64, error) {
 	// Transition: ongoing → completed when now >= end_time (or start_time + 24h if no end_time)
 	completedResult := r.db.Model(&models.Event{}).
 		Where("start_time IS NOT NULL").
-		Where("status = ?", "ongoing").
+		Where("status = ?", constant.StatusOngoing).
 		Where(r.db.Where("end_time IS NOT NULL AND end_time <= ?", now).
 			Or("end_time IS NULL AND start_time <= ?", fallbackCompletionTime)).
-		Update("status", "completed")
+		Update("status", constant.StatusCompleted)
 
 	if completedResult.Error != nil {
 		return ongoingResult.RowsAffected, completedResult.Error

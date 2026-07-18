@@ -8,15 +8,16 @@ import (
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
+	"github.com/reganputra/skripsi-backend/constant"
 	"github.com/reganputra/skripsi-backend/models"
 	"github.com/reganputra/skripsi-backend/repository"
 	"golang.org/x/crypto/bcrypt"
 )
 
 var validRoles = map[string]bool{
-	"alumni":  true,
-	"student": true,
-	"partner": true,
+	constant.RoleAlumni:  true,
+	constant.RoleStudent: true,
+	constant.RolePartner: true,
 }
 
 // ─── DTOs ─────────────────────────────────────────────────────────────────────
@@ -111,12 +112,12 @@ func (s *authService) Register(req RegisterRequest) (*models.User, error) {
 	}
 
 	// Validate role-specific fields
-	if req.Role == "alumni" || req.Role == "student" {
+	if req.Role == constant.RoleAlumni || req.Role == constant.RoleStudent {
 		if req.Faculty == "" || req.Major == "" || req.YearEnroll == 0 {
 			return nil, errors.New("fakultas, jurusan, dan tahun masuk wajib diisi untuk alumni dan mahasiswa")
 		}
 	}
-	if req.Role == "partner" {
+	if req.Role == constant.RolePartner {
 		req.CompanyName = strings.TrimSpace(req.CompanyName)
 	}
 
@@ -140,12 +141,12 @@ func (s *authService) Register(req RegisterRequest) (*models.User, error) {
 	}
 
 	// Assign role-specific fields
-	if req.Role == "alumni" || req.Role == "student" {
+	if req.Role == constant.RoleAlumni || req.Role == constant.RoleStudent {
 		user.Faculty = &req.Faculty
 		user.Major = &req.Major
 		user.YearEnroll = &req.YearEnroll
 	}
-	if req.Role == "partner" {
+	if req.Role == constant.RolePartner {
 		if req.CompanyName != "" {
 			user.CompanyName = &req.CompanyName
 		}

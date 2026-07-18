@@ -2,9 +2,9 @@ package controllers
 
 import (
 	"strconv"
-	"time"
 
 	"github.com/gofiber/fiber/v2"
+	"github.com/reganputra/skripsi-backend/dto"
 	"github.com/reganputra/skripsi-backend/service"
 	"github.com/reganputra/skripsi-backend/utils"
 )
@@ -121,16 +121,14 @@ func (ctrl *MentorController) RejectRequest(c *fiber.Ctx) error {
 	if err != nil {
 		return utils.ErrorResponse(c, fiber.StatusUnauthorized, err.Error())
 	}
-	reqID, err := strconv.ParseUint(c.Params("id"), 10, 64)
-	if err != nil {
-		return utils.ErrorResponse(c, fiber.StatusBadRequest, "ID permintaan tidak valid")
+	reqID, ok := utils.MustParseIDParam(c, "id", "permintaan")
+	if !ok {
+		return nil
 	}
-	var body struct {
-		Reason string `json:"reason"`
-	}
+	var body dto.RejectRequestRequest
 	_ = c.BodyParser(&body)
 
-	req, err := ctrl.mentorSvc.RejectRequest(userID, uint(reqID), body.Reason)
+	req, err := ctrl.mentorSvc.RejectRequest(userID, reqID, body.Reason)
 	if err != nil {
 		switch err.Error() {
 		case "akses ditolak":
@@ -161,16 +159,14 @@ func (ctrl *MentorController) EndMentorship(c *fiber.Ctx) error {
 	if err != nil {
 		return utils.ErrorResponse(c, fiber.StatusUnauthorized, err.Error())
 	}
-	requestID, err := strconv.ParseUint(c.Params("id"), 10, 64)
-	if err != nil {
-		return utils.ErrorResponse(c, fiber.StatusBadRequest, "ID mentee tidak valid")
+	requestID, ok := utils.MustParseIDParam(c, "id", "mentee")
+	if !ok {
+		return nil
 	}
-	var body struct {
-		Reason *string `json:"reason"`
-	}
+	var body dto.EndMentorshipRequest
 	_ = c.BodyParser(&body)
 
-	req, err := ctrl.mentorSvc.EndMentorship(userID, uint(requestID), body.Reason)
+	req, err := ctrl.mentorSvc.EndMentorship(userID, requestID, body.Reason)
 	if err != nil {
 		switch err.Error() {
 		case "permintaan tidak ditemukan":
@@ -192,14 +188,9 @@ func (ctrl *MentorController) CreateSession(c *fiber.Ctx) error {
 	if err != nil {
 		return utils.ErrorResponse(c, fiber.StatusUnauthorized, err.Error())
 	}
-	var body struct {
-		StudentID   uint    `json:"student_id"`
-		Topic       string  `json:"topic"`
-		Notes       *string `json:"notes"`
-		SessionDate *string `json:"session_date"` // ISO 8601 string → parsed below
-	}
+	var body dto.MentorSessionRequest
 	if err := c.BodyParser(&body); err != nil {
-		return utils.ErrorResponse(c, fiber.StatusBadRequest, "isi permintaan tidak valid")
+		return utils.ErrorResponse(c, fiber.StatusBadRequest, dto.MsgInvalidRequest)
 	}
 	req := service.SessionRequest{
 		StudentID: body.StudentID,
@@ -207,11 +198,11 @@ func (ctrl *MentorController) CreateSession(c *fiber.Ctx) error {
 		Notes:     body.Notes,
 	}
 	if body.SessionDate != nil && *body.SessionDate != "" {
-		t, err := time.Parse(time.RFC3339, *body.SessionDate)
+		t, err := utils.ParseRFC3339(*body.SessionDate)
 		if err != nil {
-			return utils.ErrorResponse(c, fiber.StatusBadRequest, "format session_date tidak valid (gunakan ISO 8601)")
+			return utils.ErrorResponse(c, fiber.StatusBadRequest, err.Error())
 		}
-		req.SessionDate = &t
+		req.SessionDate = t
 	}
 	session, err := ctrl.mentorSvc.CreateSession(userID, req)
 	if err != nil {
@@ -239,18 +230,13 @@ func (ctrl *MentorController) UpdateSession(c *fiber.Ctx) error {
 	if err != nil {
 		return utils.ErrorResponse(c, fiber.StatusUnauthorized, err.Error())
 	}
-	sessionID, err := strconv.ParseUint(c.Params("id"), 10, 64)
-	if err != nil {
-		return utils.ErrorResponse(c, fiber.StatusBadRequest, "ID sesi tidak valid")
+	sessionID, ok := utils.MustParseIDParam(c, "id", "sesi")
+	if !ok {
+		return nil
 	}
-	var body struct {
-		Topic       string  `json:"topic"`
-		Notes       *string `json:"notes"`
-		SessionDate *string `json:"session_date"`
-		Status      string  `json:"status"`
-	}
+	var body dto.UpdateSessionRequestDTO
 	if err := c.BodyParser(&body); err != nil {
-		return utils.ErrorResponse(c, fiber.StatusBadRequest, "isi permintaan tidak valid")
+		return utils.ErrorResponse(c, fiber.StatusBadRequest, dto.MsgInvalidRequest)
 	}
 	req := service.UpdateSessionRequest{
 		Topic:  body.Topic,
@@ -258,11 +244,11 @@ func (ctrl *MentorController) UpdateSession(c *fiber.Ctx) error {
 		Status: body.Status,
 	}
 	if body.SessionDate != nil && *body.SessionDate != "" {
-		t, err := time.Parse(time.RFC3339, *body.SessionDate)
+		t, err := utils.ParseRFC3339(*body.SessionDate)
 		if err != nil {
-			return utils.ErrorResponse(c, fiber.StatusBadRequest, "format session_date tidak valid")
+			return utils.ErrorResponse(c, fiber.StatusBadRequest, err.Error())
 		}
-		req.SessionDate = &t
+		req.SessionDate = t
 	}
 	session, err := ctrl.mentorSvc.UpdateSession(userID, uint(sessionID), req)
 	if err != nil {
@@ -278,29 +264,23 @@ func (ctrl *MentorController) UpdateSession(c *fiber.Ctx) error {
 
 // GetMentors godoc — GET /api/mentors  (student only)
 func (ctrl *MentorController) GetMentors(c *fiber.Ctx) error {
-	page, _ := strconv.Atoi(c.Query("page", "1"))
-	limit, _ := strconv.Atoi(c.Query("limit", "10"))
+	page, limit := utils.ParsePagination(c, 10)
 	search := c.Query("search", "")
 
 	mentors, total, err := ctrl.mentorSvc.GetAvailableMentors(page, limit, search)
 	if err != nil {
 		return utils.ErrorResponse(c, fiber.StatusInternalServerError, "gagal mengambil data mentor")
 	}
-	return utils.SuccessResponse(c, fiber.StatusOK, fiber.Map{
-		"total": total,
-		"page":  page,
-		"limit": limit,
-		"data":  mentors,
-	})
+	return utils.PaginatedResponse(c, fiber.StatusOK, mentors, total, page, limit)
 }
 
 // GetMentorDetail godoc — GET /api/mentors/:id  (student only)
 func (ctrl *MentorController) GetMentorDetail(c *fiber.Ctx) error {
-	mentorUserID, err := strconv.ParseUint(c.Params("id"), 10, 64)
-	if err != nil {
-		return utils.ErrorResponse(c, fiber.StatusBadRequest, "ID mentor tidak valid")
+	mentorUserID, ok := utils.MustParseIDParam(c, "id", "mentor")
+	if !ok {
+		return nil
 	}
-	profile, err := ctrl.mentorSvc.GetMentorDetail(uint(mentorUserID))
+	profile, err := ctrl.mentorSvc.GetMentorDetail(mentorUserID)
 	if err != nil {
 		return utils.ErrorResponse(c, fiber.StatusNotFound, err.Error())
 	}
@@ -313,9 +293,9 @@ func (ctrl *MentorController) RequestMentoring(c *fiber.Ctx) error {
 	if err != nil {
 		return utils.ErrorResponse(c, fiber.StatusUnauthorized, err.Error())
 	}
-	mentorUserID, err := strconv.ParseUint(c.Params("id"), 10, 64)
-	if err != nil {
-		return utils.ErrorResponse(c, fiber.StatusBadRequest, "ID mentor tidak valid")
+	mentorUserID, ok := utils.MustParseIDParam(c, "id", "mentor")
+	if !ok {
+		return nil
 	}
 	var req service.MentoringRequestInput
 	_ = c.BodyParser(&req) // message and similarity_score are optional
@@ -375,12 +355,12 @@ func (ctrl *MentorController) WithdrawRequest(c *fiber.Ctx) error {
 	if err != nil {
 		return utils.ErrorResponse(c, fiber.StatusUnauthorized, err.Error())
 	}
-	reqID, err := strconv.ParseUint(c.Params("id"), 10, 64)
-	if err != nil {
-		return utils.ErrorResponse(c, fiber.StatusBadRequest, "ID permintaan tidak valid")
+	reqID, ok := utils.MustParseIDParam(c, "id", "permintaan")
+	if !ok {
+		return nil
 	}
 
-	err = ctrl.mentorSvc.WithdrawRequest(studentID, uint(reqID))
+	err = ctrl.mentorSvc.WithdrawRequest(studentID, reqID)
 	if err != nil {
 		switch err.Error() {
 		case "permintaan tidak ditemukan":
@@ -401,14 +381,9 @@ func (ctrl *MentorController) CreateSessionAsStudent(c *fiber.Ctx) error {
 	if err != nil {
 		return utils.ErrorResponse(c, fiber.StatusUnauthorized, err.Error())
 	}
-	var body struct {
-		MentorID    uint    `json:"mentor_id"`
-		Topic       string  `json:"topic"`
-		Notes       *string `json:"notes"`
-		SessionDate *string `json:"session_date"`
-	}
+	var body dto.StudentSessionRequestDTO
 	if err := c.BodyParser(&body); err != nil {
-		return utils.ErrorResponse(c, fiber.StatusBadRequest, "isi permintaan tidak valid")
+		return utils.ErrorResponse(c, fiber.StatusBadRequest, dto.MsgInvalidRequest)
 	}
 	req := service.StudentSessionRequest{
 		MentorID: body.MentorID,
@@ -416,11 +391,11 @@ func (ctrl *MentorController) CreateSessionAsStudent(c *fiber.Ctx) error {
 		Notes:    body.Notes,
 	}
 	if body.SessionDate != nil && *body.SessionDate != "" {
-		t, err := time.Parse(time.RFC3339, *body.SessionDate)
+		t, err := utils.ParseRFC3339(*body.SessionDate)
 		if err != nil {
-			return utils.ErrorResponse(c, fiber.StatusBadRequest, "format session_date tidak valid (gunakan ISO 8601)")
+			return utils.ErrorResponse(c, fiber.StatusBadRequest, err.Error())
 		}
-		req.SessionDate = &t
+		req.SessionDate = t
 	}
 	session, err := ctrl.mentorSvc.CreateSessionAsStudent(userID, req)
 	if err != nil {
@@ -478,7 +453,6 @@ func (ctrl *MentorController) GetRecommendationsWithoutLemmatizer(c *fiber.Ctx) 
 	return utils.SuccessResponse(c, fiber.StatusOK, results)
 }
 
-
 // SearchRecommendations godoc — POST /api/mentors/recommend/search  (student only)
 // Accepts a JSON body with a natural-language query for richer search expressions
 // that would be cumbersome to encode as a URL query param.
@@ -490,12 +464,9 @@ func (ctrl *MentorController) SearchRecommendations(c *fiber.Ctx) error {
 		return utils.ErrorResponse(c, fiber.StatusUnauthorized, err.Error())
 	}
 
-	var body struct {
-		Query string `json:"query"`
-		Top   int    `json:"top"`
-	}
+	var body dto.SearchRecommendationsRequest
 	if err := c.BodyParser(&body); err != nil {
-		return utils.ErrorResponse(c, fiber.StatusBadRequest, "isi permintaan tidak valid")
+		return utils.ErrorResponse(c, fiber.StatusBadRequest, dto.MsgInvalidRequest)
 	}
 	if body.Query == "" {
 		return utils.ErrorResponse(c, fiber.StatusBadRequest, "query wajib diisi")

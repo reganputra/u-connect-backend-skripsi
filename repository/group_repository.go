@@ -1,6 +1,7 @@
 package repository
 
 import (
+	"github.com/reganputra/skripsi-backend/constant"
 	"github.com/reganputra/skripsi-backend/models"
 	"gorm.io/gorm"
 )
@@ -42,7 +43,7 @@ func (r *groupRepository) CreateGroupWithOwner(group *models.Group, ownerUserID 
 		member := &models.GroupMember{
 			GroupID: group.ID,
 			UserID:  ownerUserID,
-			Role:    "owner",
+			Role:    constant.RoleOwner,
 		}
 		return tx.Create(member).Error
 	})
@@ -103,7 +104,6 @@ func (r *groupRepository) FindGroupByID(id uint) (*models.Group, error) {
 	return &group, nil
 }
 
-
 func (r *groupRepository) UpdateGroup(group *models.Group) error {
 	return r.db.Save(group).Error
 }
@@ -128,7 +128,6 @@ func (r *groupRepository) DeleteGroup(id uint) error {
 		return tx.Delete(&models.Group{}, id).Error
 	})
 }
-
 
 // CountGroupStats returns member and article counts for multiple groups in one
 // query, avoiding N+1 when building the groups list response.

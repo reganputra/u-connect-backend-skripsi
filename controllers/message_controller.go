@@ -1,8 +1,6 @@
 package controllers
 
 import (
-	"strconv"
-
 	"github.com/gofiber/fiber/v2"
 	"github.com/reganputra/skripsi-backend/service"
 	"github.com/reganputra/skripsi-backend/utils"
@@ -38,15 +36,14 @@ func (ctrl *MessageController) GetConversation(c *fiber.Ctx) error {
 		return utils.ErrorResponse(c, fiber.StatusUnauthorized, err.Error())
 	}
 
-	partnerID, err := strconv.ParseUint(c.Params("userID"), 10, 64)
-	if err != nil {
-		return utils.ErrorResponse(c, fiber.StatusBadRequest, "ID pengguna tidak valid")
+	partnerID, ok := utils.MustParseIDParam(c, "userID", "pengguna")
+	if !ok {
+		return nil
 	}
 
-	page, _ := strconv.Atoi(c.Query("page", "1"))
-	limit, _ := strconv.Atoi(c.Query("limit", "20"))
+	page, limit := utils.ParsePagination(c, 20)
 
-	msgs, total, err := ctrl.msgSvc.GetConversation(callerID, uint(partnerID), page, limit)
+	msgs, total, err := ctrl.msgSvc.GetConversation(callerID, partnerID, page, limit)
 	if err != nil {
 		return utils.ErrorResponse(c, fiber.StatusInternalServerError, err.Error())
 	}
@@ -67,12 +64,12 @@ func (ctrl *MessageController) MarkAsRead(c *fiber.Ctx) error {
 		return utils.ErrorResponse(c, fiber.StatusUnauthorized, err.Error())
 	}
 
-	senderID, err := strconv.ParseUint(c.Params("userID"), 10, 64)
-	if err != nil {
-		return utils.ErrorResponse(c, fiber.StatusBadRequest, "ID pengguna tidak valid")
+	senderID, ok := utils.MustParseIDParam(c, "userID", "pengguna")
+	if !ok {
+		return nil
 	}
 
-	if err := ctrl.msgSvc.MarkAsRead(callerID, uint(senderID)); err != nil {
+	if err := ctrl.msgSvc.MarkAsRead(callerID, senderID); err != nil {
 		return utils.ErrorResponse(c, fiber.StatusInternalServerError, err.Error())
 	}
 	return utils.SuccessResponse(c, fiber.StatusOK, fiber.Map{"message": "pesan berhasil ditandai sudah dibaca"})

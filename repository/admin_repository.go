@@ -104,7 +104,9 @@ func (r *adminRepository) FindUsers(page, limit int, role, search string) ([]Adm
 		q = q.Where("LOWER(u.email) LIKE ? OR LOWER(u.name) LIKE ?", like, like)
 	}
 
-	q.Count(&total)
+	if err := q.Count(&total).Error; err != nil {
+		return nil, 0, err
+	}
 	err := q.Order("u.created_at DESC").Offset(offset).Limit(limit).Scan(&results).Error
 	return results, total, err
 }
@@ -124,29 +126,58 @@ func (r *adminRepository) UpdateUser(u *models.User) error {
 // ─── Direct Content Deletion ──────────────────────────────────────────────────
 
 func (r *adminRepository) DeletePost(id uint) error {
-	// Cascade: delete reactions, votes, comments then post
-	r.db.Where("post_id = ?", id).Delete(&models.Reaction{})
-	r.db.Where("post_id = ?", id).Delete(&models.Vote{})
-	r.db.Where("post_id = ?", id).Delete(&models.Comment{})
-	return r.db.Delete(&models.Post{}, id).Error
+	return r.db.Transaction(func(tx *gorm.DB) error {
+		if err := tx.Where("post_id = ?", id).Delete(&models.Reaction{}).Error; err != nil {
+			return err
+		}
+		if err := tx.Where("post_id = ?", id).Delete(&models.Vote{}).Error; err != nil {
+			return err
+		}
+		if err := tx.Where("post_id = ?", id).Delete(&models.Comment{}).Error; err != nil {
+			return err
+		}
+		return tx.Delete(&models.Post{}, id).Error
+	})
 }
 
 func (r *adminRepository) DeleteGroup(id uint) error {
-	r.db.Where("article_id IN (SELECT id FROM group_articles WHERE group_id = ?)", id).Delete(&models.GroupReaction{})
-	r.db.Where("comment_id IN (SELECT id FROM group_comments WHERE article_id IN (SELECT id FROM group_articles WHERE group_id = ?))", id).Delete(&models.GroupReaction{})
-	r.db.Where("article_id IN (SELECT id FROM group_articles WHERE group_id = ?)", id).Delete(&models.GroupComment{})
-	r.db.Where("group_id = ?", id).Delete(&models.GroupArticle{})
-	r.db.Where("group_id = ?", id).Delete(&models.GroupMember{})
-	return r.db.Delete(&models.Group{}, id).Error
+	return r.db.Transaction(func(tx *gorm.DB) error {
+		if err := tx.Where("article_id IN (SELECT id FROM group_articles WHERE group_id = ?)", id).Delete(&models.GroupReaction{}).Error; err != nil {
+			return err
+		}
+		if err := tx.Where("comment_id IN (SELECT id FROM group_comments WHERE article_id IN (SELECT id FROM group_articles WHERE group_id = ?))", id).Delete(&models.GroupReaction{}).Error; err != nil {
+			return err
+		}
+		if err := tx.Where("article_id IN (SELECT id FROM group_articles WHERE group_id = ?)", id).Delete(&models.GroupComment{}).Error; err != nil {
+			return err
+		}
+		if err := tx.Where("group_id = ?", id).Delete(&models.GroupArticle{}).Error; err != nil {
+			return err
+		}
+		if err := tx.Where("group_id = ?", id).Delete(&models.GroupMember{}).Error; err != nil {
+			return err
+		}
+		return tx.Delete(&models.Group{}, id).Error
+	})
 }
 
 func (r *adminRepository) DeleteEvent(id uint) error {
-	r.db.Where("event_id = ?", id).Delete(&models.EventRegistration{})
-	r.db.Where("event_id = ?", id).Delete(&models.EventAgenda{})
-	return r.db.Delete(&models.Event{}, id).Error
+	return r.db.Transaction(func(tx *gorm.DB) error {
+		if err := tx.Where("event_id = ?", id).Delete(&models.EventRegistration{}).Error; err != nil {
+			return err
+		}
+		if err := tx.Where("event_id = ?", id).Delete(&models.EventAgenda{}).Error; err != nil {
+			return err
+		}
+		return tx.Delete(&models.Event{}, id).Error
+	})
 }
 
 func (r *adminRepository) DeleteJob(id uint) error {
-	r.db.Where("job_id = ?", id).Delete(&models.JobApplication{})
-	return r.db.Delete(&models.Job{}, id).Error
+	return r.db.Transaction(func(tx *gorm.DB) error {
+		if err := tx.Where("job_id = ?", id).Delete(&models.JobApplication{}).Error; err != nil {
+			return err
+		}
+		return tx.Delete(&models.Job{}, id).Error
+	})
 }

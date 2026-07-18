@@ -26,8 +26,6 @@ type messageService struct {
 	followRepo repository.FollowRepository
 }
 
-
-
 func NewMessageService(
 	msgRepo repository.MessageRepository,
 	followRepo repository.FollowRepository,

@@ -7,6 +7,7 @@ import (
 	"github.com/gofiber/fiber/v2"
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/reganputra/skripsi-backend/config"
+	"github.com/reganputra/skripsi-backend/dto"
 	"github.com/reganputra/skripsi-backend/service"
 	"github.com/reganputra/skripsi-backend/utils"
 )
@@ -263,7 +264,7 @@ func (ctrl *ProfileController) AddExperience(c *fiber.Ctx) error {
 
 	var req service.ExperienceRequest
 	if err := c.BodyParser(&req); err != nil {
-		return utils.ErrorResponse(c, fiber.StatusBadRequest, "isi permintaan tidak valid")
+		return utils.ErrorResponse(c, fiber.StatusBadRequest, dto.MsgInvalidRequest)
 	}
 
 	exp, err := ctrl.profileSvc.AddExperience(userID, req)
@@ -280,17 +281,17 @@ func (ctrl *ProfileController) UpdateExperience(c *fiber.Ctx) error {
 		return utils.ErrorResponse(c, fiber.StatusUnauthorized, err.Error())
 	}
 
-	expID, err := strconv.ParseUint(c.Params("id"), 10, 64)
-	if err != nil {
-		return utils.ErrorResponse(c, fiber.StatusBadRequest, "ID pengalaman tidak valid")
+	expID, ok := utils.MustParseIDParam(c, "id", "pengalaman")
+	if !ok {
+		return nil
 	}
 
 	var req service.ExperienceRequest
 	if err := c.BodyParser(&req); err != nil {
-		return utils.ErrorResponse(c, fiber.StatusBadRequest, "isi permintaan tidak valid")
+		return utils.ErrorResponse(c, fiber.StatusBadRequest, dto.MsgInvalidRequest)
 	}
 
-	exp, err := ctrl.profileSvc.UpdateExperience(userID, uint(expID), req)
+	exp, err := ctrl.profileSvc.UpdateExperience(userID, expID, req)
 	if err != nil {
 		return utils.ErrorResponse(c, fiber.StatusBadRequest, err.Error())
 	}
@@ -304,12 +305,12 @@ func (ctrl *ProfileController) DeleteExperience(c *fiber.Ctx) error {
 		return utils.ErrorResponse(c, fiber.StatusUnauthorized, err.Error())
 	}
 
-	expID, err := strconv.ParseUint(c.Params("id"), 10, 64)
-	if err != nil {
-		return utils.ErrorResponse(c, fiber.StatusBadRequest, "ID pengalaman tidak valid")
+	expID, ok := utils.MustParseIDParam(c, "id", "pengalaman")
+	if !ok {
+		return nil
 	}
 
-	if err := ctrl.profileSvc.DeleteExperience(userID, uint(expID)); err != nil {
+	if err := ctrl.profileSvc.DeleteExperience(userID, expID); err != nil {
 		return utils.ErrorResponse(c, fiber.StatusBadRequest, err.Error())
 	}
 

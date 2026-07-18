@@ -43,7 +43,9 @@ func (r *jobRepository) FindJobs(search, jobType, status string, offset, limit i
 		query = query.Where("status = ?", status)
 	}
 
-	query.Count(&total)
+	if err := query.Count(&total).Error; err != nil {
+		return nil, 0, err
+	}
 	err := query.Order("created_at DESC").Offset(offset).Limit(limit).Find(&jobs).Error
 	return jobs, total, err
 }

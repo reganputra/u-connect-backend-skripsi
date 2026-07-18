@@ -4,10 +4,10 @@ import (
 	"errors"
 	"fmt"
 
+	"github.com/reganputra/skripsi-backend/constant"
 	"github.com/reganputra/skripsi-backend/models"
 	"github.com/reganputra/skripsi-backend/repository"
 )
-
 
 type FollowService interface {
 	Follow(followerID, followingID uint, followerRole string) error
@@ -28,7 +28,7 @@ func NewFollowService(repo repository.FollowRepository, userRepo repository.User
 
 func (s *followService) Follow(followerID, followingID uint, followerRole string) error {
 	// Role guard
-	if followerRole != "student" && followerRole != "alumni" {
+	if followerRole != constant.RoleStudent && followerRole != constant.RoleAlumni {
 		return errors.New("hanya student dan alumni yang dapat mengikuti pengguna")
 	}
 	// Self-follow guard
@@ -63,7 +63,6 @@ func (s *followService) Follow(followerID, followingID uint, followerRole string
 	}
 	return nil
 }
-
 
 func (s *followService) Unfollow(followerID, followingID uint) error {
 	if followerID == followingID {

@@ -38,7 +38,9 @@ func (r *notificationRepository) GetByUserID(userID uint, page, limit int) ([]mo
 	var total int64
 
 	base := r.db.Model(&models.Notification{}).Where("user_id = ?", userID)
-	base.Count(&total)
+	if err := base.Count(&total).Error; err != nil {
+		return nil, 0, err
+	}
 
 	offset := (page - 1) * limit
 	err := base.Order("created_at DESC").Offset(offset).Limit(limit).Find(&notifications).Error

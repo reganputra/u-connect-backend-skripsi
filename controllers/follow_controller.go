@@ -1,8 +1,6 @@
 package controllers
 
 import (
-	"strconv"
-
 	"github.com/gofiber/fiber/v2"
 	"github.com/reganputra/skripsi-backend/service"
 	"github.com/reganputra/skripsi-backend/utils"
@@ -26,9 +24,9 @@ func (ctrl *FollowController) Follow(c *fiber.Ctx) error {
 		return utils.ErrorResponse(c, fiber.StatusUnauthorized, err.Error())
 	}
 
-	targetID, err := strconv.ParseUint(c.Params("id"), 10, 64)
-	if err != nil {
-		return utils.ErrorResponse(c, fiber.StatusBadRequest, "ID pengguna tidak valid")
+	targetID, ok := utils.MustParseIDParam(c, "id", "pengguna")
+	if !ok {
+		return nil
 	}
 
 	if err := ctrl.followSvc.Follow(callerID, uint(targetID), role); err != nil {
@@ -52,9 +50,9 @@ func (ctrl *FollowController) Unfollow(c *fiber.Ctx) error {
 		return utils.ErrorResponse(c, fiber.StatusUnauthorized, err.Error())
 	}
 
-	targetID, err := strconv.ParseUint(c.Params("id"), 10, 64)
-	if err != nil {
-		return utils.ErrorResponse(c, fiber.StatusBadRequest, "ID pengguna tidak valid")
+	targetID, ok := utils.MustParseIDParam(c, "id", "pengguna")
+	if !ok {
+		return nil
 	}
 
 	if err := ctrl.followSvc.Unfollow(callerID, uint(targetID)); err != nil {
@@ -64,9 +62,10 @@ func (ctrl *FollowController) Unfollow(c *fiber.Ctx) error {
 }
 
 func (ctrl *FollowController) GetFollowers(c *fiber.Ctx) error {
-	targetID, err := strconv.ParseUint(c.Params("id"), 10, 64)
-	if err != nil {
-		return utils.ErrorResponse(c, fiber.StatusBadRequest, "ID pengguna tidak valid")
+
+	targetID, ok := utils.MustParseIDParam(c, "id", "pengguna")
+	if !ok {
+		return nil
 	}
 
 	users, err := ctrl.followSvc.GetFollowers(uint(targetID))
@@ -77,9 +76,10 @@ func (ctrl *FollowController) GetFollowers(c *fiber.Ctx) error {
 }
 
 func (ctrl *FollowController) GetFollowing(c *fiber.Ctx) error {
-	targetID, err := strconv.ParseUint(c.Params("id"), 10, 64)
-	if err != nil {
-		return utils.ErrorResponse(c, fiber.StatusBadRequest, "ID pengguna tidak valid")
+
+	targetID, ok := utils.MustParseIDParam(c, "id", "pengguna")
+	if !ok {
+		return nil
 	}
 
 	users, err := ctrl.followSvc.GetFollowing(uint(targetID))

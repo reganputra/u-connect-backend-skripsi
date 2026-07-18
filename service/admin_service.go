@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/reganputra/skripsi-backend/constant"
 	"github.com/reganputra/skripsi-backend/models"
 	"github.com/reganputra/skripsi-backend/repository"
 	"gorm.io/gorm"
@@ -142,7 +143,7 @@ func (s *adminService) SetUserStatus(id uint, req UpdateUserStatusRequest) (*mod
 }
 
 func (s *adminService) SetUserRole(id uint, req UpdateUserRoleRequest) (*models.User, error) {
-	validRoles := map[string]bool{"alumni": true, "student": true, "partner": true, "admin": true}
+	validRoles := map[string]bool{constant.RoleAlumni: true, constant.RoleStudent: true, constant.RolePartner: true, constant.RoleAdmin: true}
 	if !validRoles[req.Role] {
 		return nil, errors.New("role tidak valid: harus alumni, student, partner, atau admin")
 	}
@@ -193,7 +194,7 @@ func (s *adminService) ResolveReport(adminID uint, reportID uint, req ResolveRep
 	if err != nil {
 		return nil, errors.New("laporan tidak ditemukan")
 	}
-	if report.Status != "pending" {
+	if report.Status != constant.StatusPending {
 		return nil, errors.New("laporan sudah diproses sebelumnya")
 	}
 
@@ -211,7 +212,7 @@ func (s *adminService) ResolveReport(adminID uint, reportID uint, req ResolveRep
 	}
 
 	now := time.Now()
-	report.Status = "resolved"
+	report.Status = constant.StatusResolved
 	report.AdminNote = req.AdminNote
 	report.ResolvedByID = &adminID
 	report.ResolvedAt = &now
@@ -246,13 +247,13 @@ func (s *adminService) RejectReport(adminID uint, reportID uint, req RejectRepor
 	if err != nil {
 		return nil, errors.New("laporan tidak ditemukan")
 	}
-	if report.Status != "pending" {
+	if report.Status != constant.StatusPending {
 		return nil, errors.New("laporan sudah diproses sebelumnya")
 	}
 
 	now := time.Now()
 	note := req.AdminNote
-	report.Status = "rejected"
+	report.Status = constant.StatusRejected
 	report.AdminNote = &note
 	report.ResolvedByID = &adminID
 	report.ResolvedAt = &now
@@ -342,37 +343,37 @@ func (s *adminService) resolveReportTargetMeta(targetType string, targetID uint)
 		if err := s.db.Select("id", "title").First(&post, targetID).Error; err != nil {
 			return s.missingTargetMeta(targetType, targetID, err)
 		}
-		return fmt.Sprintf("Post \"%s\"", truncateNotifyText(post.Title, 80)), fmt.Sprintf("/feed/%d", post.ID), true
+		return fmt.Sprintf("Post \"%s\"", TruncateText(post.Title, 80)), fmt.Sprintf("/feed/%d", post.ID), true
 	case "comment":
 		var comment models.Comment
 		if err := s.db.Select("id", "content", "post_id").First(&comment, targetID).Error; err != nil {
 			return s.missingTargetMeta(targetType, targetID, err)
 		}
-		return fmt.Sprintf("Komentar \"%s\"", truncateNotifyText(comment.Content, 80)), fmt.Sprintf("/feed/%d", comment.PostID), true
+		return fmt.Sprintf("Komentar \"%s\"", TruncateText(comment.Content, 80)), fmt.Sprintf("/feed/%d", comment.PostID), true
 	case "group":
 		var group models.Group
 		if err := s.db.Select("id", "title").First(&group, targetID).Error; err != nil {
 			return s.missingTargetMeta(targetType, targetID, err)
 		}
-		return fmt.Sprintf("Grup \"%s\"", truncateNotifyText(group.Title, 80)), fmt.Sprintf("/groups/%d", group.ID), true
+		return fmt.Sprintf("Grup \"%s\"", TruncateText(group.Title, 80)), fmt.Sprintf("/groups/%d", group.ID), true
 	case "group_article":
 		var article models.GroupArticle
 		if err := s.db.Select("id", "title", "group_id").First(&article, targetID).Error; err != nil {
 			return s.missingTargetMeta(targetType, targetID, err)
 		}
-		return fmt.Sprintf("Artikel grup \"%s\"", truncateNotifyText(article.Title, 80)), fmt.Sprintf("/groups/%d/article/%d", article.GroupID, article.ID), true
+		return fmt.Sprintf("Artikel grup \"%s\"", TruncateText(article.Title, 80)), fmt.Sprintf("/groups/%d/article/%d", article.GroupID, article.ID), true
 	case "event":
 		var event models.Event
 		if err := s.db.Select("id", "title").First(&event, targetID).Error; err != nil {
 			return s.missingTargetMeta(targetType, targetID, err)
 		}
-		return fmt.Sprintf("Event \"%s\"", truncateNotifyText(event.Title, 80)), fmt.Sprintf("/events/%d", event.ID), true
+		return fmt.Sprintf("Event \"%s\"", TruncateText(event.Title, 80)), fmt.Sprintf("/events/%d", event.ID), true
 	case "job":
 		var job models.Job
 		if err := s.db.Select("id", "title").First(&job, targetID).Error; err != nil {
 			return s.missingTargetMeta(targetType, targetID, err)
 		}
-		return fmt.Sprintf("Lowongan \"%s\"", truncateNotifyText(job.Title, 80)), fmt.Sprintf("/jobs/%d", job.ID), true
+		return fmt.Sprintf("Lowongan \"%s\"", TruncateText(job.Title, 80)), fmt.Sprintf("/jobs/%d", job.ID), true
 	default:
 		return fmt.Sprintf("Konten (%s) ID %d", targetType, targetID), "", false
 	}
@@ -391,17 +392,6 @@ func (s *adminService) describeTargetForNotification(targetType string, targetID
 		return "", gorm.ErrRecordNotFound
 	}
 	return label, nil
-}
-
-func truncateNotifyText(s string, max int) string {
-	runes := []rune(s)
-	if len(runes) <= max {
-		return s
-	}
-	if max <= 3 {
-		return string(runes[:max])
-	}
-	return string(runes[:max-3]) + "..."
 }
 
 func (s *adminService) findContentOwner(targetType string, targetID uint) (uint, error) {

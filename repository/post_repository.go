@@ -40,7 +40,9 @@ func (r *postRepository) CreatePost(post *models.Post) error {
 // Avoids N+1 caused by Preloading Comments/Reactions/Votes just to call len().
 func (r *postRepository) FindPostsSummary(page, limit int) ([]PostListRow, int64, error) {
 	var total int64
-	r.db.Model(&models.Post{}).Count(&total)
+	if err := r.db.Model(&models.Post{}).Count(&total).Error; err != nil {
+		return nil, 0, err
+	}
 
 	var rows []PostListRow
 	offset := (page - 1) * limit
