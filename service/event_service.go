@@ -54,6 +54,7 @@ type eventService struct {
 	eventRepo  repository.EventRepository
 	agendaRepo repository.EventAgendaRepository
 	regRepo    repository.EventRegistrationRepository
+	userRepo   repository.UserRepository
 }
 
 func hydrateEventUsers(event *models.Event) {
@@ -129,11 +130,13 @@ func NewEventService(
 	eventRepo repository.EventRepository,
 	agendaRepo repository.EventAgendaRepository,
 	regRepo repository.EventRegistrationRepository,
+	userRepo repository.UserRepository,
 ) EventService {
 	return &eventService{
 		eventRepo:  eventRepo,
 		agendaRepo: agendaRepo,
 		regRepo:    regRepo,
+		userRepo:   userRepo,
 	}
 }
 
@@ -262,7 +265,7 @@ func (s *eventService) UpdateEvent(userID, eventID uint, req EventRequest) (*mod
 	if err != nil {
 		return nil, errors.New("acara tidak ditemukan")
 	}
-	if event.UserID != userID {
+	if !IsOwnerOrAdmin(s.userRepo, userID, event.UserID) {
 		return nil, errors.New("akses ditolak")
 	}
 
@@ -316,7 +319,7 @@ func (s *eventService) DeleteEvent(userID, eventID uint) error {
 	if err != nil {
 		return errors.New("acara tidak ditemukan")
 	}
-	if event.UserID != userID {
+	if !IsOwnerOrAdmin(s.userRepo, userID, event.UserID) {
 		return errors.New("akses ditolak")
 	}
 	return s.eventRepo.DeleteEvent(eventID)
@@ -400,7 +403,7 @@ func (s *eventService) AddAgenda(userID, eventID uint, req EventAgendaRequest) (
 	if err != nil {
 		return nil, errors.New("acara tidak ditemukan")
 	}
-	if event.UserID != userID {
+	if !IsOwnerOrAdmin(s.userRepo, userID, event.UserID) {
 		return nil, errors.New("akses ditolak")
 	}
 
@@ -425,7 +428,7 @@ func (s *eventService) UpdateAgenda(userID, agendaID uint, req EventAgendaReques
 	if err != nil {
 		return nil, errors.New("acara tidak ditemukan")
 	}
-	if event.UserID != userID {
+	if !IsOwnerOrAdmin(s.userRepo, userID, event.UserID) {
 		return nil, errors.New("akses ditolak")
 	}
 
@@ -452,7 +455,7 @@ func (s *eventService) DeleteAgenda(userID, agendaID uint) error {
 	if err != nil {
 		return errors.New("acara tidak ditemukan")
 	}
-	if event.UserID != userID {
+	if !IsOwnerOrAdmin(s.userRepo, userID, event.UserID) {
 		return errors.New("akses ditolak")
 	}
 

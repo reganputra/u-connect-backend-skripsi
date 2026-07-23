@@ -79,6 +79,7 @@ func main() {
 			&models.Notification{},
 			&models.PageView{},
 			&models.DailyAnalyticsSnapshot{},
+			&models.AdminActivityLog{},
 		); err != nil {
 			log.Printf("❌ AutoMigrate failed: %v", err)
 			return

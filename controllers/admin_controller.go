@@ -70,6 +70,7 @@ func (ctrl *AdminController) GetUserByID(c *fiber.Ctx) error {
 }
 
 func (ctrl *AdminController) SetUserStatus(c *fiber.Ctx) error {
+	adminID, _ := getAdminUserID(c)
 	id, err := strconv.ParseUint(c.Params("id"), 10, 64)
 	if err != nil {
 		return utils.ErrorResponse(c, fiber.StatusBadRequest, "id tidak valid")
@@ -78,7 +79,7 @@ func (ctrl *AdminController) SetUserStatus(c *fiber.Ctx) error {
 	if err := c.BodyParser(&req); err != nil {
 		return utils.ErrorResponse(c, fiber.StatusBadRequest, "body permintaan tidak valid")
 	}
-	u, err := ctrl.svc.SetUserStatus(uint(id), req)
+	u, err := ctrl.svc.SetUserStatus(adminID, uint(id), req, c.IP(), c.Get("User-Agent"))
 	if err != nil {
 		return utils.ErrorResponse(c, fiber.StatusBadRequest, err.Error())
 	}
@@ -86,6 +87,7 @@ func (ctrl *AdminController) SetUserStatus(c *fiber.Ctx) error {
 }
 
 func (ctrl *AdminController) SetUserRole(c *fiber.Ctx) error {
+	adminID, _ := getAdminUserID(c)
 	id, err := strconv.ParseUint(c.Params("id"), 10, 64)
 	if err != nil {
 		return utils.ErrorResponse(c, fiber.StatusBadRequest, "id tidak valid")
@@ -94,7 +96,7 @@ func (ctrl *AdminController) SetUserRole(c *fiber.Ctx) error {
 	if err := c.BodyParser(&req); err != nil {
 		return utils.ErrorResponse(c, fiber.StatusBadRequest, "body permintaan tidak valid")
 	}
-	u, err := ctrl.svc.SetUserRole(uint(id), req)
+	u, err := ctrl.svc.SetUserRole(adminID, uint(id), req, c.IP(), c.Get("User-Agent"))
 	if err != nil {
 		return utils.ErrorResponse(c, fiber.StatusBadRequest, err.Error())
 	}
@@ -139,7 +141,7 @@ func (ctrl *AdminController) ResolveReport(c *fiber.Ctx) error {
 	if err := c.BodyParser(&req); err != nil {
 		return utils.ErrorResponse(c, fiber.StatusBadRequest, "body permintaan tidak valid")
 	}
-	r, err := ctrl.svc.ResolveReport(adminID, uint(id), req)
+	r, err := ctrl.svc.ResolveReport(adminID, uint(id), req, c.IP(), c.Get("User-Agent"))
 	if err != nil {
 		return utils.ErrorResponse(c, fiber.StatusBadRequest, err.Error())
 	}
@@ -159,7 +161,7 @@ func (ctrl *AdminController) RejectReport(c *fiber.Ctx) error {
 	if err := c.BodyParser(&req); err != nil {
 		return utils.ErrorResponse(c, fiber.StatusBadRequest, "body permintaan tidak valid")
 	}
-	r, err := ctrl.svc.RejectReport(adminID, uint(id), req)
+	r, err := ctrl.svc.RejectReport(adminID, uint(id), req, c.IP(), c.Get("User-Agent"))
 	if err != nil {
 		return utils.ErrorResponse(c, fiber.StatusBadRequest, err.Error())
 	}
@@ -169,47 +171,65 @@ func (ctrl *AdminController) RejectReport(c *fiber.Ctx) error {
 // ─── Direct Content Deletion ──────────────────────────────────────────────────
 
 func (ctrl *AdminController) DeletePost(c *fiber.Ctx) error {
+	adminID, _ := getAdminUserID(c)
 	id, err := strconv.ParseUint(c.Params("id"), 10, 64)
 	if err != nil {
 		return utils.ErrorResponse(c, fiber.StatusBadRequest, "id tidak valid")
 	}
-	if err := ctrl.svc.DeletePost(uint(id)); err != nil {
+	if err := ctrl.svc.DeletePost(adminID, uint(id), c.IP(), c.Get("User-Agent")); err != nil {
 		return utils.ErrorResponse(c, fiber.StatusInternalServerError, err.Error())
 	}
 	return utils.SuccessResponse(c, fiber.StatusOK, fiber.Map{"message": "postingan berhasil dihapus"})
 }
 
 func (ctrl *AdminController) DeleteGroup(c *fiber.Ctx) error {
+	adminID, _ := getAdminUserID(c)
 	id, err := strconv.ParseUint(c.Params("id"), 10, 64)
 	if err != nil {
 		return utils.ErrorResponse(c, fiber.StatusBadRequest, "id tidak valid")
 	}
-	if err := ctrl.svc.DeleteGroup(uint(id)); err != nil {
+	if err := ctrl.svc.DeleteGroup(adminID, uint(id), c.IP(), c.Get("User-Agent")); err != nil {
 		return utils.ErrorResponse(c, fiber.StatusInternalServerError, err.Error())
 	}
 	return utils.SuccessResponse(c, fiber.StatusOK, fiber.Map{"message": "grup berhasil dihapus"})
 }
 
 func (ctrl *AdminController) DeleteEvent(c *fiber.Ctx) error {
+	adminID, _ := getAdminUserID(c)
 	id, err := strconv.ParseUint(c.Params("id"), 10, 64)
 	if err != nil {
 		return utils.ErrorResponse(c, fiber.StatusBadRequest, "id tidak valid")
 	}
-	if err := ctrl.svc.DeleteEvent(uint(id)); err != nil {
+	if err := ctrl.svc.DeleteEvent(adminID, uint(id), c.IP(), c.Get("User-Agent")); err != nil {
 		return utils.ErrorResponse(c, fiber.StatusInternalServerError, err.Error())
 	}
 	return utils.SuccessResponse(c, fiber.StatusOK, fiber.Map{"message": "acara berhasil dihapus"})
 }
 
 func (ctrl *AdminController) DeleteJob(c *fiber.Ctx) error {
+	adminID, _ := getAdminUserID(c)
 	id, err := strconv.ParseUint(c.Params("id"), 10, 64)
 	if err != nil {
 		return utils.ErrorResponse(c, fiber.StatusBadRequest, "id tidak valid")
 	}
-	if err := ctrl.svc.DeleteJob(uint(id)); err != nil {
+	if err := ctrl.svc.DeleteJob(adminID, uint(id), c.IP(), c.Get("User-Agent")); err != nil {
 		return utils.ErrorResponse(c, fiber.StatusInternalServerError, err.Error())
 	}
 	return utils.SuccessResponse(c, fiber.StatusOK, fiber.Map{"message": "lowongan berhasil dihapus"})
+}
+
+// ─── Activity Logs ────────────────────────────────────────────────────────────
+
+func (ctrl *AdminController) GetAdminLogs(c *fiber.Ctx) error {
+	page, limit := utils.ParsePagination(c, 20)
+	action := c.Query("action")
+	targetType := c.Query("target_type")
+
+	logs, total, err := ctrl.svc.GetAdminActivityLogs(page, limit, action, targetType)
+	if err != nil {
+		return utils.ErrorResponse(c, fiber.StatusInternalServerError, err.Error())
+	}
+	return utils.PaginatedResponse(c, fiber.StatusOK, logs, total, page, limit)
 }
 
 // ─── Categories ───────────────────────────────────────────────────────────────
