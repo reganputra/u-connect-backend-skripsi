@@ -80,6 +80,7 @@ func main() {
 			&models.PageView{},
 			&models.DailyAnalyticsSnapshot{},
 			&models.AdminActivityLog{},
+			&models.Announcement{},
 		); err != nil {
 			log.Printf("❌ AutoMigrate failed: %v", err)
 			return
@@ -164,6 +165,7 @@ func main() {
 	routes.SetupNotificationRoutes(app, c.NotifCtrl)
 	routes.RegisterActivityRoutes(app, c.ActivityCtrl)
 	routes.RegisterAnalyticsRoutes(app, c.AnalyticsCtrl)
+	routes.RegisterAnnouncementRoutes(app, c.AnnouncementCtrl)
 
 	// ── Background Schedulers (with context for graceful shutdown) ──────────────
 	schedulerCtx, cancelSchedulers := context.WithCancel(context.Background())
