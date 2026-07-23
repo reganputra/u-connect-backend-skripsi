@@ -1,7 +1,9 @@
 package service
 
 import (
+	"github.com/reganputra/skripsi-backend/constant"
 	"github.com/reganputra/skripsi-backend/models"
+	"github.com/reganputra/skripsi-backend/repository"
 )
 
 // ApplyUserPicture promotes profile.ProfilePicture to user.PictureURL and nils
@@ -36,4 +38,18 @@ func TruncateText(s string, max int) string {
 		return string(runes[:max])
 	}
 	return string(runes[:max-3]) + "..."
+}
+
+// IsOwnerOrAdmin reports whether userID is the content owner (ownerID) or has RoleAdmin.
+func IsOwnerOrAdmin(userRepo repository.UserRepository, userID, ownerID uint) bool {
+	if userID == ownerID {
+		return true
+	}
+	if userRepo != nil {
+		user, err := userRepo.FindUserByID(userID)
+		if err == nil && user != nil && user.Role == constant.RoleAdmin {
+			return true
+		}
+	}
+	return false
 }

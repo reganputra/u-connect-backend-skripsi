@@ -16,6 +16,9 @@ func RegisterAdminRoutes(app *fiber.App, ctrl *controllers.AdminController, auth
 	// Dashboard
 	admin.Get("/dashboard", ctrl.GetDashboard)
 
+	// Admin Activity Logs
+	admin.Get("/logs", ctrl.GetAdminLogs)
+
 	// User management
 	admin.Get("/users", ctrl.GetUsers)
 	admin.Get("/users/:id", ctrl.GetUserByID)

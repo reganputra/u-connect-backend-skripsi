@@ -193,6 +193,7 @@ type groupService struct {
 	articleRepo       repository.GroupArticleRepository
 	commentRepo       repository.GroupCommentRepository
 	groupReactionRepo repository.GroupReactionRepository
+	userRepo          repository.UserRepository
 	notifSvc          NotificationService
 }
 
@@ -239,6 +240,7 @@ func NewGroupService(
 	articleRepo repository.GroupArticleRepository,
 	commentRepo repository.GroupCommentRepository,
 	groupReactionRepo repository.GroupReactionRepository,
+	userRepo repository.UserRepository,
 	notifSvc NotificationService,
 ) GroupService {
 	return &groupService{
@@ -247,6 +249,7 @@ func NewGroupService(
 		articleRepo:       articleRepo,
 		commentRepo:       commentRepo,
 		groupReactionRepo: groupReactionRepo,
+		userRepo:          userRepo,
 		notifSvc:          notifSvc,
 	}
 }
@@ -254,11 +257,21 @@ func NewGroupService(
 // ─── helpers ──────────────────────────────────────────────────────────────────
 
 func (s *groupService) isMember(groupID, userID uint) bool {
+	if s.userRepo != nil {
+		if u, err := s.userRepo.FindUserByID(userID); err == nil && u != nil && u.Role == constant.RoleAdmin {
+			return true
+		}
+	}
 	_, err := s.memberRepo.FindGroupMember(groupID, userID)
 	return err == nil
 }
 
 func (s *groupService) isOwner(groupID, userID uint) bool {
+	if s.userRepo != nil {
+		if u, err := s.userRepo.FindUserByID(userID); err == nil && u != nil && u.Role == constant.RoleAdmin {
+			return true
+		}
+	}
 	m, err := s.memberRepo.FindGroupMember(groupID, userID)
 	return err == nil && m.Role == "owner"
 }

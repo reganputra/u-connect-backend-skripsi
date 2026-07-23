@@ -315,7 +315,7 @@ func (s *feedService) UpdatePost(userID uint, postID uint, req PostRequest) (*mo
 	if err != nil {
 		return nil, errors.New("postingan tidak ditemukan")
 	}
-	if post.UserID != userID {
+	if !IsOwnerOrAdmin(s.userRepo, userID, post.UserID) {
 		return nil, errors.New("akses ditolak")
 	}
 	if req.Title != "" {
@@ -364,7 +364,7 @@ func (s *feedService) DeletePost(userID uint, postID uint) error {
 	if err != nil {
 		return errors.New("postingan tidak ditemukan")
 	}
-	if post.UserID != userID {
+	if !IsOwnerOrAdmin(s.userRepo, userID, post.UserID) {
 		return errors.New("akses ditolak")
 	}
 	return s.postRepo.DeletePost(postID)
@@ -442,7 +442,7 @@ func (s *feedService) UpdateComment(userID uint, commentID uint, req CommentRequ
 	if err != nil {
 		return nil, errors.New("komentar tidak ditemukan")
 	}
-	if comment.UserID != userID {
+	if !IsOwnerOrAdmin(s.userRepo, userID, comment.UserID) {
 		return nil, errors.New("akses ditolak")
 	}
 	comment.Content = req.Content
@@ -457,7 +457,7 @@ func (s *feedService) DeleteComment(userID uint, commentID uint) error {
 	if err != nil {
 		return errors.New("komentar tidak ditemukan")
 	}
-	if comment.UserID != userID {
+	if !IsOwnerOrAdmin(s.userRepo, userID, comment.UserID) {
 		return errors.New("akses ditolak")
 	}
 	return s.commentRepo.DeleteComment(commentID)

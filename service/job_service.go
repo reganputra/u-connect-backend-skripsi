@@ -213,7 +213,7 @@ func (s *jobService) UpdateJob(userID, jobID uint, req JobRequest) (*models.Job,
 	if err != nil {
 		return nil, errors.New("lowongan tidak ditemukan")
 	}
-	if job.UserID != userID {
+	if !IsOwnerOrAdmin(s.userRepo, userID, job.UserID) {
 		return nil, errors.New("akses ditolak")
 	}
 
@@ -275,7 +275,7 @@ func (s *jobService) DeleteJob(userID, jobID uint) error {
 	if err != nil {
 		return errors.New("lowongan tidak ditemukan")
 	}
-	if job.UserID != userID {
+	if !IsOwnerOrAdmin(s.userRepo, userID, job.UserID) {
 		return errors.New("akses ditolak")
 	}
 	if err := s.jobRepo.DeleteJob(jobID); err != nil {
@@ -353,7 +353,7 @@ func (s *jobService) GetApplicants(userID, jobID uint) ([]models.JobApplication,
 	if err != nil {
 		return nil, errors.New("lowongan tidak ditemukan")
 	}
-	if job.UserID != userID {
+	if !IsOwnerOrAdmin(s.userRepo, userID, job.UserID) {
 		return nil, errors.New("akses ditolak")
 	}
 	apps, err := s.jobAppRepo.FindApplicantsByJobID(jobID)
@@ -403,7 +403,7 @@ func (s *jobService) UpdateApplicationStatus(userID, applicationID uint, status 
 		return nil, errors.New("lamaran tidak ditemukan")
 	}
 
-	if app.Job.UserID != userID {
+	if !IsOwnerOrAdmin(s.userRepo, userID, app.Job.UserID) {
 		return nil, errors.New("akses ditolak")
 	}
 	if app.Status == constant.StatusWithdrawn {

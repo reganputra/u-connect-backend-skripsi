@@ -52,26 +52,30 @@ type AdminService interface {
 	// User management
 	GetUsers(page, limit int, role, search string) ([]repository.AdminUserWithProfile, int64, error)
 	GetUserByID(id uint) (*models.User, error)
-	SetUserStatus(id uint, req UpdateUserStatusRequest) (*models.User, error)
-	SetUserRole(id uint, req UpdateUserRoleRequest) (*models.User, error)
+	SetUserStatus(adminID uint, id uint, req UpdateUserStatusRequest, ip, userAgent string) (*models.User, error)
+	SetUserRole(adminID uint, id uint, req UpdateUserRoleRequest, ip, userAgent string) (*models.User, error)
 
 	// Report moderation
 	GetReports(page, limit int, status string) ([]AdminReportView, int64, error)
 	GetReportByID(id uint) (*AdminReportView, error)
-	ResolveReport(adminID uint, reportID uint, req ResolveReportRequest) (*models.Report, error)
-	RejectReport(adminID uint, reportID uint, req RejectReportRequest) (*models.Report, error)
+	ResolveReport(adminID uint, reportID uint, req ResolveReportRequest, ip, userAgent string) (*models.Report, error)
+	RejectReport(adminID uint, reportID uint, req RejectReportRequest, ip, userAgent string) (*models.Report, error)
 
 	// Direct content deletion
-	DeletePost(id uint) error
-	DeleteGroup(id uint) error
-	DeleteEvent(id uint) error
-	DeleteJob(id uint) error
+	DeletePost(adminID uint, id uint, ip, userAgent string) error
+	DeleteGroup(adminID uint, id uint, ip, userAgent string) error
+	DeleteEvent(adminID uint, id uint, ip, userAgent string) error
+	DeleteJob(adminID uint, id uint, ip, userAgent string) error
 
 	// Category management
 	GetCategories() ([]models.Category, error)
 	CreateCategory(req CategoryRequest) (*models.Category, error)
 	UpdateCategory(id uint, req CategoryRequest) (*models.Category, error)
 	DeleteCategory(id uint) error
+
+	// Admin activity logs
+	GetAdminActivityLogs(page, limit int, action, targetType string) ([]models.AdminActivityLog, int64, error)
+	RecordActivityLog(adminID uint, action, targetType string, targetID uint, details *string, ip, userAgent *string) error
 }
 
 // ─── Implementation ───────────────────────────────────────────────────────────
@@ -80,6 +84,7 @@ type adminService struct {
 	adminRepo    repository.AdminRepository
 	reportRepo   repository.ReportRepository
 	categoryRepo repository.CategoryRepository
+	logRepo      repository.AdminActivityLogRepository
 	notifSvc     NotificationService
 	db           *gorm.DB
 }
@@ -88,6 +93,7 @@ func NewAdminService(
 	adminRepo repository.AdminRepository,
 	reportRepo repository.ReportRepository,
 	categoryRepo repository.CategoryRepository,
+	logRepo repository.AdminActivityLogRepository,
 	notifSvc NotificationService,
 	db *gorm.DB,
 ) AdminService {
@@ -95,6 +101,7 @@ func NewAdminService(
 		adminRepo:    adminRepo,
 		reportRepo:   reportRepo,
 		categoryRepo: categoryRepo,
+		logRepo:      logRepo,
 		notifSvc:     notifSvc,
 		db:           db,
 	}
@@ -130,7 +137,7 @@ func (s *adminService) GetUserByID(id uint) (*models.User, error) {
 	return u, nil
 }
 
-func (s *adminService) SetUserStatus(id uint, req UpdateUserStatusRequest) (*models.User, error) {
+func (s *adminService) SetUserStatus(adminID uint, id uint, req UpdateUserStatusRequest, ip, userAgent string) (*models.User, error) {
 	u, err := s.adminRepo.FindUserByID(id)
 	if err != nil {
 		return nil, errors.New("pengguna tidak ditemukan")
@@ -139,10 +146,18 @@ func (s *adminService) SetUserStatus(id uint, req UpdateUserStatusRequest) (*mod
 	if err := s.adminRepo.UpdateUser(u); err != nil {
 		return nil, errors.New("gagal memperbarui status pengguna")
 	}
+
+	statusStr := "Aktif"
+	if !u.IsActive {
+		statusStr = "Non-Aktif (Banned)"
+	}
+	detail := fmt.Sprintf("Mengubah status akun user ID %d (Nama: %s) menjadi %s", id, u.Name, statusStr)
+	_ = s.RecordActivityLog(adminID, "UPDATE_USER_STATUS", "user", id, &detail, &ip, &userAgent)
+
 	return u, nil
 }
 
-func (s *adminService) SetUserRole(id uint, req UpdateUserRoleRequest) (*models.User, error) {
+func (s *adminService) SetUserRole(adminID uint, id uint, req UpdateUserRoleRequest, ip, userAgent string) (*models.User, error) {
 	validRoles := map[string]bool{constant.RoleAlumni: true, constant.RoleStudent: true, constant.RolePartner: true, constant.RoleAdmin: true}
 	if !validRoles[req.Role] {
 		return nil, errors.New("role tidak valid: harus alumni, student, partner, atau admin")
@@ -151,10 +166,15 @@ func (s *adminService) SetUserRole(id uint, req UpdateUserRoleRequest) (*models.
 	if err != nil {
 		return nil, errors.New("pengguna tidak ditemukan")
 	}
+	oldRole := u.Role
 	u.Role = req.Role
 	if err := s.adminRepo.UpdateUser(u); err != nil {
 		return nil, errors.New("gagal memperbarui role pengguna")
 	}
+
+	detail := fmt.Sprintf("Mengubah role user ID %d (Nama: %s) dari '%s' menjadi '%s'", id, u.Name, oldRole, u.Role)
+	_ = s.RecordActivityLog(adminID, "UPDATE_USER_ROLE", "user", id, &detail, &ip, &userAgent)
+
 	return u, nil
 }
 
@@ -189,7 +209,7 @@ func (s *adminService) GetReportByID(id uint) (*AdminReportView, error) {
 	return &view, nil
 }
 
-func (s *adminService) ResolveReport(adminID uint, reportID uint, req ResolveReportRequest) (*models.Report, error) {
+func (s *adminService) ResolveReport(adminID uint, reportID uint, req ResolveReportRequest, ip, userAgent string) (*models.Report, error) {
 	report, err := s.reportRepo.FindReportByID(reportID)
 	if err != nil {
 		return nil, errors.New("laporan tidak ditemukan")
@@ -206,7 +226,7 @@ func (s *adminService) ResolveReport(adminID uint, reportID uint, req ResolveRep
 	contentDeleted := false
 	// Optionally delete the reported content
 	if req.DeleteContent {
-		if err := s.deleteTargetAndNotify(report.TargetType, report.TargetID, req.AdminNote); err == nil {
+		if err := s.deleteTargetAndNotify(adminID, report.TargetType, report.TargetID, req.AdminNote, ip, userAgent); err == nil {
 			contentDeleted = true
 		}
 	}
@@ -236,10 +256,16 @@ func (s *adminService) ResolveReport(adminID uint, reportID uint, req ResolveRep
 		)
 	}
 
+	detail := fmt.Sprintf("Menyelesaikan laporan ID %d (Target: %s #%d)", reportID, report.TargetType, report.TargetID)
+	if req.AdminNote != nil && *req.AdminNote != "" {
+		detail += fmt.Sprintf(" - Catatan: %s", *req.AdminNote)
+	}
+	_ = s.RecordActivityLog(adminID, "RESOLVE_REPORT", "report", reportID, &detail, &ip, &userAgent)
+
 	return report, nil
 }
 
-func (s *adminService) RejectReport(adminID uint, reportID uint, req RejectReportRequest) (*models.Report, error) {
+func (s *adminService) RejectReport(adminID uint, reportID uint, req RejectReportRequest, ip, userAgent string) (*models.Report, error) {
 	if req.AdminNote == "" {
 		return nil, errors.New("alasan penolakan wajib diisi")
 	}
@@ -275,25 +301,28 @@ func (s *adminService) RejectReport(adminID uint, reportID uint, req RejectRepor
 		report.TargetID,
 	)
 
+	detail := fmt.Sprintf("Menolak laporan ID %d (Target: %s #%d) - Alasan: %s", reportID, report.TargetType, report.TargetID, req.AdminNote)
+	_ = s.RecordActivityLog(adminID, "REJECT_REPORT", "report", reportID, &detail, &ip, &userAgent)
+
 	return report, nil
 }
 
 // ─── Direct Content Deletion ──────────────────────────────────────────────────
 
-func (s *adminService) DeletePost(id uint) error {
-	return s.deleteTargetAndNotify("post", id, nil)
+func (s *adminService) DeletePost(adminID uint, id uint, ip, userAgent string) error {
+	return s.deleteTargetAndNotify(adminID, "post", id, nil, ip, userAgent)
 }
-func (s *adminService) DeleteGroup(id uint) error {
-	return s.deleteTargetAndNotify("group", id, nil)
+func (s *adminService) DeleteGroup(adminID uint, id uint, ip, userAgent string) error {
+	return s.deleteTargetAndNotify(adminID, "group", id, nil, ip, userAgent)
 }
-func (s *adminService) DeleteEvent(id uint) error {
-	return s.deleteTargetAndNotify("event", id, nil)
+func (s *adminService) DeleteEvent(adminID uint, id uint, ip, userAgent string) error {
+	return s.deleteTargetAndNotify(adminID, "event", id, nil, ip, userAgent)
 }
-func (s *adminService) DeleteJob(id uint) error {
-	return s.deleteTargetAndNotify("job", id, nil)
+func (s *adminService) DeleteJob(adminID uint, id uint, ip, userAgent string) error {
+	return s.deleteTargetAndNotify(adminID, "job", id, nil, ip, userAgent)
 }
 
-func (s *adminService) deleteTargetAndNotify(targetType string, targetID uint, adminNote *string) error {
+func (s *adminService) deleteTargetAndNotify(adminID uint, targetType string, targetID uint, adminNote *string, ip, userAgent string) error {
 	ownerID, err := s.findContentOwner(targetType, targetID)
 	if err != nil {
 		return err
@@ -323,7 +352,32 @@ func (s *adminService) deleteTargetAndNotify(targetType string, targetID uint, a
 		targetID,
 	)
 
+	detail := fmt.Sprintf("Menghapus konten %s ID %d", targetType, targetID)
+	_ = s.RecordActivityLog(adminID, "DELETE_CONTENT", targetType, targetID, &detail, &ip, &userAgent)
+
 	return nil
+}
+
+// ─── Activity Logs ────────────────────────────────────────────────────────────
+
+func (s *adminService) RecordActivityLog(adminID uint, action, targetType string, targetID uint, details *string, ip, userAgent *string) error {
+	if adminID == 0 {
+		return nil
+	}
+	log := &models.AdminActivityLog{
+		AdminID:    adminID,
+		Action:     action,
+		TargetType: targetType,
+		TargetID:   targetID,
+		Details:    details,
+		IPAddress:  ip,
+		UserAgent:  userAgent,
+	}
+	return s.logRepo.CreateLog(log)
+}
+
+func (s *adminService) GetAdminActivityLogs(page, limit int, actionFilter, targetTypeFilter string) ([]models.AdminActivityLog, int64, error) {
+	return s.logRepo.FindLogs(page, limit, actionFilter, targetTypeFilter)
 }
 
 func (s *adminService) buildAdminReportView(report *models.Report) AdminReportView {

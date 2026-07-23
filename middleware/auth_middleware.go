@@ -6,6 +6,7 @@ import (
 	jwtware "github.com/gofiber/contrib/jwt"
 	"github.com/gofiber/fiber/v2"
 	"github.com/golang-jwt/jwt/v5"
+	"github.com/reganputra/skripsi-backend/constant"
 	"github.com/reganputra/skripsi-backend/utils"
 )
 
@@ -34,6 +35,9 @@ func RequireRole(roles ...string) fiber.Handler {
 		}
 
 		role, _ := claims["role"].(string)
+		if role == constant.RoleAdmin {
+			return c.Next()
+		}
 		for _, allowed := range roles {
 			if role == allowed {
 				return c.Next()
