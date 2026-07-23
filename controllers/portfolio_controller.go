@@ -1,8 +1,6 @@
 package controllers
 
 import (
-	"strconv"
-
 	"github.com/gofiber/fiber/v2"
 	"github.com/reganputra/skripsi-backend/service"
 	"github.com/reganputra/skripsi-backend/utils"
@@ -66,9 +64,9 @@ func (ctrl *PortfolioController) UpdatePortfolioItem(c *fiber.Ctx) error {
 		return utils.ErrorResponse(c, fiber.StatusUnauthorized, err.Error())
 	}
 
-	itemID, err := strconv.ParseUint(c.Params("id"), 10, 64)
-	if err != nil {
-		return utils.ErrorResponse(c, fiber.StatusBadRequest, "ID item portofolio tidak valid")
+	itemID, ok := utils.MustParseIDParam(c, "id", "item portofolio")
+	if !ok {
+		return nil
 	}
 
 	mediaURL, err := uploadFileIfPresent(c, "media", "alumni-platform/portfolio")
@@ -104,9 +102,9 @@ func (ctrl *PortfolioController) DeletePortfolioItem(c *fiber.Ctx) error {
 		return utils.ErrorResponse(c, fiber.StatusUnauthorized, err.Error())
 	}
 
-	itemID, err := strconv.ParseUint(c.Params("id"), 10, 64)
-	if err != nil {
-		return utils.ErrorResponse(c, fiber.StatusBadRequest, "ID item portofolio tidak valid")
+	itemID, ok := utils.MustParseIDParam(c, "id", "item portofolio")
+	if !ok {
+		return nil
 	}
 
 	if err := ctrl.portfolioSvc.DeletePortfolioItem(userID, uint(itemID)); err != nil {

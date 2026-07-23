@@ -10,8 +10,9 @@ import (
 // Sentinel errors returned by repository methods on constraint violations.
 // Controllers should map these to 409 Conflict responses.
 var (
-	ErrAlreadyFollowing  = errors.New("already following")
-	ErrAlreadyRegistered = errors.New("already registered")
+	ErrAlreadyFollowing   = errors.New("already following")
+	ErrAlreadyRegistered  = errors.New("already registered")
+	ErrAlreadyGroupMember = errors.New("sudah menjadi anggota grup ini")
 )
 
 // isDuplicateKeyError reports whether err is a PostgreSQL unique-constraint

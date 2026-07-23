@@ -1,6 +1,7 @@
 package repository
 
 import (
+	"github.com/reganputra/skripsi-backend/constant"
 	"github.com/reganputra/skripsi-backend/models"
 	"gorm.io/gorm"
 )
@@ -35,7 +36,9 @@ func (r *reportRepository) FindReports(page, limit int, status string) ([]models
 	if status != "" {
 		query = query.Where("status = ?", status)
 	}
-	query.Count(&total)
+	if err := query.Count(&total).Error; err != nil {
+		return nil, 0, err
+	}
 	err := query.Order("created_at DESC").Offset(offset).Limit(limit).Find(&reports).Error
 	return reports, total, err
 }
@@ -57,7 +60,9 @@ func (r *reportRepository) FindMyReports(reporterID uint, page, limit int) ([]mo
 	var total int64
 	offset := (page - 1) * limit
 
-	r.db.Model(&models.Report{}).Where("reporter_id = ?", reporterID).Count(&total)
+	if err := r.db.Model(&models.Report{}).Where("reporter_id = ?", reporterID).Count(&total).Error; err != nil {
+		return nil, 0, err
+	}
 	err := r.db.
 		Where("reporter_id = ?", reporterID).
 		Order("created_at DESC").
@@ -69,7 +74,7 @@ func (r *reportRepository) FindMyReports(reporterID uint, page, limit int) ([]mo
 func (r *reportRepository) FindExistingActiveReport(reporterID uint, targetType string, targetID uint) (*models.Report, error) {
 	var report models.Report
 	err := r.db.
-		Where("reporter_id = ? AND target_type = ? AND target_id = ? AND status = ?", reporterID, targetType, targetID, "pending").
+		Where("reporter_id = ? AND target_type = ? AND target_id = ? AND status = ?", reporterID, targetType, targetID, constant.StatusPending).
 		First(&report).Error
 	if err != nil {
 		return nil, err

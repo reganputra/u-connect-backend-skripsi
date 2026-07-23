@@ -99,11 +99,21 @@ func (r *groupArticleRepository) UpdateGroupArticle(article *models.GroupArticle
 }
 
 func (r *groupArticleRepository) DeleteGroupArticle(id uint) error {
-	r.db.Where("article_id = ?", id).Delete(&models.GroupReaction{})
-	r.db.Where("comment_id IN (SELECT id FROM group_comments WHERE article_id = ?)", id).Delete(&models.GroupReaction{})
-	r.db.Where("article_id = ?", id).Delete(&models.GroupComment{})
-	r.db.Where("article_id = ?", id).Delete(&models.GroupArticleImage{})
-	return r.db.Delete(&models.GroupArticle{}, id).Error
+	return r.db.Transaction(func(tx *gorm.DB) error {
+		if err := tx.Where("article_id = ?", id).Delete(&models.GroupReaction{}).Error; err != nil {
+			return err
+		}
+		if err := tx.Where("comment_id IN (SELECT id FROM group_comments WHERE article_id = ?)", id).Delete(&models.GroupReaction{}).Error; err != nil {
+			return err
+		}
+		if err := tx.Where("article_id = ?", id).Delete(&models.GroupComment{}).Error; err != nil {
+			return err
+		}
+		if err := tx.Where("article_id = ?", id).Delete(&models.GroupArticleImage{}).Error; err != nil {
+			return err
+		}
+		return tx.Delete(&models.GroupArticle{}, id).Error
+	})
 }
 
 // ─── Image management ─────────────────────────────────────────────────────────

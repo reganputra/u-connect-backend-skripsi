@@ -4,16 +4,12 @@ import (
 	"errors"
 	"time"
 
+	"github.com/reganputra/skripsi-backend/constant"
 	"github.com/reganputra/skripsi-backend/models"
 	"github.com/reganputra/skripsi-backend/repository"
 )
 
-var validEventStatuses = map[string]bool{
-	"upcoming":  true,
-	"ongoing":   true,
-	"completed": true,
-	"cancelled": true,
-}
+var validEventStatuses = constant.EventStatuses
 
 // ─── DTOs ─────────────────────────────────────────────────────────────────────
 
@@ -59,7 +55,6 @@ type eventService struct {
 	agendaRepo repository.EventAgendaRepository
 	regRepo    repository.EventRegistrationRepository
 }
-
 
 func hydrateEventUsers(event *models.Event) {
 	if event == nil {
@@ -125,7 +120,6 @@ func (s *eventService) attachEventsRegistrationStats(events []models.Event) erro
 	return nil
 }
 
-
 func (s *eventService) syncPastEventStatuses() error {
 	_, err := s.eventRepo.AutoCompletePastEvents(time.Now())
 	return err
@@ -151,7 +145,7 @@ func (s *eventService) CreateEvent(userID uint, req EventRequest) (*models.Event
 	}
 	status := req.Status
 	if status == "" {
-		status = "upcoming"
+		status = constant.StatusUpcoming
 	}
 	if !validEventStatuses[status] {
 		return nil, errors.New("status tidak valid: harus upcoming, ongoing, completed, atau cancelled")
@@ -339,7 +333,7 @@ func (s *eventService) RegisterForEvent(userID, eventID uint) error {
 		return errors.New("acara tidak ditemukan")
 	}
 
-	if event.Status == "completed" || event.Status == "cancelled" {
+	if event.Status == constant.StatusCompleted || event.Status == constant.StatusCancelled {
 		return errors.New("pendaftaran tidak diperbolehkan untuk acara yang telah selesai atau dibatalkan")
 	}
 
@@ -367,7 +361,6 @@ func (s *eventService) RegisterForEvent(userID, eventID uint) error {
 	}
 	return nil
 }
-
 
 func (s *eventService) CancelRegistration(userID, eventID uint) error {
 	_, err := s.eventRepo.FindEventByID(eventID)

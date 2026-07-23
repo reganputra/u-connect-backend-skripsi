@@ -2,7 +2,12 @@
 
 RESTful API for an alumni networking platform built with **Go**, **Fiber v2**, **GORM**, and **PostgreSQL**.
 
-📖 **Full API Reference → [docs/API.md](docs/API.md)**
+📖 **Developer & Integration Documentation:**
+- **[Full API Reference](docs/API.md)**
+- **[Codebase Architecture Guide](ARCHITECTURE.md)**
+- **[Mentor Recommendation System (CBF)](RECOMMENDATION_SYSTEM.md)**
+- **[WebSockets & Background Schedulers Guide](WEBSOCKETS_AND_SCHEDULER.md)**
+- **[Codebase Quality Assessment & Future Improvements](ASSESSMENT.md)**
 
 For frontend teams, read the integration guardrails in
 **[Frontend Integration Contract](docs/API.md#frontend-integration-contract)**.

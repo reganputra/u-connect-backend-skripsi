@@ -11,6 +11,8 @@ type UserProfile struct {
 	ProfilePicture string  `gorm:"default:null"`
 	Bio            *string `gorm:"default:null"`
 	Location       *string `gorm:"default:null"`
+	LinkedinURL    *string `gorm:"default:null"`
+	GithubURL      *string `gorm:"default:null"`
 
 	// Professional (alumni)
 	JobStatus       *string `gorm:"default:null"` // employed|entrepreneur|continuing_study|unemployed|freelance|student

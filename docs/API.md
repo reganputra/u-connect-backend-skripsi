@@ -443,6 +443,8 @@ Notes:
 | `skills`                   | ❌                          | Comma-separated text (used by mentor recommendation)  |
 | `interests`                | ❌                          | Comma-separated text (used by mentor recommendation)  |
 | `career_interests`         | ❌                          | Comma-separated text (used by mentor recommendation)  |
+| `linkedin_url`             | ❌                          | URL to user's LinkedIn profile                        |
+| `github_url`               | ❌                          | URL to user's GitHub profile                          |
 | `position`                 | if `employed`               | Current job title                                     |
 | `company_name`             | if `employed`               | Current company name                                  |
 | `company_location`         | ❌                          | Company/work location (relevant for `employed`)       |
@@ -3803,6 +3805,65 @@ Returns the most-viewed content items within a time window, ranked by view count
 |---|---|
 | `401` | Not authenticated |
 | `403` | Authenticated user is not an admin |
+
+---
+
+## CBF Evaluation & Tracing (Admin)
+
+#### GET `/api/admin/evaluation/cbf-explain` — CBF Recommendation Tracing
+
+> Mengembalikan rincian perhitungan kemiripan (similarity matching) antara mahasiswa dan mentor langkah-demi-langkah (Preprocessing, TF, IDF, TF-IDF, dan Cosine Similarity). Berguna untuk auditing akademik, debugging, atau analisis relevansi kualitatif sistem rekomendasi.
+
+**Query params:**
+
+| Param | Description | Default |
+|---|---|---|
+| `student_id` | ID User mahasiswa yang ingin dicari kecocokannya (wajib) | - |
+| `mentor_id` | ID User mentor target yang ingin dibandingkan (wajib) | - |
+| `q` | Kueri pencarian kustom (jika diisi, meng-override profil mahasiswa) | profil mahasiswa |
+
+**Response `200`:**
+
+```json
+{
+  "success": true,
+  "data": {
+    "student_id": 2,
+    "student_name": "Malekith",
+    "query_text": "Python SQL Machine Learning...",
+    "query_tokens": ["python", "sql", "machine", "learn"],
+    "mentor_id": 6,
+    "mentor_name": "Andry Syva Maldini",
+    "mentor_text": "Experienced in handling large-scale datasets, predictive modeling...",
+    "mentor_tokens": ["experience", "handle", "large", "scale", "dataset"],
+    "query_tf": [
+      { "term": "python", "count": 2, "total": 15, "tf": 0.1333 }
+    ],
+    "mentor_tf": [
+      { "term": "python", "count": 1, "total": 45, "tf": 0.0222 }
+    ],
+    "idf": [
+      { "term": "python", "doc_freq": 10, "total": 42, "idf": 2.358 }
+    ],
+    "query_vector": [
+      { "term": "python", "tf_idf": 0.3144, "normalized": 0.412 }
+    ],
+    "mentor_vector": [
+      { "term": "python", "tf_idf": 0.0523, "normalized": 0.089 }
+    ],
+    "matching_terms": [
+      {
+        "term": "python",
+        "query_weight": 0.412,
+        "mentor_weight": 0.089,
+        "product": 0.0366
+      }
+    ],
+    "dot_product": 0.285,
+    "similarity_score": 0.285
+  }
+}
+```
 
 ---
 

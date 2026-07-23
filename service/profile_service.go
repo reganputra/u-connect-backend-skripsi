@@ -3,18 +3,12 @@ package service
 import (
 	"errors"
 
+	"github.com/reganputra/skripsi-backend/constant"
 	"github.com/reganputra/skripsi-backend/models"
 	"github.com/reganputra/skripsi-backend/repository"
 )
 
-var validProfileJobStatuses = map[string]bool{
-	"employed":         true,
-	"entrepreneur":     true,
-	"continuing_study": true,
-	"unemployed":       true,
-	"freelance":        true,
-	"student":          true,
-}
+var validProfileJobStatuses = constant.ProfileJobStatuses
 
 // ─── DTOs ─────────────────────────────────────────────────────────────────────
 
@@ -23,6 +17,8 @@ type ProfileRequest struct {
 	ProfilePicture *string `json:"profile_picture"`
 	Bio            *string `json:"bio"`
 	Location       *string `json:"location"`
+	LinkedinURL    *string `json:"linkedin_url"`
+	GithubURL      *string `json:"github_url"`
 
 	// Professional
 	JobStatus       *string `json:"job_status"`
@@ -157,6 +153,7 @@ func nullFieldsByStatus(profile *models.UserProfile) {
 	if status != "employed" {
 		profile.Position = nil
 		profile.CompanyLocation = nil
+		profile.IndustryType = nil
 		if status != "entrepreneur" {
 			profile.CompanyName = nil
 		}
@@ -164,10 +161,7 @@ func nullFieldsByStatus(profile *models.UserProfile) {
 	if status != "entrepreneur" {
 		profile.CompanySize = nil
 		profile.YearFounding = nil
-		if status != "employed" {
-			profile.IndustryName = nil
-			profile.IndustryType = nil
-		}
+		profile.IndustryName = nil
 	}
 	if status != "continuing_study" {
 		profile.EducationalLevel = nil
@@ -196,6 +190,8 @@ func (s *profileService) CreateProfile(userID uint, req ProfileRequest) (*models
 		UserID:                 userID,
 		Bio:                    req.Bio,
 		Location:               req.Location,
+		LinkedinURL:            req.LinkedinURL,
+		GithubURL:              req.GithubURL,
 		JobStatus:              req.JobStatus,
 		Position:               req.Position,
 		CompanyName:            req.CompanyName,
@@ -263,6 +259,12 @@ func (s *profileService) UpdateProfile(userID uint, req ProfileRequest) (*models
 	}
 	if req.Location != nil {
 		profile.Location = req.Location
+	}
+	if req.LinkedinURL != nil {
+		profile.LinkedinURL = req.LinkedinURL
+	}
+	if req.GithubURL != nil {
+		profile.GithubURL = req.GithubURL
 	}
 	if req.JobStatus != nil {
 		profile.JobStatus = req.JobStatus
@@ -444,7 +446,7 @@ func (s *profileService) SearchProfiles(query string, page, limit int) ([]Direct
 
 // GetProfilesByRole returns paginated profiles filtered by role (student, alumni, or partner).
 func (s *profileService) GetProfilesByRole(role string, page, limit int) ([]DirectorySummary, int64, error) {
-	if role != "student" && role != "alumni" && role != "partner" {
+	if !constant.IsValidDirectoryRole(role) {
 		return []DirectorySummary{}, 0, errors.New("peran harus student, alumni, atau partner")
 	}
 	return s.profileRepo.GetProfilesByRole(role, page, limit)

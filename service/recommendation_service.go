@@ -66,6 +66,7 @@ func deduplicateInterests(skills, interests string) string {
 	}
 	return strings.Join(unique, ", ")
 }
+
 // RecommendationService computes mentor recommendations using TF-IDF + Cosine Similarity.
 type RecommendationService interface {
 	RecommendMentors(studentText string, topN int) ([]RecommendResult, error)
@@ -88,8 +89,8 @@ type corpusCache struct {
 	docs           []repository.MentorDoc
 	tokenSets      []map[string]struct{}
 	texts          []string
-	idf            map[string]float64       // corpus-level IDF (mentor docs only)
-	normalizedVecs []map[string]float64     // L2-normalized TF-IDF vectors per mentor
+	idf            map[string]float64   // corpus-level IDF (mentor docs only)
+	normalizedVecs []map[string]float64 // L2-normalized TF-IDF vectors per mentor
 	loadedAt       time.Time
 }
 
@@ -101,9 +102,9 @@ const cacheTTL = 5 * time.Minute
 const minScore = 0.1
 
 type recommendationService struct {
-	mentorRepo    repository.MentorRepository
-	cache         corpusCache
-	cacheNoLemma  corpusCache
+	mentorRepo   repository.MentorRepository
+	cache        corpusCache
+	cacheNoLemma corpusCache
 }
 
 func NewRecommendationService(mentorRepo repository.MentorRepository) RecommendationService {
@@ -371,4 +372,3 @@ func (s *recommendationService) RecommendMentorsWithoutLemmatizer(studentText st
 
 	return results, nil
 }
-

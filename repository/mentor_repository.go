@@ -1,6 +1,7 @@
 package repository
 
 import (
+	"github.com/reganputra/skripsi-backend/constant"
 	"github.com/reganputra/skripsi-backend/models"
 	"gorm.io/gorm"
 )
@@ -64,7 +65,7 @@ func (r *mentorRepository) FindMentors(page, limit int, search string) ([]models
 
 	q := r.db.
 		Joins("JOIN users u ON u.id = user_profiles.user_id AND u.deleted_at IS NULL").
-		Where("u.role = ?", "alumni").
+		Where("u.role = ?", constant.RoleAlumni).
 		Where("user_profiles.mentor_quota IS NOT NULL").
 		Where(activeMenteesSubquery + " < user_profiles.mentor_quota")
 
@@ -74,7 +75,9 @@ func (r *mentorRepository) FindMentors(page, limit int, search string) ([]models
 			like, like, like)
 	}
 
-	q.Model(&models.UserProfile{}).Count(&total)
+	if err := q.Model(&models.UserProfile{}).Count(&total).Error; err != nil {
+		return nil, 0, err
+	}
 
 	offset := (page - 1) * limit
 	err := q.
@@ -91,7 +94,7 @@ func (r *mentorRepository) FindMentorProfileByUserID(userID uint) (*models.UserP
 	var profile models.UserProfile
 	err := r.db.
 		Joins("JOIN users u ON u.id = user_profiles.user_id AND u.deleted_at IS NULL").
-		Where("user_profiles.user_id = ? AND u.role = ? AND user_profiles.mentor_quota IS NOT NULL", userID, "alumni").
+		Where("user_profiles.user_id = ? AND u.role = ? AND user_profiles.mentor_quota IS NOT NULL", userID, constant.RoleAlumni).
 		Preload("User").
 		Preload("Experiences").
 		First(&profile).Error

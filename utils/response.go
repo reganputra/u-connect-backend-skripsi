@@ -15,3 +15,16 @@ func ErrorResponse(c *fiber.Ctx, status int, message string) error {
 		"error":   message,
 	})
 }
+
+// PaginatedResponse writes the standard success envelope with a paginated
+// "data" key plus total/page/limit metadata. It replaces the hand-built
+// fiber.Map{"total","page","limit","data":...} envelopes repeated across
+// controllers.
+func PaginatedResponse(c *fiber.Ctx, status int, data any, total int64, page, limit int) error {
+	return SuccessResponse(c, status, fiber.Map{
+		"total": total,
+		"page":  page,
+		"limit": limit,
+		"data":  data,
+	})
+}

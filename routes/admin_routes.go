@@ -51,4 +51,7 @@ func RegisterAdminRoutes(app *fiber.App, ctrl *controllers.AdminController, auth
 	// CBF Evaluation (MRR metric) — admin-only, untuk evaluasi skripsi
 	admin.Get("/evaluation/cbf-mrr", evalCtrl.EvaluateCBFMRR)
 	admin.Get("/evaluation/cbf-mrr-no-lemma", evalCtrl.EvaluateCBFMRRWithoutLemmatizer)
+
+	// CBF Explanation (tracing detail) — admin-only, untuk debugging/sidang skripsi
+	admin.Get("/evaluation/cbf-explain", evalCtrl.ExplainCBF)
 }

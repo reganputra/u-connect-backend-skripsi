@@ -5,15 +5,12 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/reganputra/skripsi-backend/constant"
+	"github.com/reganputra/skripsi-backend/dto"
 	"github.com/reganputra/skripsi-backend/models"
 	"github.com/reganputra/skripsi-backend/repository"
 	"gorm.io/gorm"
 )
-
-var validGroupReactionTypes = map[string]bool{
-	"like": true, "love": true, "haha": true,
-	"wow": true, "sad": true, "angry": true,
-}
 
 // ─── DTOs ─────────────────────────────────────────────────────────────────────
 
@@ -78,15 +75,8 @@ type GroupListItemResponse struct {
 	ArticleCount int `json:"article_count"`
 }
 
-// PaginationMeta is included in responses with paginated sub-collections.
-type PaginationMeta struct {
-	Total      int64 `json:"total"`
-	Page       int   `json:"page"`
-	Limit      int   `json:"limit"`
-	TotalPages int   `json:"total_pages"`
-	HasNext    bool  `json:"has_next"`
-	HasPrev    bool  `json:"has_prev"`
-}
+// PaginationMeta is the canonical pagination envelope shared across services.
+type PaginationMeta = dto.PaginationMeta
 
 type GroupArticleWithCount struct {
 	ID           uint                   `json:"ID"`
@@ -206,7 +196,6 @@ type groupService struct {
 	notifSvc          NotificationService
 }
 
-
 func hydrateGroupCommentNode(node *GroupCommentNode) {
 	if node == nil {
 		return
@@ -295,7 +284,6 @@ func (s *groupService) CreateGroup(userID uint, req GroupRequest) (*models.Group
 	}
 	return group, nil
 }
-
 
 func (s *groupService) GetGroups(page, limit int) ([]*GroupListItemResponse, int64, error) {
 	if page < 1 {
@@ -829,7 +817,7 @@ func (s *groupService) DeleteGroupComment(userID uint, commentID uint) error {
 // ─── Reactions ────────────────────────────────────────────────────────────────
 
 func (s *groupService) ReactToGroupArticle(userID uint, articleID uint, req GroupReactionRequest) (string, error) {
-	if !validGroupReactionTypes[req.Type] {
+	if !constant.ValidReactionTypes[req.Type] {
 		return "", errors.New("jenis reaksi tidak valid")
 	}
 	article, err := s.articleRepo.FindGroupArticleByID(articleID)
@@ -860,7 +848,7 @@ func (s *groupService) ReactToGroupArticle(userID uint, articleID uint, req Grou
 }
 
 func (s *groupService) ReactToGroupComment(userID uint, commentID uint, req GroupReactionRequest) (string, error) {
-	if !validGroupReactionTypes[req.Type] {
+	if !constant.ValidReactionTypes[req.Type] {
 		return "", errors.New("jenis reaksi tidak valid")
 	}
 	comment, err := s.commentRepo.FindGroupCommentByID(commentID)

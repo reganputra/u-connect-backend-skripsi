@@ -1,6 +1,7 @@
 package repository
 
 import (
+	"github.com/reganputra/skripsi-backend/constant"
 	"github.com/reganputra/skripsi-backend/models"
 	"gorm.io/gorm"
 )
@@ -81,7 +82,7 @@ func (r *profileRepository) BackfillMissingPartnerProfiles() error {
 		Table("users as u").
 		Select("u.id").
 		Joins("LEFT JOIN user_profiles up ON up.user_id = u.id").
-		Where("u.role = ? AND up.user_id IS NULL", "partner").
+		Where("u.role = ? AND up.user_id IS NULL", constant.RolePartner).
 		Scan(&missingUserIDs).Error; err != nil {
 		return err
 	}
@@ -145,10 +146,12 @@ func (r *profileRepository) GetAllProfiles(page, limit int) ([]DirectorySummary,
 				"up.skills, up.interests, up.mentor_description",
 		).
 		Joins("LEFT JOIN user_profiles up ON up.user_id = u.id").
-		Where("u.role IN (?, ?, ?) AND u.is_active = true", "student", "alumni", "partner").
+		Where("u.role IN (?, ?, ?) AND u.is_active = true", constant.RoleStudent, constant.RoleAlumni, constant.RolePartner).
 		Order("u.created_at DESC")
 
-	base.Count(&total)
+	if err := base.Count(&total).Error; err != nil {
+		return nil, 0, err
+	}
 
 	offset := (page - 1) * limit
 	err := base.Offset(offset).Limit(limit).Scan(&profiles).Error
@@ -179,14 +182,16 @@ func (r *profileRepository) SearchProfiles(query string, page, limit int) ([]Dir
 				"up.skills, up.interests, up.mentor_description",
 		).
 		Joins("LEFT JOIN user_profiles up ON up.user_id = u.id").
-		Where("u.role IN (?, ?, ?) AND u.is_active = true", "student", "alumni", "partner").
+		Where("u.role IN (?, ?, ?) AND u.is_active = true", constant.RoleStudent, constant.RoleAlumni, constant.RolePartner).
 		Where(
 			"u.name ILIKE ? OR up.skills ILIKE ? OR up.company_name ILIKE ? OR up.interests ILIKE ?",
 			searchPattern, searchPattern, searchPattern, searchPattern,
 		).
 		Order("u.created_at DESC")
 
-	base.Count(&total)
+	if err := base.Count(&total).Error; err != nil {
+		return nil, 0, err
+	}
 
 	offset := (page - 1) * limit
 	err := base.Offset(offset).Limit(limit).Scan(&profiles).Error
@@ -204,7 +209,7 @@ func (r *profileRepository) GetProfilesByRole(role string, page, limit int) ([]D
 	}
 
 	// Only allow filtering by student, alumni, or partner
-	if role != "student" && role != "alumni" && role != "partner" {
+	if !constant.IsValidDirectoryRole(role) {
 		return []DirectorySummary{}, 0, nil
 	}
 
@@ -223,7 +228,9 @@ func (r *profileRepository) GetProfilesByRole(role string, page, limit int) ([]D
 		Where("u.role = ? AND u.is_active = true", role).
 		Order("u.created_at DESC")
 
-	base.Count(&total)
+	if err := base.Count(&total).Error; err != nil {
+		return nil, 0, err
+	}
 
 	offset := (page - 1) * limit
 	err := base.Offset(offset).Limit(limit).Scan(&profiles).Error

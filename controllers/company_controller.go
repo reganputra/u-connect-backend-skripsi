@@ -2,6 +2,7 @@ package controllers
 
 import (
 	"github.com/gofiber/fiber/v2"
+	"github.com/reganputra/skripsi-backend/dto"
 	"github.com/reganputra/skripsi-backend/service"
 	"github.com/reganputra/skripsi-backend/utils"
 )
@@ -22,7 +23,7 @@ func (ctrl *CompanyController) CreateOrJoinCompanyProfile(c *fiber.Ctx) error {
 
 	var req service.CompanyProfileRequest
 	if err := c.BodyParser(&req); err != nil {
-		return utils.ErrorResponse(c, fiber.StatusBadRequest, "isi permintaan tidak valid")
+		return utils.ErrorResponse(c, fiber.StatusBadRequest, dto.MsgInvalidRequest)
 	}
 
 	profile, created, err := ctrl.companySvc.CreateOrJoinCompanyProfile(userID, req)
@@ -59,7 +60,7 @@ func (ctrl *CompanyController) UpdateCompanyProfile(c *fiber.Ctx) error {
 
 	var req service.CompanyProfileRequest
 	if err := c.BodyParser(&req); err != nil {
-		return utils.ErrorResponse(c, fiber.StatusBadRequest, "isi permintaan tidak valid")
+		return utils.ErrorResponse(c, fiber.StatusBadRequest, dto.MsgInvalidRequest)
 	}
 
 	profile, err := ctrl.companySvc.UpdateCompanyProfile(userID, req)
@@ -76,11 +77,9 @@ func (ctrl *CompanyController) ChangeCompanyAffiliation(c *fiber.Ctx) error {
 		return utils.ErrorResponse(c, fiber.StatusUnauthorized, err.Error())
 	}
 
-	var body struct {
-		CompanyName string `json:"company_name"`
-	}
+	var body dto.ChangeCompanyAffiliationRequest
 	if err := c.BodyParser(&body); err != nil {
-		return utils.ErrorResponse(c, fiber.StatusBadRequest, "isi permintaan tidak valid")
+		return utils.ErrorResponse(c, fiber.StatusBadRequest, dto.MsgInvalidRequest)
 	}
 
 	profile, joined, err := ctrl.companySvc.ChangeCompanyAffiliation(userID, body.CompanyName)

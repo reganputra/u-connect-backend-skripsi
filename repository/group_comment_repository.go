@@ -40,6 +40,10 @@ func (r *groupCommentRepository) UpdateGroupComment(comment *models.GroupComment
 }
 
 func (r *groupCommentRepository) DeleteGroupComment(id uint) error {
-	r.db.Where("comment_id = ?", id).Delete(&models.GroupReaction{})
-	return r.db.Delete(&models.GroupComment{}, id).Error
+	return r.db.Transaction(func(tx *gorm.DB) error {
+		if err := tx.Where("comment_id = ?", id).Delete(&models.GroupReaction{}).Error; err != nil {
+			return err
+		}
+		return tx.Delete(&models.GroupComment{}, id).Error
+	})
 }

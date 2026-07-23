@@ -1,9 +1,6 @@
 package controllers
 
 import (
-	"strconv"
-	"strings"
-
 	"github.com/gofiber/fiber/v2"
 	"github.com/reganputra/skripsi-backend/service"
 	"github.com/reganputra/skripsi-backend/utils"
@@ -20,20 +17,7 @@ func NewEvaluationController(svc service.EvaluationService) *EvaluationControlle
 // Mengevaluasi sistem rekomendasi CBF menggunakan permintaan mentoring aktual sebagai ground truth dan mengembalikan MAP, P@1, P@3, P@5, serta rincian per mahasiswa.
 // student_ids bersifat opsional — jika tidak diberikan, semua mahasiswa dengan riwayat permintaan akan dievaluasi.
 func (ctrl *EvaluationController) EvaluateCBF(c *fiber.Ctx) error {
-	topN, _ := strconv.Atoi(c.Query("top_n", "10"))
-	if topN <= 0 || topN > 50 {
-		topN = 10
-	}
-
-	var studentIDs []uint
-	if raw := c.Query("student_ids"); raw != "" {
-		for _, part := range strings.Split(raw, ",") {
-			part = strings.TrimSpace(part)
-			if id, err := strconv.ParseUint(part, 10, 64); err == nil && id > 0 {
-				studentIDs = append(studentIDs, uint(id))
-			}
-		}
-	}
+	topN, studentIDs := utils.ParseEvaluationParams(c, 50)
 
 	result, err := ctrl.svc.EvaluateCBF(topN, studentIDs)
 	if err != nil {
@@ -44,20 +28,7 @@ func (ctrl *EvaluationController) EvaluateCBF(c *fiber.Ctx) error {
 
 // EvaluateCBFWithoutLemmatizer mengevaluasi sistem rekomendasi CBF tanpa menggunakan Bilingual Lemmatizer.
 func (ctrl *EvaluationController) EvaluateCBFWithoutLemmatizer(c *fiber.Ctx) error {
-	topN, _ := strconv.Atoi(c.Query("top_n", "10"))
-	if topN <= 0 || topN > 50 {
-		topN = 10
-	}
-
-	var studentIDs []uint
-	if raw := c.Query("student_ids"); raw != "" {
-		for _, part := range strings.Split(raw, ",") {
-			part = strings.TrimSpace(part)
-			if id, err := strconv.ParseUint(part, 10, 64); err == nil && id > 0 {
-				studentIDs = append(studentIDs, uint(id))
-			}
-		}
-	}
+	topN, studentIDs := utils.ParseEvaluationParams(c, 50)
 
 	result, err := ctrl.svc.EvaluateCBFWithoutLemmatizer(topN, studentIDs)
 	if err != nil {
@@ -68,20 +39,7 @@ func (ctrl *EvaluationController) EvaluateCBFWithoutLemmatizer(c *fiber.Ctx) err
 
 // EvaluateCBFMRR mengevaluasi sistem rekomendasi CBF menggunakan metrik MRR.
 func (ctrl *EvaluationController) EvaluateCBFMRR(c *fiber.Ctx) error {
-	topN, _ := strconv.Atoi(c.Query("top_n", "10"))
-	if topN <= 0 || topN > 50 {
-		topN = 10
-	}
-
-	var studentIDs []uint
-	if raw := c.Query("student_ids"); raw != "" {
-		for _, part := range strings.Split(raw, ",") {
-			part = strings.TrimSpace(part)
-			if id, err := strconv.ParseUint(part, 10, 64); err == nil && id > 0 {
-				studentIDs = append(studentIDs, uint(id))
-			}
-		}
-	}
+	topN, studentIDs := utils.ParseEvaluationParams(c, 50)
 
 	result, err := ctrl.svc.EvaluateCBFMRR(topN, studentIDs)
 	if err != nil {
@@ -92,20 +50,7 @@ func (ctrl *EvaluationController) EvaluateCBFMRR(c *fiber.Ctx) error {
 
 // EvaluateCBFMRRWithoutLemmatizer mengevaluasi sistem rekomendasi CBF menggunakan metrik MRR tanpa Bilingual Lemmatizer.
 func (ctrl *EvaluationController) EvaluateCBFMRRWithoutLemmatizer(c *fiber.Ctx) error {
-	topN, _ := strconv.Atoi(c.Query("top_n", "10"))
-	if topN <= 0 || topN > 50 {
-		topN = 10
-	}
-
-	var studentIDs []uint
-	if raw := c.Query("student_ids"); raw != "" {
-		for _, part := range strings.Split(raw, ",") {
-			part = strings.TrimSpace(part)
-			if id, err := strconv.ParseUint(part, 10, 64); err == nil && id > 0 {
-				studentIDs = append(studentIDs, uint(id))
-			}
-		}
-	}
+	topN, studentIDs := utils.ParseEvaluationParams(c, 50)
 
 	result, err := ctrl.svc.EvaluateCBFMRRWithoutLemmatizer(topN, studentIDs)
 	if err != nil {
@@ -114,3 +59,21 @@ func (ctrl *EvaluationController) EvaluateCBFMRRWithoutLemmatizer(c *fiber.Ctx) 
 	return utils.SuccessResponse(c, fiber.StatusOK, result)
 }
 
+// ExplainCBF menjelaskan tahapan perhitungan rekomendasi CBF per mahasiswa terhadap mentor tertentu.
+func (ctrl *EvaluationController) ExplainCBF(c *fiber.Ctx) error {
+	studentID, ok := utils.MustParseIDParam(c, "student_id", "student")
+	if !ok {
+		return nil
+	}
+	mentorID, ok := utils.MustParseIDParam(c, "mentor_id", "mentor")
+	if !ok {
+		return nil
+	}
+	customQuery := c.Query("q", "")
+
+	result, err := ctrl.svc.ExplainCBF(studentID, mentorID, customQuery)
+	if err != nil {
+		return utils.ErrorResponse(c, fiber.StatusInternalServerError, err.Error())
+	}
+	return utils.SuccessResponse(c, fiber.StatusOK, result)
+}

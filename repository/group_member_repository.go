@@ -41,7 +41,7 @@ func (r *groupMemberRepository) AddGroupMember(member *models.GroupMember) error
 					"updated_at": time.Now(),
 				}).Error
 		}
-		return errors.New("sudah menjadi anggota grup ini")
+		return ErrAlreadyGroupMember
 	}
 	if !errors.Is(err, gorm.ErrRecordNotFound) {
 		return err

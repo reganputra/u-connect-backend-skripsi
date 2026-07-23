@@ -3,6 +3,7 @@ package repository
 import (
 	"time"
 
+	"github.com/reganputra/skripsi-backend/constant"
 	"github.com/reganputra/skripsi-backend/models"
 	"gorm.io/gorm"
 )
@@ -71,7 +72,7 @@ func (r *mentoringSessionRepository) CancelScheduledByPair(mentorID, studentID u
 	result := r.db.Model(&models.MentoringSession{}).
 		Where("mentor_id = ? AND student_id = ? AND status = 'scheduled'", mentorID, studentID).
 		Updates(map[string]any{
-			"status":       "cancelled",
+			"status":       constant.StatusCancelled,
 			"cancelled_at": now,
 		})
 	return result.RowsAffected, result.Error

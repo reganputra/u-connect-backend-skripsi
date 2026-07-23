@@ -53,19 +53,13 @@ func (ctrl *EventController) CreateEvent(c *fiber.Ctx) error {
 }
 
 func (ctrl *EventController) GetEvents(c *fiber.Ctx) error {
-	page, _ := strconv.Atoi(c.Query("page", "1"))
-	limit, _ := strconv.Atoi(c.Query("limit", "10"))
+	page, limit := utils.ParsePagination(c, 10)
 
 	events, total, err := ctrl.eventSvc.GetEvents(page, limit)
 	if err != nil {
 		return utils.ErrorResponse(c, fiber.StatusInternalServerError, "gagal mengambil data acara")
 	}
-	return utils.SuccessResponse(c, fiber.StatusOK, fiber.Map{
-		"total":  total,
-		"page":   page,
-		"limit":  limit,
-		"events": events,
-	})
+	return utils.PaginatedResponse(c, fiber.StatusOK, events, total, page, limit)
 }
 
 func (ctrl *EventController) GetMyOwnedEvents(c *fiber.Ctx) error {
@@ -73,20 +67,14 @@ func (ctrl *EventController) GetMyOwnedEvents(c *fiber.Ctx) error {
 	if err != nil {
 		return utils.ErrorResponse(c, fiber.StatusUnauthorized, err.Error())
 	}
-	page, _ := strconv.Atoi(c.Query("page", "1"))
-	limit, _ := strconv.Atoi(c.Query("limit", "10"))
+	page, limit := utils.ParsePagination(c, 10)
 
 	events, total, err := ctrl.eventSvc.GetMyOwnedEvents(userID, page, limit)
 	if err != nil {
 		return utils.ErrorResponse(c, fiber.StatusInternalServerError, "gagal mengambil data acara milik pengguna")
 	}
 
-	return utils.SuccessResponse(c, fiber.StatusOK, fiber.Map{
-		"total":  total,
-		"page":   page,
-		"limit":  limit,
-		"events": events,
-	})
+	return utils.PaginatedResponse(c, fiber.StatusOK, events, total, page, limit)
 }
 
 func (ctrl *EventController) GetMyRegisteredEvents(c *fiber.Ctx) error {
@@ -94,28 +82,22 @@ func (ctrl *EventController) GetMyRegisteredEvents(c *fiber.Ctx) error {
 	if err != nil {
 		return utils.ErrorResponse(c, fiber.StatusUnauthorized, err.Error())
 	}
-	page, _ := strconv.Atoi(c.Query("page", "1"))
-	limit, _ := strconv.Atoi(c.Query("limit", "10"))
+	page, limit := utils.ParsePagination(c, 10)
 
 	events, total, err := ctrl.eventSvc.GetMyRegisteredEvents(userID, page, limit)
 	if err != nil {
 		return utils.ErrorResponse(c, fiber.StatusInternalServerError, "gagal mengambil data acara terdaftar pengguna")
 	}
 
-	return utils.SuccessResponse(c, fiber.StatusOK, fiber.Map{
-		"total":  total,
-		"page":   page,
-		"limit":  limit,
-		"events": events,
-	})
+	return utils.PaginatedResponse(c, fiber.StatusOK, events, total, page, limit)
 }
 
 func (ctrl *EventController) GetEventByID(c *fiber.Ctx) error {
-	eventID, err := strconv.ParseUint(c.Params("id"), 10, 64)
-	if err != nil {
-		return utils.ErrorResponse(c, fiber.StatusBadRequest, "ID acara tidak valid")
+	eventID, ok := utils.MustParseIDParam(c, "id", "acara")
+	if !ok {
+		return nil
 	}
-	event, err := ctrl.eventSvc.GetEventByID(uint(eventID))
+	event, err := ctrl.eventSvc.GetEventByID(eventID)
 	if err != nil {
 		return utils.ErrorResponse(c, fiber.StatusNotFound, err.Error())
 	}
@@ -127,9 +109,9 @@ func (ctrl *EventController) UpdateEvent(c *fiber.Ctx) error {
 	if err != nil {
 		return utils.ErrorResponse(c, fiber.StatusUnauthorized, err.Error())
 	}
-	eventID, err := strconv.ParseUint(c.Params("id"), 10, 64)
-	if err != nil {
-		return utils.ErrorResponse(c, fiber.StatusBadRequest, "ID acara tidak valid")
+	eventID, ok := utils.MustParseIDParam(c, "id", "acara")
+	if !ok {
+		return nil
 	}
 
 	photoURL, err := uploadFileIfPresent(c, "photo", "alumni-platform/events")

@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/reganputra/skripsi-backend/config"
+	"github.com/reganputra/skripsi-backend/constant"
 	"github.com/reganputra/skripsi-backend/models"
 	"github.com/reganputra/skripsi-backend/repository"
 	"github.com/reganputra/skripsi-backend/utils"
@@ -14,25 +15,16 @@ import (
 )
 
 var validJobTypes = map[string]bool{
-	"full-time":  true,
-	"part-time":  true,
-	"internship": true,
-	"contract":   true,
-	"freelance":  true,
+	constant.JobTypeFullTime:   true,
+	constant.JobTypePartTime:   true,
+	constant.JobTypeInternship: true,
+	constant.JobTypeContract:   true,
+	constant.JobTypeFreelance:  true,
 }
 
-var validJobStatuses = map[string]bool{
-	"open":   true,
-	"closed": true,
-	"filled": true,
-}
+var validJobStatuses = constant.JobStatuses
 
-var validApplicationStatuses = map[string]bool{
-	"pending":  true,
-	"reviewed": true,
-	"accepted": true,
-	"rejected": true,
-}
+var validApplicationStatuses = constant.ApplicationStatuses
 
 // ─── DTOs ─────────────────────────────────────────────────────────────────────
 
@@ -80,7 +72,6 @@ type jobService struct {
 	notifSvc    NotificationService
 }
 
-
 func NewJobService(jobRepo repository.JobRepository, jobAppRepo repository.JobApplicationRepository, companyRepo repository.CompanyRepository, userRepo repository.UserRepository, notifSvc NotificationService) JobService {
 	return &jobService{
 		jobRepo:     jobRepo,
@@ -97,7 +88,7 @@ func (s *jobService) resolveJobCompany(userID uint, role string, reqCompanyName 
 		return "", nil, errors.New("nama perusahaan wajib diisi")
 	}
 
-	if role == "partner" {
+	if role == constant.RolePartner {
 		user, err := s.userRepo.FindUserByID(userID)
 		if err != nil {
 			return "", nil, errors.New("pengguna tidak ditemukan")
@@ -128,12 +119,12 @@ func (s *jobService) resolveJobCompany(userID uint, role string, reqCompanyName 
 func (s *jobService) syncJobOpeningState(job *models.Job) {
 	if job.Openings <= 0 {
 		job.Openings = 0
-		job.Status = "filled"
+		job.Status = constant.StatusFilled
 		return
 	}
 
 	if job.Openings == 1 {
-		job.Status = "filled"
+		job.Status = constant.StatusFilled
 		return
 	}
 }
@@ -141,7 +132,7 @@ func (s *jobService) syncJobOpeningState(job *models.Job) {
 // ─── Job CRUD ─────────────────────────────────────────────────────────────────
 
 func (s *jobService) CreateJob(userID uint, role string, req JobRequest) (*models.Job, error) {
-	if role != "alumni" && role != "partner" {
+	if role != constant.RoleAlumni && role != constant.RolePartner {
 		return nil, errors.New("akses ditolak: hanya alumni atau partner yang dapat membuat lowongan")
 	}
 	if req.Title == "" {
@@ -162,7 +153,7 @@ func (s *jobService) CreateJob(userID uint, role string, req JobRequest) (*model
 	}
 	status := req.Status
 	if status == "" {
-		status = "open"
+		status = constant.StatusOpen
 	}
 	if !validJobStatuses[status] {
 		return nil, errors.New("status tidak valid: harus open, closed, atau filled")
@@ -296,7 +287,7 @@ func (s *jobService) DeleteJob(userID, jobID uint) error {
 // ─── Applications ─────────────────────────────────────────────────────────────
 
 func (s *jobService) ApplyForJob(userID uint, role string, jobID uint, req JobApplicationRequest) (*models.JobApplication, error) {
-	if role != "student" && role != "alumni" {
+	if role != constant.RoleStudent && role != constant.RoleAlumni {
 		return nil, errors.New("akses ditolak: hanya student atau alumni yang dapat melamar")
 	}
 	if req.ResumeURL == "" {
@@ -307,7 +298,7 @@ func (s *jobService) ApplyForJob(userID uint, role string, jobID uint, req JobAp
 	if err != nil {
 		return nil, errors.New("lowongan tidak ditemukan")
 	}
-	if job.Status != "open" {
+	if job.Status != constant.StatusOpen {
 		return nil, errors.New("lowongan sudah tidak menerima lamaran")
 	}
 
@@ -324,7 +315,7 @@ func (s *jobService) ApplyForJob(userID uint, role string, jobID uint, req JobAp
 		UserID:      userID,
 		CoverLetter: req.CoverLetter,
 		ResumeURL:   req.ResumeURL,
-		Status:      "pending",
+		Status:      constant.StatusPending,
 	}
 	if err := s.jobAppRepo.CreateJobApplication(app); err != nil {
 		return nil, errors.New("gagal melamar pekerjaan")
@@ -333,7 +324,7 @@ func (s *jobService) ApplyForJob(userID uint, role string, jobID uint, req JobAp
 }
 
 func (s *jobService) WithdrawApplication(userID uint, role string, jobID uint) error {
-	if role != "student" && role != "alumni" {
+	if role != constant.RoleStudent && role != constant.RoleAlumni {
 		return errors.New("akses ditolak: hanya student atau alumni yang dapat menarik lamaran")
 	}
 
@@ -341,7 +332,7 @@ func (s *jobService) WithdrawApplication(userID uint, role string, jobID uint) e
 	if err != nil {
 		return errors.New("lowongan tidak ditemukan")
 	}
-	if job.Status == "filled" {
+	if job.Status == constant.StatusFilled {
 		return errors.New("lamaran tidak dapat ditarik untuk lowongan yang sudah penuh")
 	}
 
@@ -349,11 +340,11 @@ func (s *jobService) WithdrawApplication(userID uint, role string, jobID uint) e
 	if err != nil || app == nil {
 		return errors.New("lamaran tidak ditemukan")
 	}
-	if app.Status != "pending" {
+	if app.Status != constant.StatusPending {
 		return errors.New("lamaran hanya bisa ditarik saat masih pending")
 	}
 
-	app.Status = "withdrawn"
+	app.Status = constant.StatusWithdrawn
 	return s.jobAppRepo.UpdateJobApplication(app)
 }
 
@@ -415,13 +406,13 @@ func (s *jobService) UpdateApplicationStatus(userID, applicationID uint, status 
 	if app.Job.UserID != userID {
 		return nil, errors.New("akses ditolak")
 	}
-	if app.Status == "withdrawn" {
+	if app.Status == constant.StatusWithdrawn {
 		return nil, errors.New("lamaran sudah ditarik")
 	}
 	previousStatus := app.Status
 
 	app.Status = status
-	if status == "accepted" && previousStatus != "accepted" {
+	if status == constant.ApplicationStatusAccepted && previousStatus != constant.ApplicationStatusAccepted {
 		job, err := s.jobRepo.FindJobByID(app.JobID)
 		if err != nil {
 			return nil, errors.New("lowongan tidak ditemukan")
@@ -432,19 +423,19 @@ func (s *jobService) UpdateApplicationStatus(userID, applicationID uint, status 
 		job.Openings--
 		if job.Openings <= 0 {
 			job.Openings = 0
-			job.Status = "filled"
+			job.Status = constant.StatusFilled
 		}
 		if err := s.jobRepo.UpdateJob(job); err != nil {
 			return nil, errors.New("gagal memperbarui status lowongan")
 		}
-	} else if previousStatus == "accepted" && status != "accepted" {
+	} else if previousStatus == constant.ApplicationStatusAccepted && status != constant.ApplicationStatusAccepted {
 		job, err := s.jobRepo.FindJobByID(app.JobID)
 		if err != nil {
 			return nil, errors.New("lowongan tidak ditemukan")
 		}
 		job.Openings++
-		if job.Status == "filled" && job.Openings > 0 {
-			job.Status = "open"
+		if job.Status == constant.StatusFilled && job.Openings > 0 {
+			job.Status = constant.StatusOpen
 		}
 		if err := s.jobRepo.UpdateJob(job); err != nil {
 			return nil, errors.New("gagal memperbarui status lowongan")

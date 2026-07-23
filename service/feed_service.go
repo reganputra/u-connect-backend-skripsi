@@ -6,14 +6,10 @@ import (
 	"sync"
 	"time"
 
+	"github.com/reganputra/skripsi-backend/constant"
 	"github.com/reganputra/skripsi-backend/models"
 	"github.com/reganputra/skripsi-backend/repository"
 )
-
-var validReactionTypes = map[string]bool{
-	"like": true, "love": true, "haha": true,
-	"wow": true, "sad": true, "angry": true,
-}
 
 // ─── Response types ───────────────────────────────────────────────────────────
 
@@ -64,8 +60,6 @@ type PostListItem struct {
 	CreatedAt     time.Time   `json:"created_at"`
 	UpdatedAt     time.Time   `json:"updated_at"`
 }
-
-
 
 // buildCommentTree converts a flat comment list into an infinitely nested tree.
 func buildCommentTree(comments []models.Comment) []*CommentNode {
@@ -472,7 +466,7 @@ func (s *feedService) DeleteComment(userID uint, commentID uint) error {
 // ─── Reaction ─────────────────────────────────────────────────────────────────
 
 func (s *feedService) ReactToPost(userID uint, postID uint, req ReactionRequest) (string, error) {
-	if !validReactionTypes[req.Type] {
+	if !constant.ValidReactionTypes[req.Type] {
 		return "", errors.New("jenis reaksi tidak valid: harus like, love, haha, wow, sad, atau angry")
 	}
 
@@ -512,7 +506,7 @@ func (s *feedService) ReactToPost(userID uint, postID uint, req ReactionRequest)
 }
 
 func (s *feedService) ReactToComment(userID uint, commentID uint, req ReactionRequest) (string, error) {
-	if !validReactionTypes[req.Type] {
+	if !constant.ValidReactionTypes[req.Type] {
 		return "", errors.New("jenis reaksi tidak valid: harus like, love, haha, wow, sad, atau angry")
 	}
 
