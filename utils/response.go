@@ -21,11 +21,10 @@ func ErrorResponse(c *fiber.Ctx, status int, message string) error {
 // fiber.Map{"total","page","limit","data":...} envelopes repeated across
 // controllers.
 func PaginatedResponse(c *fiber.Ctx, status int, data any, total int64, page, limit int) error {
-	return c.Status(status).JSON(fiber.Map{
-		"success": true,
-		"total":   total,
-		"page":    page,
-		"limit":   limit,
-		"data":    data,
+	return SuccessResponse(c, status, fiber.Map{
+		"total": total,
+		"page":  page,
+		"limit": limit,
+		"data":  data,
 	})
 }
