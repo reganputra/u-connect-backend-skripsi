@@ -8,10 +8,10 @@ RESTful API for an alumni networking platform built with **Go**, **Fiber v2**, *
 - **[Mentor Recommendation System (CBF)](RECOMMENDATION_SYSTEM.md)**
 - **[WebSockets & Background Schedulers Guide](WEBSOCKETS_AND_SCHEDULER.md)**
 - **[Codebase Quality Assessment & Future Improvements](ASSESSMENT.md)**
+- **[Frontend Repo](https://github.com/reganputra/frontend-skripsi.git)**
 
 For frontend teams, read the integration guardrails in
 **[Frontend Integration Contract](docs/API.md#frontend-integration-contract)**.
-**[Frontend Repo](https://github.com/reganputra/frontend-skripsi.git)**.
 
 ---
 
