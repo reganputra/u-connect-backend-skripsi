@@ -34,7 +34,8 @@ type AppContainer struct {
 	NotifCtrl     *controllers.NotificationController
 	ActivityCtrl  *controllers.ActivityController
 	AnalyticsCtrl *controllers.AnalyticsController
-	EvalCtrl      *controllers.EvaluationController
+	EvalCtrl         *controllers.EvaluationController
+	AnnouncementCtrl *controllers.AnnouncementController
 }
 
 // Build wires up all dependencies and returns the container.
@@ -62,6 +63,7 @@ func Build(db *gorm.DB, hub *ws.Hub) *AppContainer {
 	adminRepo := repository.NewAdminRepository(db)
 	categoryRepo := repository.NewCategoryRepository(db)
 	logRepo := repository.NewAdminActivityLogRepository(db)
+	announcementRepo := repository.NewAnnouncementRepository(db)
 	mentorRepo := repository.NewMentorRepository(db)
 	mentorRequestRepo := repository.NewMentorRequestRepository(db)
 	mentoringSessionRepo := repository.NewMentoringSessionRepository(db)
@@ -86,6 +88,7 @@ func Build(db *gorm.DB, hub *ws.Hub) *AppContainer {
 	jobSvc := service.NewJobService(jobRepo, jobAppRepo, companyRepo, userRepo, notifSvc)
 	reportSvc := service.NewReportService(reportRepo)
 	adminSvc := service.NewAdminService(adminRepo, reportRepo, categoryRepo, logRepo, notifSvc, db)
+	announcementSvc := service.NewAnnouncementService(announcementRepo, userRepo, notifSvc, adminSvc, db)
 	recommendSvc := service.NewRecommendationService(mentorRepo)
 	mentorSvc := service.NewMentorService(profileRepo, mentorRepo, mentorRequestRepo, mentoringSessionRepo, recommendSvc, userRepo, notifSvc)
 	followSvc := service.NewFollowService(followRepo, userRepo, notifSvc)
@@ -95,26 +98,27 @@ func Build(db *gorm.DB, hub *ws.Hub) *AppContainer {
 
 	// ── Controllers ───────────────────────────────────────────────────────────
 	return &AppContainer{
-		UserRepo:      userRepo,
-		NotifSvc:      notifSvc,
-		MessageSvc:    messageSvc,
-		AuthCtrl:      controllers.NewAuthController(authSvc),
-		ProfileCtrl:   controllers.NewProfileController(profileSvc),
-		DirectoryCtrl: controllers.NewDirectoryController(profileSvc, portfolioSvc),
-		CompanyCtrl:   controllers.NewCompanyController(companySvc),
-		PortfolioCtrl: controllers.NewPortfolioController(portfolioSvc),
-		FeedCtrl:      controllers.NewFeedController(feedSvc),
-		GroupCtrl:     controllers.NewGroupController(groupSvc),
-		EventCtrl:     controllers.NewEventController(eventSvc),
-		JobCtrl:       controllers.NewJobController(jobSvc),
-		ReportCtrl:    controllers.NewReportController(reportSvc),
-		AdminCtrl:     controllers.NewAdminController(adminSvc, profileSvc),
-		MentorCtrl:    controllers.NewMentorController(mentorSvc),
-		FollowCtrl:    controllers.NewFollowController(followSvc),
-		MessageCtrl:   controllers.NewMessageController(messageSvc),
-		NotifCtrl:     controllers.NewNotificationController(notifSvc),
-		ActivityCtrl:  controllers.NewActivityController(eventSvc, jobSvc, groupSvc),
-		AnalyticsCtrl: controllers.NewAnalyticsController(analyticsSvc),
-		EvalCtrl:      controllers.NewEvaluationController(evalSvc),
+		UserRepo:         userRepo,
+		NotifSvc:         notifSvc,
+		MessageSvc:       messageSvc,
+		AuthCtrl:         controllers.NewAuthController(authSvc),
+		ProfileCtrl:      controllers.NewProfileController(profileSvc),
+		DirectoryCtrl:    controllers.NewDirectoryController(profileSvc, portfolioSvc),
+		CompanyCtrl:      controllers.NewCompanyController(companySvc),
+		PortfolioCtrl:    controllers.NewPortfolioController(portfolioSvc),
+		FeedCtrl:         controllers.NewFeedController(feedSvc),
+		GroupCtrl:        controllers.NewGroupController(groupSvc),
+		EventCtrl:        controllers.NewEventController(eventSvc),
+		JobCtrl:          controllers.NewJobController(jobSvc),
+		ReportCtrl:       controllers.NewReportController(reportSvc),
+		AdminCtrl:        controllers.NewAdminController(adminSvc, profileSvc),
+		MentorCtrl:       controllers.NewMentorController(mentorSvc),
+		FollowCtrl:       controllers.NewFollowController(followSvc),
+		MessageCtrl:      controllers.NewMessageController(messageSvc),
+		NotifCtrl:        controllers.NewNotificationController(notifSvc),
+		ActivityCtrl:     controllers.NewActivityController(eventSvc, jobSvc, groupSvc),
+		AnalyticsCtrl:    controllers.NewAnalyticsController(analyticsSvc),
+		EvalCtrl:         controllers.NewEvaluationController(evalSvc),
+		AnnouncementCtrl: controllers.NewAnnouncementController(announcementSvc),
 	}
 }
