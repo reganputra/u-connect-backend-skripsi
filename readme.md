@@ -9,8 +9,9 @@ RESTful API for an alumni networking platform built with **Go**, **Fiber v2**, *
 - **[WebSockets & Background Schedulers Guide](WEBSOCKETS_AND_SCHEDULER.md)**
 - **[Codebase Quality Assessment & Future Improvements](ASSESSMENT.md)**
 
-For frontend teams, read the integration guardrails in
-**[Frontend Integration Contract](docs/API.md#frontend-integration-contract)**.
+For frontend, read the integration guardrails in:
+- **[Frontend Integration Contract](docs/API.md#frontend-integration-contract)**.
+- - **[Frontend Repository](https://github.com/reganputra/frontend-skripsi.git)**.
 
 ---
 
