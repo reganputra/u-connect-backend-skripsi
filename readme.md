@@ -11,7 +11,7 @@ RESTful API for an alumni networking platform built with **Go**, **Fiber v2**, *
 
 For frontend, read the integration guardrails in:
 - **[Frontend Integration Contract](docs/API.md#frontend-integration-contract)**.
-- - **[Frontend Repository](https://github.com/reganputra/frontend-skripsi.git)**.
+- **[Frontend Repository](https://github.com/reganputra/frontend-skripsi.git)**.
 
 ---
 
