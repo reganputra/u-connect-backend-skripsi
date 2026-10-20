@@ -19,6 +19,9 @@ type GroupArticleRepository interface {
 	FindArticleImages(articleID uint) ([]models.GroupArticleImage, error)
 	DeleteArticleImages(articleID uint) error
 	CreateArticleImage(img *models.GroupArticleImage) error
+	// C-3: Atomic helpers
+	CreateArticleWithImages(article *models.GroupArticle, imageURLs []string) error
+	UpdateArticleWithImages(article *models.GroupArticle, imageURLs []string) error
 }
 
 type groupArticleRepository struct {
@@ -133,4 +136,40 @@ func (r *groupArticleRepository) DeleteArticleImages(articleID uint) error {
 
 func (r *groupArticleRepository) CreateArticleImage(img *models.GroupArticleImage) error {
 	return r.db.Create(img).Error
+}
+
+func (r *groupArticleRepository) CreateArticleWithImages(article *models.GroupArticle, imageURLs []string) error {
+	return r.db.Transaction(func(tx *gorm.DB) error {
+		if err := tx.Create(article).Error; err != nil {
+			return err
+		}
+		for _, u := range imageURLs {
+			if u == "" {
+				continue
+			}
+			if err := tx.Create(&models.GroupArticleImage{ArticleID: article.ID, ImageURL: u}).Error; err != nil {
+				return err
+			}
+		}
+		return nil
+	})
+}
+
+func (r *groupArticleRepository) UpdateArticleWithImages(article *models.GroupArticle, imageURLs []string) error {
+	return r.db.Transaction(func(tx *gorm.DB) error {
+		if len(imageURLs) > 0 {
+			if err := tx.Where("article_id = ?", article.ID).Delete(&models.GroupArticleImage{}).Error; err != nil {
+				return err
+			}
+			for _, u := range imageURLs {
+				if u == "" {
+					continue
+				}
+				if err := tx.Create(&models.GroupArticleImage{ArticleID: article.ID, ImageURL: u}).Error; err != nil {
+					return err
+				}
+			}
+		}
+		return tx.Save(article).Error
+	})
 }

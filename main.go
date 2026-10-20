@@ -17,13 +17,10 @@ import (
 	"github.com/gofiber/fiber/v2/middleware/recover"
 	"github.com/reganputra/skripsi-backend/config"
 	"github.com/reganputra/skripsi-backend/container"
-	"github.com/reganputra/skripsi-backend/models"
 	"github.com/reganputra/skripsi-backend/routes"
 	"github.com/reganputra/skripsi-backend/scheduler"
 	"github.com/reganputra/skripsi-backend/utils"
 	"github.com/reganputra/skripsi-backend/ws"
-	"golang.org/x/crypto/bcrypt"
-	"gorm.io/gorm"
 )
 
 func main() {
@@ -45,55 +42,10 @@ func main() {
 	// Initialize Cloudinary
 	config.ConnectCloudinary()
 
-	// ── Background: migrate + seed (runs after HTTP server is already listening)
-	// instead of timing out while AutoMigrate runs 20+ slow SQL queries.
-	go func() {
-		if err := config.DB.AutoMigrate(
-			&models.User{},
-			&models.UserProfile{},
-			&models.UserExperience{},
-			&models.CompanyProfile{},
-			&models.PortfolioItem{},
-			&models.Post{},
-			&models.PostImage{},
-			&models.Comment{},
-			&models.Reaction{},
-			&models.Vote{},
-			&models.Group{},
-			&models.GroupMember{},
-			&models.GroupArticle{},
-			&models.GroupArticleImage{},
-			&models.GroupComment{},
-			&models.GroupReaction{},
-			&models.Event{},
-			&models.EventAgenda{},
-			&models.EventRegistration{},
-			&models.Job{},
-			&models.JobApplication{},
-			&models.Report{},
-			&models.Category{},
-			&models.MentorRequest{},
-			&models.MentoringSession{},
-			&models.Follow{},
-			&models.Message{},
-			&models.Notification{},
-			&models.PageView{},
-			&models.DailyAnalyticsSnapshot{},
-			&models.AdminActivityLog{},
-			&models.Announcement{},
-		); err != nil {
-			log.Printf("❌ AutoMigrate failed: %v", err)
-			return
-		}
-		log.Println("✅ Database migrated successfully!")
-
-		if err := cleanupDuplicateFollows(config.DB); err != nil {
-			log.Printf("❌ Failed to clean duplicate follows: %v", err)
-		}
-
-		seedGeneralCategory(config.DB)
-		seedAdmin(config.DB)
-	}()
+	// ── C-1: Synchronous migration before serving traffic (no background goroutine).
+	if err := config.RunMigrations(config.DB); err != nil {
+		log.Fatalf("❌ Migration failed: %v", err)
+	}
 
 	db := config.DB
 
@@ -139,11 +91,39 @@ func main() {
 		AllowCredentials: allowedOrigins != "*", // credentials not allowed with wildcard
 	}))
 
-	// Health check
+	// ── Health probes (C-1) ───────────────────────────────────────────────────
 	app.Get("/health", func(c *fiber.Ctx) error {
 		return c.JSON(fiber.Map{
 			"status":  "ok",
 			"message": "Server is running",
+		})
+	})
+	app.Get("/ready", func(c *fiber.Ctx) error {
+		sqlDB, err := config.DB.DB()
+		if err != nil {
+			return c.Status(fiber.StatusServiceUnavailable).JSON(fiber.Map{
+				"status": "not_ready",
+				"error":  "db handle unavailable",
+			})
+		}
+		ctx, cancel := context.WithTimeout(c.Context(), 2*time.Second)
+		defer cancel()
+		if err := sqlDB.PingContext(ctx); err != nil {
+			return c.Status(fiber.StatusServiceUnavailable).JSON(fiber.Map{
+				"status": "not_ready",
+				"error":  "db ping failed",
+			})
+		}
+		var exists bool
+		if err := config.DB.WithContext(ctx).Raw("SELECT EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'users')").Scan(&exists).Error; err != nil || !exists {
+			return c.Status(fiber.StatusServiceUnavailable).JSON(fiber.Map{
+				"status": "not_ready",
+				"error":  "schema not ready",
+			})
+		}
+		return c.JSON(fiber.Map{
+			"status":  "ready",
+			"message": "Server is ready",
 		})
 	})
 
@@ -221,83 +201,4 @@ func main() {
 	if err := app.Listen(":" + port); err != nil && !errors.Is(err, net.ErrClosed) {
 		log.Fatalf("❌ Failed to start server: %v", err)
 	}
-}
-
-func cleanupDuplicateFollows(db *gorm.DB) error {
-	return db.Transaction(func(tx *gorm.DB) error {
-		return tx.Exec(`
-			DELETE FROM follows f
-			USING (
-				SELECT id,
-					ROW_NUMBER() OVER (
-						PARTITION BY follower_id, following_id
-						ORDER BY (deleted_at IS NOT NULL) ASC, created_at DESC, id DESC
-					) AS rn
-				FROM follows
-			) ranked
-			WHERE f.id = ranked.id
-				AND ranked.rn > 1
-		`).Error
-	})
-}
-
-// seedAdmin creates the first admin account from environment variables
-// if no admin user already exists. Safe to call on every startup.
-func seedAdmin(db *gorm.DB) {
-	email := os.Getenv("ADMIN_EMAIL")
-	password := os.Getenv("ADMIN_PASSWORD")
-	name := os.Getenv("ADMIN_NAME")
-
-	if email == "" || password == "" {
-		log.Println("⚠️  ADMIN_EMAIL or ADMIN_PASSWORD not set — skipping admin seeder")
-		return
-	}
-
-	var count int64
-	db.Model(&models.User{}).Where("role = ?", "admin").Count(&count)
-	if count > 0 {
-		log.Println("ℹ️  Admin user already exists — skipping seeder")
-		return
-	}
-
-	if name == "" {
-		name = "Administrator"
-	}
-
-	hashed, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
-	if err != nil {
-		log.Printf("❌ Failed to hash admin password: %v", err)
-		return
-	}
-
-	admin := models.User{
-		Name:     name,
-		Email:    email,
-		Password: string(hashed),
-		Role:     "admin",
-		IsActive: true,
-	}
-
-	if err := db.Create(&admin).Error; err != nil {
-		log.Printf("❌ Failed to seed admin user: %v", err)
-		return
-	}
-
-	log.Printf("✅ Admin user seeded: %s", email)
-}
-
-// seedGeneralCategory ensures the fallback category exists for content cleanup.
-func seedGeneralCategory(db *gorm.DB) {
-	var count int64
-	db.Model(&models.Category{}).Where("name = ?", "General").Count(&count)
-	if count > 0 {
-		return
-	}
-
-	if err := db.Create(&models.Category{Name: "General"}).Error; err != nil {
-		log.Printf("❌ Failed to seed General category: %v", err)
-		return
-	}
-
-	log.Println("✅ General category seeded")
 }
