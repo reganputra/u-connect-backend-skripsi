@@ -1,8 +1,6 @@
 package container
 
 import (
-	"log"
-
 	"github.com/reganputra/skripsi-backend/controllers"
 	"github.com/reganputra/skripsi-backend/repository"
 	"github.com/reganputra/skripsi-backend/service"
@@ -17,23 +15,23 @@ type AppContainer struct {
 	MessageSvc service.MessageService
 
 	// All Controllers
-	AuthCtrl      *controllers.AuthController
-	ProfileCtrl   *controllers.ProfileController
-	DirectoryCtrl *controllers.DirectoryController
-	CompanyCtrl   *controllers.CompanyController
-	PortfolioCtrl *controllers.PortfolioController
-	FeedCtrl      *controllers.FeedController
-	GroupCtrl     *controllers.GroupController
-	EventCtrl     *controllers.EventController
-	JobCtrl       *controllers.JobController
-	ReportCtrl    *controllers.ReportController
-	AdminCtrl     *controllers.AdminController
-	MentorCtrl    *controllers.MentorController
-	FollowCtrl    *controllers.FollowController
-	MessageCtrl   *controllers.MessageController
-	NotifCtrl     *controllers.NotificationController
-	ActivityCtrl  *controllers.ActivityController
-	AnalyticsCtrl *controllers.AnalyticsController
+	AuthCtrl         *controllers.AuthController
+	ProfileCtrl      *controllers.ProfileController
+	DirectoryCtrl    *controllers.DirectoryController
+	CompanyCtrl      *controllers.CompanyController
+	PortfolioCtrl    *controllers.PortfolioController
+	FeedCtrl         *controllers.FeedController
+	GroupCtrl        *controllers.GroupController
+	EventCtrl        *controllers.EventController
+	JobCtrl          *controllers.JobController
+	ReportCtrl       *controllers.ReportController
+	AdminCtrl        *controllers.AdminController
+	MentorCtrl       *controllers.MentorController
+	FollowCtrl       *controllers.FollowController
+	MessageCtrl      *controllers.MessageController
+	NotifCtrl        *controllers.NotificationController
+	ActivityCtrl     *controllers.ActivityController
+	AnalyticsCtrl    *controllers.AnalyticsController
 	EvalCtrl         *controllers.EvaluationController
 	AnnouncementCtrl *controllers.AnnouncementController
 }
@@ -72,9 +70,7 @@ func Build(db *gorm.DB, hub *ws.Hub) *AppContainer {
 	notifRepo := repository.NewNotificationRepository(db)
 	analyticsRepo := repository.NewAnalyticsRepository(db)
 
-	if err := profileRepo.BackfillMissingPartnerProfiles(); err != nil {
-		log.Fatalf("❌ Failed to backfill partner profiles: %v", err)
-	}
+	// C-1: backfill now runs inside RunMigrations (before Listen); no-op here.
 
 	// ── Services ──────────────────────────────────────────────────────────────
 	notifSvc := service.NewNotificationService(notifRepo, hub, db)

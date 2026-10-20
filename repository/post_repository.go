@@ -22,6 +22,10 @@ type PostRepository interface {
 	DeletePost(id uint) error
 	CreatePostImage(image *models.PostImage) error
 	DeletePostImagesByPostID(postID uint) error
+	// C-3: Atomic helpers
+	CreatePostWithImages(post *models.Post, imageURLs []string) error
+	UpdatePostWithImages(post *models.Post, imageURLs []string) error
+	DB() *gorm.DB
 }
 
 type postRepository struct {
@@ -110,4 +114,38 @@ func (r *postRepository) CreatePostImage(image *models.PostImage) error {
 
 func (r *postRepository) DeletePostImagesByPostID(postID uint) error {
 	return r.db.Where("post_id = ?", postID).Delete(&models.PostImage{}).Error
+}
+
+func (r *postRepository) DB() *gorm.DB { return r.db }
+
+// CreatePostWithImages creates post + images atomically.
+func (r *postRepository) CreatePostWithImages(post *models.Post, imageURLs []string) error {
+	return r.db.Transaction(func(tx *gorm.DB) error {
+		if err := tx.Create(post).Error; err != nil {
+			return err
+		}
+		for _, u := range imageURLs {
+			if err := tx.Create(&models.PostImage{PostID: post.ID, ImageURL: u}).Error; err != nil {
+				return err
+			}
+		}
+		return nil
+	})
+}
+
+// UpdatePostWithImages replaces images atomically (delete old, insert new) + saves post.
+func (r *postRepository) UpdatePostWithImages(post *models.Post, imageURLs []string) error {
+	return r.db.Transaction(func(tx *gorm.DB) error {
+		if len(imageURLs) > 0 {
+			if err := tx.Where("post_id = ?", post.ID).Delete(&models.PostImage{}).Error; err != nil {
+				return err
+			}
+			for _, u := range imageURLs {
+				if err := tx.Create(&models.PostImage{PostID: post.ID, ImageURL: u}).Error; err != nil {
+					return err
+				}
+			}
+		}
+		return tx.Save(post).Error
+	})
 }

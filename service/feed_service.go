@@ -185,7 +185,6 @@ func (s *feedService) CreatePost(userID uint, req PostRequest) (*models.Post, er
 		return nil, errors.New("judul dan konten wajib diisi")
 	}
 
-	// Set legacy ImageURL to first image for backward compatibility
 	imageURL := req.ImageURL
 	if imageURL == nil && len(req.ImageURLs) > 0 {
 		imageURL = &req.ImageURLs[0]
@@ -199,20 +198,8 @@ func (s *feedService) CreatePost(userID uint, req PostRequest) (*models.Post, er
 		ImageURL: imageURL,
 	}
 
-	if err := s.postRepo.CreatePost(post); err != nil {
+	if err := s.postRepo.CreatePostWithImages(post, req.ImageURLs); err != nil {
 		return nil, errors.New("gagal membuat postingan")
-	}
-
-	// Save individual post images
-	for _, imgURL := range req.ImageURLs {
-		image := &models.PostImage{
-			PostID:   post.ID,
-			ImageURL: imgURL,
-		}
-		if err := s.postRepo.CreatePostImage(image); err != nil {
-			// Log error but don't fail the entire post creation
-			return nil, errors.New("gagal menyimpan gambar postingan")
-		}
 	}
 
 	return post, nil
@@ -327,32 +314,17 @@ func (s *feedService) UpdatePost(userID uint, postID uint, req PostRequest) (*mo
 	if req.Category != nil {
 		post.Category = req.Category
 	}
-
-	// Handle image updates
 	if req.ImageURL != nil {
 		post.ImageURL = req.ImageURL
 	}
 	if len(req.ImageURLs) > 0 {
-		// Update ImageURL to first image for backward compatibility
 		first := req.ImageURLs[0]
 		post.ImageURL = &first
-
-		// Delete old images and add new ones
-		if err := s.postRepo.DeletePostImagesByPostID(postID); err != nil {
-			return nil, errors.New("gagal menghapus gambar lama")
+		if err := s.postRepo.UpdatePostWithImages(post, req.ImageURLs); err != nil {
+			return nil, errors.New("gagal memperbarui postingan")
 		}
-
-		for _, imgURL := range req.ImageURLs {
-			image := &models.PostImage{
-				PostID:   postID,
-				ImageURL: imgURL,
-			}
-			if err := s.postRepo.CreatePostImage(image); err != nil {
-				return nil, errors.New("gagal menyimpan gambar postingan")
-			}
-		}
+		return post, nil
 	}
-
 	if err := s.postRepo.UpdatePost(post); err != nil {
 		return nil, errors.New("gagal memperbarui postingan")
 	}

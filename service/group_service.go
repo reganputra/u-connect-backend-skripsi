@@ -599,25 +599,10 @@ func (s *groupService) CreateGroupArticle(userID uint, groupID uint, req GroupAr
 		Content:  req.Content,
 		MediaURL: legacyMediaURL,
 	}
-	if err := s.articleRepo.CreateGroupArticle(article); err != nil {
+	if err := s.articleRepo.CreateArticleWithImages(article, req.MediaURLs); err != nil {
 		return nil, errors.New("gagal membuat artikel")
 	}
 
-	// Save multiple images
-	for _, mediaURL := range req.MediaURLs {
-		if mediaURL != "" {
-			img := &models.GroupArticleImage{
-				ArticleID: article.ID,
-				ImageURL:  mediaURL,
-			}
-			if err := s.articleRepo.CreateArticleImage(img); err != nil {
-				_ = s.articleRepo.DeleteGroupArticle(article.ID)
-				return nil, errors.New("gagal menyimpan media artikel")
-			}
-		}
-	}
-
-	// Reload to include preloaded relations expected by some clients (e.g. User).
 	created, err := s.articleRepo.FindGroupArticleByID(article.ID)
 	if err != nil {
 		return article, nil
@@ -687,30 +672,16 @@ func (s *groupService) UpdateGroupArticle(userID uint, articleID uint, req Group
 	} else if req.MediaURL != nil {
 		article.MediaURL = req.MediaURL
 	}
+	if len(req.MediaURLs) > 0 {
+		if err := s.articleRepo.UpdateArticleWithImages(article, req.MediaURLs); err != nil {
+			return nil, errors.New("gagal memperbarui media artikel")
+		}
+		ApplyUserPicture(&article.User)
+		return article, nil
+	}
 	if err := s.articleRepo.UpdateGroupArticle(article); err != nil {
 		return nil, errors.New("gagal memperbarui artikel")
 	}
-
-	// If new media URLs supplied, replace all old ones
-	if len(req.MediaURLs) > 0 {
-		// Delete existing images
-		if err := s.articleRepo.DeleteArticleImages(articleID); err != nil {
-			return nil, errors.New("gagal memperbarui media artikel")
-		}
-		// Create new images
-		for _, mediaURL := range req.MediaURLs {
-			if mediaURL != "" {
-				img := &models.GroupArticleImage{
-					ArticleID: articleID,
-					ImageURL:  mediaURL,
-				}
-				if err := s.articleRepo.CreateArticleImage(img); err != nil {
-					return nil, errors.New("gagal memperbarui media artikel")
-				}
-			}
-		}
-	}
-
 	ApplyUserPicture(&article.User)
 	return article, nil
 }
