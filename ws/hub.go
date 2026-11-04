@@ -1,20 +1,25 @@
 package ws
 
 import (
-	"log"
+	"context"
+	"encoding/json"
+	"fmt"
+	"log/slog"
 	"sync"
+	"time"
 
 	fws "github.com/gofiber/contrib/websocket"
+	"github.com/redis/go-redis/v9"
 )
 
-// OutgoingMsg is the JSON envelope sent to a WebSocket client.
+const deliveryChannel = "uconnect:ws:delivery:v1"
+
 type OutgoingMsg struct {
-	Type    string `json:"type"`              // "message" | "notification" | "error"
-	Message string `json:"message,omitempty"` // used for "error" type
-	Data    any    `json:"data,omitempty"`    // used for "message" / "notification" type
+	Type    string `json:"type"`
+	Message string `json:"message,omitempty"`
+	Data    any    `json:"data,omitempty"`
 }
 
-// Client represents a connected WebSocket session.
 type Client struct {
 	UserID uint
 	Conn   *fws.Conn
@@ -22,81 +27,161 @@ type Client struct {
 	Done   chan struct{}
 }
 
-// Hub manages all active WebSocket connections.
+type delivery struct {
+	UserID  uint   `json:"user_id"`
+	Payload []byte `json:"payload"`
+}
+
+// Hub keeps sockets local; Redis broadcasts delivery requests to every replica.
+// Redis Pub/Sub is transient, not a durable queue. REST/DB remains the source of truth.
 type Hub struct {
-	mu         sync.RWMutex
-	clients    map[uint]*Client // keyed by userID (one connection per user)
-	Register   chan *Client
-	Unregister chan *Client
-	quit       chan struct{} // closed by Close() to stop Run()
+	mu           sync.RWMutex
+	clients      map[uint]*Client
+	Register     chan *Client
+	Unregister   chan *Client
+	quit         chan struct{}
+	once         sync.Once
+	redis        *redis.Client
+	subscription *redis.PubSub
+	cancel       context.CancelFunc
+	workers      sync.WaitGroup
 }
 
-// NewHub creates a new Hub instance (not started yet).
+// NewHub explicitly selects local-only (single replica) mode.
 func NewHub() *Hub {
-	return &Hub{
-		clients:    make(map[uint]*Client),
-		Register:   make(chan *Client, 16),
-		Unregister: make(chan *Client, 16),
-		quit:       make(chan struct{}),
-	}
+	return &Hub{clients: make(map[uint]*Client), Register: make(chan *Client, 16), Unregister: make(chan *Client, 16), quit: make(chan struct{})}
 }
 
-// Run starts the hub event loop. Call this in a goroutine.
-func (h *Hub) Run() {
-	log.Println("[WS/HUB] INFO  hub started")
+// NewRedisHub waits for the subscription acknowledgement before allowing sends.
+func NewRedisHub(ctx context.Context, client *redis.Client) (*Hub, error) {
+	if client == nil {
+		return nil, fmt.Errorf("Redis hub requires a client")
+	}
+	h := NewHub()
+	h.redis = client
+	h.subscription = client.Subscribe(ctx, deliveryChannel)
+	if _, err := h.subscription.Receive(ctx); err != nil {
+		_ = h.subscription.Close()
+		return nil, fmt.Errorf("subscribe WebSocket delivery: %w", err)
+	}
+	workerCtx, cancel := context.WithCancel(context.Background())
+	h.cancel = cancel
+	h.workers.Add(1)
+	go h.receive(workerCtx)
+	return h, nil
+}
+
+func (h *Hub) receive(ctx context.Context) {
+	defer h.workers.Done()
+	// go-redis reconnects and re-subscribes automatically; Close unblocks this channel.
+	ch := h.subscription.Channel()
 	for {
 		select {
-		case <-h.quit:
-			log.Println("[WS/HUB] INFO  hub stopped")
+		case <-ctx.Done():
 			return
-		case client := <-h.Register:
-			h.mu.Lock()
-			if old, ok := h.clients[client.UserID]; ok {
-				// A second tab / device opened — drop the stale connection.
-				log.Printf("[WS/HUB] WARN  replacing existing connection — userID: %d", client.UserID)
-				close(old.Done)
+		case message, ok := <-ch:
+			if !ok {
+				return
 			}
-			h.clients[client.UserID] = client
-			total := len(h.clients)
-			h.mu.Unlock()
-			log.Printf("[WS/HUB] INFO  registered   — userID: %d, online: %d", client.UserID, total)
-
-		case client := <-h.Unregister:
-			h.mu.Lock()
-			if current, ok := h.clients[client.UserID]; ok && current == client {
-				delete(h.clients, client.UserID)
-				total := len(h.clients)
-				h.mu.Unlock()
-				log.Printf("[WS/HUB] INFO  unregistered — userID: %d, online: %d", client.UserID, total)
-			} else {
-				h.mu.Unlock() // stale unregister (already replaced), nothing to do
+			var d delivery
+			if err := json.Unmarshal([]byte(message.Payload), &d); err != nil {
+				slog.Warn("invalid Redis delivery payload", "error", err)
+				continue
 			}
+			h.sendLocal(d.UserID, d.Payload)
 		}
 	}
 }
 
-// Close signals the hub to stop its Run loop and disconnects all clients.
-func (h *Hub) Close() {
-	close(h.quit)
-	h.mu.Lock()
-	defer h.mu.Unlock()
-	for _, client := range h.clients {
-		close(client.Done)
+func (h *Hub) Run() {
+	for {
+		select {
+		case <-h.quit:
+			return
+		case client := <-h.Register:
+			h.mu.Lock()
+			select {
+			case <-h.quit:
+				close(client.Done)
+				h.mu.Unlock()
+				continue
+			default:
+			}
+			if old := h.clients[client.UserID]; old != nil && old != client {
+				close(old.Done)
+				if old.Conn != nil {
+					_ = old.Conn.Close()
+				}
+			}
+			h.clients[client.UserID] = client
+			h.mu.Unlock()
+		case client := <-h.Unregister:
+			h.mu.Lock()
+			if h.clients[client.UserID] == client {
+				delete(h.clients, client.UserID)
+				close(client.Done)
+			}
+			h.mu.Unlock()
+		}
 	}
-	h.clients = make(map[uint]*Client)
-	log.Println("[WS/HUB] INFO  all clients disconnected")
 }
 
-// SendToUser enqueues a payload for direct delivery to a connected user.
-// Returns false if the user is not currently connected.
+func (h *Hub) Close() {
+	h.once.Do(func() {
+		close(h.quit)
+		if h.cancel != nil {
+			h.cancel()
+		}
+		if h.subscription != nil {
+			_ = h.subscription.Close()
+		}
+		h.workers.Wait()
+		h.mu.Lock()
+		defer h.mu.Unlock()
+		for _, client := range h.clients {
+			close(client.Done)
+			if client.Conn != nil {
+				_ = client.Conn.Close()
+			}
+		}
+		h.clients = make(map[uint]*Client)
+	})
+}
+
+// SendToUser returns whether delivery was accepted, NOT whether a remote user
+// received it. Redis subscriber counts are not per-user presence acknowledgements.
 func (h *Hub) SendToUser(userID uint, payload []byte) bool {
+	select {
+	case <-h.quit:
+		return false
+	default:
+	}
+	if h.redis == nil {
+		return h.sendLocal(userID, payload)
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	data, err := json.Marshal(delivery{UserID: userID, Payload: payload})
+	if err == nil {
+		err = h.redis.Publish(ctx, deliveryChannel, data).Err()
+	}
+	if err != nil {
+		slog.Error("publish WebSocket delivery", "user_id", userID, "error", err)
+		return false
+	}
+	return true
+}
+
+func (h *Hub) sendLocal(userID uint, payload []byte) bool {
 	h.mu.RLock()
-	client, ok := h.clients[userID]
-	h.mu.RUnlock()
-	if !ok {
+	defer h.mu.RUnlock()
+	client := h.clients[userID]
+	if client == nil {
 		return false
 	}
 	select {
+	case <-client.Done:
+		return false
 	case client.Send <- payload:
 		return true
 	default:
@@ -104,10 +189,9 @@ func (h *Hub) SendToUser(userID uint, payload []byte) bool {
 	}
 }
 
-// IsOnline reports whether a user has an active WebSocket connection.
+// IsOnline reports local presence only; it must not gate Redis publication.
 func (h *Hub) IsOnline(userID uint) bool {
 	h.mu.RLock()
-	_, ok := h.clients[userID]
-	h.mu.RUnlock()
-	return ok
+	defer h.mu.RUnlock()
+	return h.clients[userID] != nil
 }

@@ -184,7 +184,10 @@ const (
 
 // Auth/JWT durations.
 const (
-	JWTAccessExpiry = 24 * 60 * 60 // seconds (24h)
+	JWTAccessExpiry  = 15 * 60       // seconds (15m) — C-4 short access
+	JWTRefreshExpiry = 7 * 24 * 60 * 60 // seconds (7d) — httpOnly refresh cookie
+	ForgotLockTTL    = 30 * 60       // seconds (30m) — C-4 ResetLockedAt auto-expire
+	WSTicketTTL      = 30            // seconds (30s) — POST /api/ws/ticket
 )
 
 // Recommendation/cache/notification tuning values.

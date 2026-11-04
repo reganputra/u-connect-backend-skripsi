@@ -8,9 +8,11 @@ import (
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
+	"github.com/google/uuid"
 	"github.com/reganputra/skripsi-backend/constant"
 	"github.com/reganputra/skripsi-backend/models"
 	"github.com/reganputra/skripsi-backend/repository"
+	"github.com/reganputra/skripsi-backend/utils"
 	"golang.org/x/crypto/bcrypt"
 )
 
@@ -69,14 +71,17 @@ type AuthUserPayload struct {
 }
 
 type LoginResponse struct {
-	Token string           `json:"token,omitempty"`
-	User  *AuthUserPayload `json:"user"`
+	Token        string           `json:"token,omitempty"`
+	RefreshToken string           `json:"-"`
+	User         *AuthUserPayload `json:"user"`
 }
 
 type AuthClaims struct {
-	UserID uint   `json:"user_id"`
-	Email  string `json:"email"`
-	Role   string `json:"role"`
+	Purpose      string `json:"token_type"`
+	UserID       uint   `json:"user_id"`
+	Email        string `json:"email"`
+	Role         string `json:"role"`
+	TokenVersion int    `json:"token_version"`
 	jwt.RegisteredClaims
 }
 
@@ -85,6 +90,8 @@ type AuthClaims struct {
 type AuthService interface {
 	Register(req RegisterRequest) (*models.User, error)
 	Login(req LoginRequest) (*LoginResponse, error)
+	Refresh(refreshToken string) (*LoginResponse, error)
+	Logout(userID uint) error
 	Me(userID uint) (*AuthUserPayload, error)
 	ChangePassword(userID uint, req ChangePasswordRequest) error
 	ForgotPassword(req ForgotPasswordRequest) error
@@ -169,26 +176,17 @@ func (s *authService) Login(req LoginRequest) (*LoginResponse, error) {
 		return nil, errors.New("email atau kata sandi tidak valid")
 	}
 
+	if !user.IsActive {
+		return nil, errors.New("akun dinonaktifkan, hubungi admin")
+	}
+
 	if err := bcrypt.CompareHashAndPassword([]byte(user.Password), []byte(req.Password)); err != nil {
 		return nil, errors.New("email atau kata sandi tidak valid")
 	}
 
-	claims := AuthClaims{
-		UserID: user.ID,
-		Email:  user.Email,
-		Role:   user.Role,
-		RegisteredClaims: jwt.RegisteredClaims{
-			ExpiresAt: jwt.NewNumericDate(time.Now().Add(24 * time.Hour)),
-			IssuedAt:  jwt.NewNumericDate(time.Now()),
-		},
-	}
-
-	secret := os.Getenv("JWT_SECRET")
-
-	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
-	signed, err := token.SignedString([]byte(secret))
+	signed, refresh, err := s.issueTokens(user)
 	if err != nil {
-		return nil, errors.New("gagal membuat token")
+		return nil, err
 	}
 
 	authUser, err := s.buildAuthUser(user)
@@ -197,9 +195,96 @@ func (s *authService) Login(req LoginRequest) (*LoginResponse, error) {
 	}
 
 	return &LoginResponse{
-		Token: signed,
-		User:  authUser,
+		Token:        signed,
+		RefreshToken: refresh,
+		User:         authUser,
 	}, nil
+}
+
+func (s *authService) issueTokens(user *models.User) (access, refresh string, err error) {
+	secret := os.Getenv("JWT_SECRET")
+	if secret == "" {
+		return "", "", errors.New("JWT_SECRET is not configured")
+	}
+	now := time.Now()
+
+	accessClaims := AuthClaims{
+		Purpose:      "access",
+		UserID:       user.ID,
+		Email:        user.Email,
+		Role:         user.Role,
+		TokenVersion: user.TokenVersion,
+		RegisteredClaims: jwt.RegisteredClaims{
+			ID:        uuid.NewString(),
+			ExpiresAt: jwt.NewNumericDate(now.Add(time.Duration(constant.JWTAccessExpiry) * time.Second)),
+			IssuedAt:  jwt.NewNumericDate(now),
+		},
+	}
+	accessTok := jwt.NewWithClaims(jwt.SigningMethodHS256, accessClaims)
+	access, err = accessTok.SignedString([]byte(secret))
+	if err != nil {
+		return "", "", errors.New("gagal membuat token")
+	}
+
+	refreshClaims := AuthClaims{
+		Purpose:      "refresh",
+		UserID:       user.ID,
+		Email:        user.Email,
+		Role:         user.Role,
+		TokenVersion: user.TokenVersion,
+		RegisteredClaims: jwt.RegisteredClaims{
+			ID:        uuid.NewString(),
+			ExpiresAt: jwt.NewNumericDate(now.Add(time.Duration(constant.JWTRefreshExpiry) * time.Second)),
+			IssuedAt:  jwt.NewNumericDate(now),
+		},
+	}
+	refreshTok := jwt.NewWithClaims(jwt.SigningMethodHS256, refreshClaims)
+	refresh, err = refreshTok.SignedString([]byte(secret))
+	if err != nil {
+		return "", "", errors.New("gagal membuat refresh token")
+	}
+	return access, refresh, nil
+}
+
+func (s *authService) Refresh(refreshToken string) (*LoginResponse, error) {
+	if refreshToken == "" {
+		return nil, errors.New("refresh token diperlukan")
+	}
+	claims, err := utils.ParseRefreshJWT(refreshToken)
+	if err != nil {
+		return nil, errors.New("refresh token tidak valid atau kadaluarsa")
+	}
+	id, version, err := utils.TokenIdentity(claims)
+	if err != nil {
+		return nil, err
+	}
+	user, err := s.userRepo.FindUserByID(id)
+	if err != nil || user == nil || !user.IsActive || user.TokenVersion != version || user.Role != claims["role"] {
+		return nil, errors.New("sesi kadaluarsa, silakan login kembali")
+	}
+	// Sign the exact next generation before CAS. Never reread the winner's version.
+	updated := *user
+	updated.TokenVersion = version + 1
+	signed, refresh, err := s.issueTokens(&updated)
+	if err != nil {
+		return nil, err
+	}
+	if err := s.userRepo.CompareAndSwapTokenVersion(id, version); err != nil {
+		return nil, errors.New("sesi kadaluarsa, silakan login kembali")
+	}
+	authUser, err := s.buildAuthUser(&updated)
+	if err != nil {
+		return nil, err
+	}
+	return &LoginResponse{
+		Token:        signed,
+		RefreshToken: refresh,
+		User:         authUser,
+	}, nil
+}
+
+func (s *authService) Logout(userID uint) error {
+	return s.userRepo.BumpTokenVersion(userID)
 }
 
 func (s *authService) Me(userID uint) (*AuthUserPayload, error) {
@@ -282,9 +367,17 @@ func (s *authService) ForgotPassword(req ForgotPasswordRequest) error {
 		return errors.New("data yang dimasukkan tidak cocok")
 	}
 
-	// Check if locked
+	// C-4: auto-expire lock after ForgotLockTTL
 	if user.ResetAttempts >= maxResetAttempts {
-		return errors.New("akun terkunci karena terlalu banyak percobaan reset, hubungi admin")
+		if user.ResetLockedAt == nil || time.Since(*user.ResetLockedAt) < time.Duration(constant.ForgotLockTTL)*time.Second {
+			return errors.New("akun terkunci karena terlalu banyak percobaan reset, coba lagi dalam 30 menit atau hubungi admin")
+		}
+		// TTL expired — reset attempts and continue
+		if err := s.userRepo.UnlockResetAttempts(user.ID); err != nil {
+			return errors.New("gagal membuka kunci reset")
+		}
+		user.ResetAttempts = 0
+		user.ResetLockedAt = nil
 	}
 
 	// Verify identity: faculty + major + year_enroll must match
@@ -304,11 +397,16 @@ func (s *authService) ForgotPassword(req ForgotPasswordRequest) error {
 	if !strings.EqualFold(userFaculty, strings.TrimSpace(req.Faculty)) ||
 		!strings.EqualFold(userMajor, strings.TrimSpace(req.Major)) ||
 		userYear != req.YearEnroll {
-		// Increment attempts; lock if limit reached
-		_ = s.userRepo.IncrementResetAttempts(user.ID)
+		if err := s.userRepo.IncrementResetAttempts(user.ID); err != nil {
+			return errors.New("gagal mencatat percobaan reset")
+		}
 		remaining := maxResetAttempts - user.ResetAttempts - 1
 		if remaining <= 0 {
-			return errors.New("data tidak cocok — akun terkunci karena terlalu banyak percobaan, hubungi admin")
+			now := time.Now()
+			if err := s.userRepo.LockResetWithTime(user.ID, now); err != nil {
+				return errors.New("gagal mengunci reset")
+			}
+			return errors.New("data tidak cocok — akun terkunci 30 menit, hubungi admin jika perlu")
 		}
 		return fmt.Errorf("data yang dimasukkan tidak cocok (%d percobaan tersisa)", remaining)
 	}

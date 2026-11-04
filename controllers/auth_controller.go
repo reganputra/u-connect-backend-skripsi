@@ -1,10 +1,14 @@
 package controllers
 
 import (
+	"os"
 	"strconv"
+	"strings"
+	"time"
 
 	"github.com/gofiber/fiber/v2"
 	"github.com/golang-jwt/jwt/v5"
+	"github.com/reganputra/skripsi-backend/constant"
 	"github.com/reganputra/skripsi-backend/service"
 	"github.com/reganputra/skripsi-backend/utils"
 )
@@ -52,7 +56,61 @@ func (ctrl *AuthController) Login(c *fiber.Ctx) error {
 		return utils.ErrorResponse(c, fiber.StatusUnauthorized, err.Error())
 	}
 
+	if loginRes.RefreshToken != "" {
+		c.Cookie(&fiber.Cookie{
+			Name:     "refresh_token",
+			Value:    loginRes.RefreshToken,
+			Path:     "/",
+			MaxAge:   constant.JWTRefreshExpiry,
+			HTTPOnly: true,
+			Secure:   os.Getenv("APP_ENV") != "development" || c.Protocol() == "https",
+			SameSite: "Strict",
+		})
+	}
+
+	c.Set("Cache-Control", "no-store")
 	return utils.SuccessResponse(c, fiber.StatusOK, loginRes)
+}
+
+func (ctrl *AuthController) Refresh(c *fiber.Ctx) error {
+	token := c.Cookies("refresh_token")
+	loginRes, err := ctrl.authSvc.Refresh(token)
+	if err != nil {
+		return utils.ErrorResponse(c, fiber.StatusUnauthorized, err.Error())
+	}
+	if loginRes.RefreshToken != "" {
+		c.Cookie(&fiber.Cookie{
+			Name:     "refresh_token",
+			Value:    loginRes.RefreshToken,
+			Path:     "/",
+			MaxAge:   constant.JWTRefreshExpiry,
+			HTTPOnly: true,
+			Secure:   os.Getenv("APP_ENV") != "development" || c.Protocol() == "https",
+			SameSite: "Strict",
+		})
+	}
+	c.Set("Cache-Control", "no-store")
+	return utils.SuccessResponse(c, fiber.StatusOK, loginRes)
+}
+
+func (ctrl *AuthController) Logout(c *fiber.Ctx) error {
+	userID, err := getUserIDFromToken(c)
+	if err != nil {
+		return utils.ErrorResponse(c, fiber.StatusUnauthorized, err.Error())
+	}
+	if err := ctrl.authSvc.Logout(userID); err != nil {
+		return utils.ErrorResponse(c, fiber.StatusBadRequest, err.Error())
+	}
+	c.Cookie(&fiber.Cookie{
+		Name:     "refresh_token",
+		Value:    "",
+		Path:     "/",
+		MaxAge:   -1,
+		HTTPOnly: true,
+		Secure:   os.Getenv("APP_ENV") != "development" || c.Protocol() == "https",
+		SameSite: "Strict",
+	})
+	return utils.SuccessResponse(c, fiber.StatusOK, fiber.Map{"message": "berhasil logout"})
 }
 
 func (ctrl *AuthController) Me(c *fiber.Ctx) error {
@@ -108,7 +166,13 @@ func (ctrl *AuthController) ForgotPassword(c *fiber.Ctx) error {
 	}
 
 	if err := ctrl.authSvc.ForgotPassword(req); err != nil {
-		return utils.ErrorResponse(c, fiber.StatusBadRequest, err.Error())
+		msg := err.Error()
+		if strings.Contains(msg, "terkunci") {
+			c.Set("Retry-After", strconv.Itoa(constant.ForgotLockTTL))
+			// Also set rate-limit style header for 30m
+			c.Set("X-Retry-After", time.Now().Add(time.Duration(constant.ForgotLockTTL)*time.Second).Format(time.RFC3339))
+		}
+		return utils.ErrorResponse(c, fiber.StatusBadRequest, msg)
 	}
 
 	return utils.SuccessResponse(c, fiber.StatusOK, fiber.Map{

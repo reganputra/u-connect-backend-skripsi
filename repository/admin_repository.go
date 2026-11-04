@@ -16,6 +16,9 @@ type AdminRepository interface {
 	FindUsers(page, limit int, role, search string) ([]AdminUserWithProfile, int64, error)
 	FindUserByID(id uint) (*models.User, error)
 	UpdateUser(u *models.User) error
+	UpdateUserStatus(userID uint, active bool) error
+	UpdateUserRole(userID uint, role string) error
+	BumpTokenVersion(userID uint) error
 
 	// Direct content deletion
 	DeletePost(id uint) error
@@ -119,8 +122,31 @@ func (r *adminRepository) FindUserByID(id uint) (*models.User, error) {
 	return &u, nil
 }
 
+// UpdateUser uses optimistic version matching, never Save's insert fallback.
 func (r *adminRepository) UpdateUser(u *models.User) error {
-	return r.db.Save(u).Error
+	result := r.db.Model(&models.User{}).Where("id = ? AND token_version = ?", u.ID, u.TokenVersion).
+		Updates(map[string]interface{}{"role": u.Role, "is_active": u.IsActive, "token_version": gorm.Expr("token_version + 1")})
+	if err := requireUserUpdate(result); err != nil {
+		return err
+	}
+	u.TokenVersion++
+	return nil
+}
+
+// Security state and revocation are committed by the same SQL statement.
+// Separate field-specific methods prevent stale reads overwriting other security fields.
+func (r *adminRepository) UpdateUserStatus(id uint, active bool) error {
+	return requireUserUpdate(r.db.Model(&models.User{}).Where("id = ?", id).
+		Updates(map[string]interface{}{"is_active": active, "token_version": gorm.Expr("token_version + 1")}))
+}
+
+func (r *adminRepository) UpdateUserRole(id uint, role string) error {
+	return requireUserUpdate(r.db.Model(&models.User{}).Where("id = ?", id).
+		Updates(map[string]interface{}{"role": role, "token_version": gorm.Expr("token_version + 1")}))
+}
+
+func (r *adminRepository) BumpTokenVersion(userID uint) error {
+	return r.db.Model(&models.User{}).Where("id = ?", userID).UpdateColumn("token_version", gorm.Expr("token_version + 1")).Error
 }
 
 // ─── Direct Content Deletion ──────────────────────────────────────────────────

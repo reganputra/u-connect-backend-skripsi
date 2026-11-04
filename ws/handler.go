@@ -1,17 +1,18 @@
 package ws
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"log"
-	"os"
+	"strings"
 	"time"
 
 	fws "github.com/gofiber/contrib/websocket"
 	"github.com/gofiber/fiber/v2"
-	"github.com/golang-jwt/jwt/v5"
 	"github.com/reganputra/skripsi-backend/repository"
 	"github.com/reganputra/skripsi-backend/service"
+	"github.com/reganputra/skripsi-backend/utils"
 )
 
 // IncomingMsg is the JSON payload a client sends over WebSocket.
@@ -28,57 +29,53 @@ const (
 	writeWait  = 10 * time.Second // per-write deadline
 )
 
-// WSAuthMiddleware validates the JWT from the ?token= query param BEFORE the
-// WebSocket upgrade takes place.  An invalid / missing token is returned as a
-// plain HTTP 401 or 403 response — visible in the browser Network tab and much
-// easier to debug than an error frame sent after a successful upgrade.
-//
-// On success it stores ws_user_id (uint) and ws_role (string) in c.Locals.
-// gofiber/contrib/websocket copies Fiber Locals into Conn.Locals automatically,
-// so the values are available inside WSHandler via c.Locals("ws_user_id").
-func WSAuthMiddleware() fiber.Handler {
+func extractWSToken(c *fiber.Ctx) string {
+	if h := c.Get("Authorization"); strings.HasPrefix(h, "Bearer ") {
+		return strings.TrimPrefix(h, "Bearer ")
+	}
+	parts := strings.Split(c.Get("Sec-WebSocket-Protocol"), ",")
+	if len(parts) == 2 && strings.TrimSpace(parts[0]) == "Bearer" {
+		return strings.TrimSpace(parts[1])
+	}
+	return ""
+}
+
+// WSAuthMiddleware never accepts access tokens in URLs. Tickets are opaque,
+// single-use Redis handles and the retained access token is revalidated at upgrade.
+func WSAuthMiddleware(users repository.UserRepository, tickets *TicketStore) fiber.Handler {
 	return func(c *fiber.Ctx) error {
-		ip := c.IP()
-
-		tokenStr := c.Query("token")
-		if tokenStr == "" {
-			log.Printf("[WS/AUTH] WARN  no token provided — ip: %s", ip)
-			return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
-				"success": false,
-				"error":   "token diperlukan",
-			})
+		if c.Query("token") != "" {
+			return c.SendStatus(fiber.StatusUnauthorized)
 		}
-
-		claims, err := parseJWT(tokenStr)
-		if err != nil {
-			log.Printf("[WS/AUTH] WARN  invalid/expired token — ip: %s — %v", ip, err)
-			return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
-				"success": false,
-				"error":   "token tidak valid atau sudah kadaluarsa",
-			})
+		raw := extractWSToken(c)
+		if ticket := c.Query("ticket"); ticket != "" {
+			ctx, cancel := context.WithTimeout(c.UserContext(), 2*time.Second)
+			defer cancel()
+			var err error
+			raw, err = tickets.Consume(ctx, ticket)
+			if err != nil {
+				return c.SendStatus(fiber.StatusUnauthorized)
+			}
 		}
-
-		userIDFloat, ok := claims["user_id"].(float64)
-		role, _ := claims["role"].(string)
-		if !ok || userIDFloat == 0 {
-			log.Printf("[WS/AUTH] WARN  user_id missing in claims — ip: %s", ip)
-			return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
-				"success": false,
-				"error":   "user_id tidak ditemukan dalam token",
-			})
+		claims, err := utils.ParseJWT(raw)
+		if err != nil || users == nil {
+			return c.SendStatus(fiber.StatusUnauthorized)
 		}
-
-		if role != "student" && role != "alumni" {
-			log.Printf("[WS/AUTH] WARN  role not allowed — userID: %d, role: %q, ip: %s", uint(userIDFloat), role, ip)
-			return c.Status(fiber.StatusForbidden).JSON(fiber.Map{
-				"success": false,
-				"error":   "akses ditolak: hanya student dan alumni yang dapat menggunakan pesan",
-			})
+		uid, ok := claims["user_id"].(float64)
+		version, vok := claims["token_version"].(float64)
+		if !ok || !vok || uid <= 0 || uid != float64(uint(uid)) {
+			return c.SendStatus(fiber.StatusUnauthorized)
 		}
-
-		log.Printf("[WS/AUTH] INFO  auth OK — userID: %d, role: %q, ip: %s", uint(userIDFloat), role, ip)
-		c.Locals("ws_user_id", uint(userIDFloat))
-		c.Locals("ws_role", role)
+		user, err := users.FindUserByID(uint(uid))
+		if err != nil || user == nil || !user.IsActive || version != float64(user.TokenVersion) {
+			return c.SendStatus(fiber.StatusUnauthorized)
+		}
+		if user.Role != "student" && user.Role != "alumni" {
+			return c.SendStatus(fiber.StatusForbidden)
+		}
+		c.Locals("ws_user_id", user.ID)
+		c.Locals("ws_role", user.Role)
+		c.Locals("ws_token", raw)
 		return c.Next()
 	}
 }
@@ -108,9 +105,16 @@ func WSHandler(hub *Hub, msgSvc service.MessageService, userRepo repository.User
 			Send:   make(chan []byte, 64),
 			Done:   make(chan struct{}),
 		}
-		hub.Register <- client
+		select {
+		case hub.Register <- client:
+		case <-hub.quit:
+			return
+		}
 		defer func() {
-			hub.Unregister <- client
+			select {
+			case hub.Unregister <- client:
+			case <-hub.quit:
+			}
 			log.Printf("[WS/CONN] INFO  unregister queued — userID: %d", userID)
 		}()
 
@@ -131,6 +135,7 @@ func WSHandler(hub *Hub, msgSvc service.MessageService, userRepo repository.User
 		// This goroutine is the sole owner of c.WriteMessage, which eliminates
 		// data races on the underlying net.Conn.
 		go func() {
+			defer c.Close()
 			ticker := time.NewTicker(pingPeriod)
 			defer ticker.Stop()
 
@@ -148,6 +153,12 @@ func WSHandler(hub *Hub, msgSvc service.MessageService, userRepo repository.User
 					}
 
 				case <-ticker.C:
+					raw, _ := c.Locals("ws_token").(string)
+					claims, err := utils.ParseJWT(raw)
+					user, userErr := userRepo.FindUserByID(userID)
+					if err != nil || userErr != nil || user == nil || !user.IsActive || claims["token_version"] != float64(user.TokenVersion) {
+						return
+					}
 					_ = c.SetWriteDeadline(time.Now().Add(writeWait))
 					if err := c.WriteMessage(fws.PingMessage, nil); err != nil {
 						log.Printf("[WS/PUMP] WARN  ping failed — userID: %d — %v", userID, err)
@@ -178,6 +189,14 @@ func WSHandler(hub *Hub, msgSvc service.MessageService, userRepo repository.User
 				break
 			}
 
+			// Recheck every incoming message: disabling/logout cannot keep using
+			// an already-upgraded socket to perform writes.
+			rawToken, _ := c.Locals("ws_token").(string)
+			claims, authErr := utils.ParseJWT(rawToken)
+			currentUser, userErr := userRepo.FindUserByID(userID)
+			if authErr != nil || userErr != nil || currentUser == nil || !currentUser.IsActive || claims["token_version"] != float64(currentUser.TokenVersion) {
+				return
+			}
 			var incoming IncomingMsg
 			if err := json.Unmarshal(raw, &incoming); err != nil {
 				log.Printf("[WS/MSG]  WARN  invalid JSON — userID: %d — %v", userID, err)
@@ -212,7 +231,7 @@ func WSHandler(hub *Hub, msgSvc service.MessageService, userRepo repository.User
 				Data: msg,
 			})
 			if hub.SendToUser(incoming.ReceiverID, payload) {
-				log.Printf("[WS/MSG]  INFO  delivered to receiverID: %d (online)", incoming.ReceiverID)
+				log.Printf("[WS/MSG]  INFO  delivery accepted for receiverID: %d (not a receipt acknowledgement)", incoming.ReceiverID)
 			} else {
 				log.Printf("[WS/MSG]  INFO  receiverID: %d is offline — saved to DB, awaiting REST fetch", incoming.ReceiverID)
 			}
@@ -253,29 +272,6 @@ func sendError(client *Client, msg string) {
 	case client.Send <- payload:
 	default: // drop silently if the buffer is full
 	}
-}
-
-func parseJWT(tokenStr string) (jwt.MapClaims, error) {
-	secret := os.Getenv("JWT_SECRET")
-	token, err := jwt.Parse(tokenStr, func(t *jwt.Token) (interface{}, error) {
-		if _, ok := t.Method.(*jwt.SigningMethodHMAC); !ok {
-			return nil, jwt.ErrSignatureInvalid
-		}
-		return []byte(secret), nil
-	})
-	if err != nil || !token.Valid {
-		return nil, err
-	}
-	claims, ok := token.Claims.(jwt.MapClaims)
-	if !ok {
-		return nil, jwt.ErrTokenInvalidClaims
-	}
-	if exp, ok := claims["exp"].(float64); ok {
-		if time.Now().Unix() > int64(exp) {
-			return nil, jwt.ErrTokenExpired
-		}
-	}
-	return claims, nil
 }
 
 func truncateText(s string, max int) string {

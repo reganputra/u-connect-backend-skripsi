@@ -24,8 +24,11 @@ type User struct {
 	CompanyName *string `gorm:"default:null"`
 
 	// Forgot password rate limiting
-	ResetAttempts  int        `gorm:"default:0"`
-	ResetLockedAt  *time.Time `gorm:"default:null"`
+	ResetAttempts int        `gorm:"default:0"`
+	ResetLockedAt *time.Time `gorm:"default:null"`
+
+	// C-4: JWT revocation (DB-based, no Redis). Incremented on logout/disable/role-change.
+	TokenVersion int `gorm:"not null;default:0" json:"-"`
 
 	// Association — populated only when explicitly Preloaded
 	Profile *UserProfile `gorm:"foreignKey:UserID"`
