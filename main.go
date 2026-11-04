@@ -7,7 +7,6 @@ import (
 	"net"
 	"os"
 	"os/signal"
-	"strings"
 	"syscall"
 	"time"
 
@@ -50,7 +49,20 @@ func main() {
 	db := config.DB
 
 	// ── WebSocket Hub ──────────────
-	hub := ws.NewHub()
+	redisCtx, redisCancel := context.WithTimeout(context.Background(), 5*time.Second)
+	redisClient, err := config.OpenRedis(redisCtx, os.Getenv("REDIS_URL"))
+	redisCancel()
+	if err != nil {
+		log.Fatalf("Redis startup failed: %v", err)
+	}
+	hubCtx, hubCancel := context.WithTimeout(context.Background(), 5*time.Second)
+	hub, err := ws.NewRedisHub(hubCtx, redisClient)
+	hubCancel()
+	if err != nil {
+		_ = redisClient.Close()
+		log.Fatalf("WebSocket startup failed: %v", err)
+	}
+	tickets := ws.NewTicketStore(redisClient)
 	go hub.Run()
 
 	// ── Build Dependencies via Container ──────────────────────────────────────
@@ -81,9 +93,7 @@ func main() {
 		allowedOrigins = "http://localhost:5173" // dev
 	}
 	app.Use(cors.New(cors.Config{
-		Next: func(c *fiber.Ctx) bool {
-			return strings.HasPrefix(c.Path(), "/api/ws")
-		},
+		Next:             func(c *fiber.Ctx) bool { return c.Path() == "/api/ws" },
 		AllowOrigins:     allowedOrigins,
 		AllowMethods:     "GET,POST,PUT,PATCH,DELETE,OPTIONS",
 		AllowHeaders:     "Origin, Content-Type, Accept, Authorization, Sec-WebSocket-Key, Sec-WebSocket-Version, Sec-WebSocket-Extensions, Connection, Upgrade, ngrok-skip-browser-warning",
@@ -114,6 +124,9 @@ func main() {
 				"error":  "db ping failed",
 			})
 		}
+		if err := redisClient.Ping(ctx).Err(); err != nil {
+			return c.SendStatus(fiber.StatusServiceUnavailable)
+		}
 		var exists bool
 		if err := config.DB.WithContext(ctx).Raw("SELECT EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'users')").Scan(&exists).Error; err != nil || !exists {
 			return c.Status(fiber.StatusServiceUnavailable).JSON(fiber.Map{
@@ -126,6 +139,8 @@ func main() {
 			"message": "Server is ready",
 		})
 	})
+
+	app.Use(func(ctx *fiber.Ctx) error { ctx.Locals("auth_user_repository", c.UserRepo); return ctx.Next() })
 
 	// ── Routes ────────────────────────────────────────────────────────────────
 	routes.RegisterAuthRoutes(app, c.AuthCtrl)
@@ -141,7 +156,7 @@ func main() {
 	routes.RegisterAdminRoutes(app, c.AdminCtrl, c.AuthCtrl, c.EvalCtrl)
 	routes.RegisterMentorRoutes(app, c.MentorCtrl)
 	routes.SetupFollowRoutes(app, c.FollowCtrl)
-	routes.SetupMessageRoutes(app, c.MessageCtrl, hub, c.MessageSvc, c.UserRepo, c.NotifSvc)
+	routes.SetupMessageRoutes(app, c.MessageCtrl, hub, c.MessageSvc, c.UserRepo, c.NotifSvc, tickets)
 	routes.SetupNotificationRoutes(app, c.NotifCtrl)
 	routes.RegisterActivityRoutes(app, c.ActivityCtrl)
 	routes.RegisterAnalyticsRoutes(app, c.AnalyticsCtrl)
@@ -188,6 +203,7 @@ func main() {
 
 		// 3. Close WebSocket hub (signals all clients to disconnect)
 		hub.Close()
+		_ = redisClient.Close()
 
 		// 4. Close database connection pool
 		if sqlDB, err := config.DB.DB(); err == nil {

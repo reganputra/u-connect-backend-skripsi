@@ -143,8 +143,12 @@ func (s *adminService) SetUserStatus(adminID uint, id uint, req UpdateUserStatus
 		return nil, errors.New("pengguna tidak ditemukan")
 	}
 	u.IsActive = req.IsActive
-	if err := s.adminRepo.UpdateUser(u); err != nil {
+	if err := s.adminRepo.UpdateUserStatus(id, req.IsActive); err != nil {
 		return nil, errors.New("gagal memperbarui status pengguna")
+	}
+	u, err = s.adminRepo.FindUserByID(id)
+	if err != nil {
+		return nil, errors.New("gagal memuat pengguna")
 	}
 
 	statusStr := "Aktif"
@@ -168,10 +172,14 @@ func (s *adminService) SetUserRole(adminID uint, id uint, req UpdateUserRoleRequ
 	}
 	oldRole := u.Role
 	u.Role = req.Role
-	if err := s.adminRepo.UpdateUser(u); err != nil {
+	if err := s.adminRepo.UpdateUserRole(id, req.Role); err != nil {
 		return nil, errors.New("gagal memperbarui role pengguna")
 	}
 
+	u, err = s.adminRepo.FindUserByID(id)
+	if err != nil {
+		return nil, errors.New("gagal memuat pengguna")
+	}
 	detail := fmt.Sprintf("Mengubah role user ID %d (Nama: %s) dari '%s' menjadi '%s'", id, u.Name, oldRole, u.Role)
 	_ = s.RecordActivityLog(adminID, "UPDATE_USER_ROLE", "user", id, &detail, &ip, &userAgent)
 

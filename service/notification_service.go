@@ -93,6 +93,15 @@ func (s *notificationService) CountUnread(userID uint) (int64, error) {
 	return s.repo.CountUnread(userID)
 }
 
+// PublishPersisted delivers an already committed notification without inserting
+// another row. Publication is best-effort; the DB/REST copy remains durable.
+func (s *notificationService) PublishPersisted(n *models.Notification) {
+	if n == nil || s.deliverer == nil {
+		return
+	}
+	s.deliver(n)
+}
+
 func (s *notificationService) deliver(n *models.Notification) {
 	type outgoing struct {
 		Type string               `json:"type"`

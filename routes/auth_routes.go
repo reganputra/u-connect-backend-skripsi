@@ -10,9 +10,11 @@ func RegisterAuthRoutes(app *fiber.App, ctrl *controllers.AuthController) {
 	auth := app.Group("/api/auth")
 	auth.Post("/register", ctrl.Register)
 	auth.Post("/login", ctrl.Login)
+	auth.Post("/refresh", ctrl.Refresh)
 	auth.Post("/forgot-password", ctrl.ForgotPassword) // No auth required
 
 	api := app.Group("/api")
 	api.Get("/me", middleware.Protected(), ctrl.Me)
 	api.Post("/auth/change-password", middleware.Protected(), ctrl.ChangePassword)
+	api.Post("/auth/logout", middleware.Protected(), ctrl.Logout)
 }

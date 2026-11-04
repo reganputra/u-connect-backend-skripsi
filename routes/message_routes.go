@@ -19,6 +19,7 @@ func SetupMessageRoutes(
 	msgSvc service.MessageService,
 	userRepo repository.UserRepository,
 	notifSvc service.NotificationService,
+	tickets *ws.TicketStore,
 ) {
 	// ── REST endpoints ─────────────────────────────────────────────────────────
 	msgs := app.Group("/api/messages", middleware.Protected(), middleware.RequireRole("student", "alumni"))
@@ -29,10 +30,10 @@ func SetupMessageRoutes(
 	msgs.Patch("/:userID/read", ctrl.MarkAsRead)
 
 	// ── WebSocket endpoint ─────────────────────────────────────────────────────
-	app.Use("/api/ws", ws.WSAuthMiddleware())
+	app.Post("/api/ws/ticket", middleware.Protected(), middleware.RequireRole("student", "alumni"), controllers.NewWSTicketController(tickets).CreateTicket)
 
 	// Step 2 — Confirm the request is a WebSocket upgrade, then upgrade.
-	app.Get("/api/ws", func(c *fiber.Ctx) error {
+	app.Get("/api/ws", ws.WSAuthMiddleware(userRepo, tickets), func(c *fiber.Ctx) error {
 		if !websocket.IsWebSocketUpgrade(c) {
 			log.Printf("[WS/UPGRADE] WARN rejected — not a WebSocket request — method: %s, ip: %s", c.Method(), c.IP())
 			return c.Status(fiber.StatusUpgradeRequired).JSON(fiber.Map{
